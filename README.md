@@ -1,0 +1,49 @@
+# Atlas
+
+A local infrastructure workspace with separate desktop and mobile interfaces backed by one SQLite database. This is the first working increment after the approved Atlas prototypes.
+
+## Run
+
+Python 3.11 or newer; no third-party packages required.
+
+```powershell
+python atlas.py --inventory-dir '..\server map\dashboard\data'
+```
+
+- Desktop: http://127.0.0.1:8770/
+- Mobile layout: http://127.0.0.1:8770/mobile
+
+`Start-Atlas.ps1` locates the bundled Codex Python runtime when Python is not on PATH. The coordinator stays in the terminal; Ctrl+C stops it. Port 8770 is separate from the existing infrastructure progress dashboard.
+
+The server currently binds to loopback only. The mobile interface can be reviewed on this computer at a phone viewport. Access from a physical phone requires a later authenticated network-access increment; the hosted prototype remains available separately. This build is not uploaded to Sites and private inventory is not published there.
+
+## Implemented
+
+- Shared HTTP API and persistent SQLite storage at `data/atlas.sqlite3`.
+- Add and rename hosts; update their connection hostname.
+- Drag desktop nodes and save positions; mobile uses a compact independent arrangement.
+- Create and remove documented directional relationships.
+- Search hosts, services and containers; browse full saved inventory in a server workspace.
+- Import the existing four sanitized dashboard records on startup or with **Import newer saved reports**. Records are read, never changed. No host connections are made.
+- Recorded activity and 15-second refresh of coordinator state across interfaces.
+- Input validation, bounded metadata ingestion, local host/origin checks and explicit static assets.
+
+Observation times are preserved. Reports older than 15 minutes are labelled stale. Stale means current health is unknown, not offline. No fake CPU/memory/disk utilisation is displayed. Services show their saved state and do not imply current health. Relationships start empty because prototype sample dependencies were not verified infrastructure facts.
+
+## Data
+
+The database contains hostnames, map coordinates, documented relationships and selected inventory metadata, but no passwords, SSH private keys or raw configurations. `data/` is ignored by Git. Back up the database after stopping the coordinator (SQLite's backup API is an alternative for a running process). Deleting it discards the saved map. The source inventory directory remains independent.
+
+Import is atomic. Invalid reports leave the database unchanged; older or identical reports are ignored. Updates preserve server IDs, owner-edited names, connection hostnames, map positions and relationships. Imported observed hostname is displayed separately from the connection hostname.
+
+## Verify
+
+```powershell
+python -m unittest discover -s tests -v
+```
+
+Tests cover persistence across coordinator recreation, ingestion ordering and atomicity, input validation, shared API/assets and rejection of foreign-origin requests/private file access. Browser checks are recorded in `IMPLEMENTATION.md`.
+
+## Next increments
+
+See [ROADMAP.md](ROADMAP.md). Remote authentication, SSH sessions, files, terminal, transfers, agents and service control are deliberately not connected yet. Workspace tabs state that limitation; none simulate successful authentication or operations.

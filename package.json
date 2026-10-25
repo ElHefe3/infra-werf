@@ -1,0 +1,8 @@
+{
+  "name": "atlas-local",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node --check static/api.js && node --check static/desktop/app.js && node --check static/mobile/app.js"
+  }
+}
