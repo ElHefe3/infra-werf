@@ -57,6 +57,9 @@ mise run check
 mise run test:feature -- F01
 mise run test:feature -- F03
 mise run test:desktop
+mise run ssh:fixture
+mise run test:ssh
+mise run test:ssh-native
 mise run smoke:desktop
 mise run smoke:android
 mise run build:desktop

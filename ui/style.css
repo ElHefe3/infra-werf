@@ -190,6 +190,18 @@ form label { display: grid; gap: 7px; margin-top: 18px; color: #86987a; font-siz
 .system-grid dt { font-size: 10px; margin-bottom: 7px; }
 .system-grid dd { font-size: 15px; overflow-wrap: anywhere; }
 .workspace-body > .primary { align-self: flex-start; }
+.ssh-connection { border-top: 1px solid var(--border); margin-top: 25px; padding-top: 23px; padding-bottom: 18px; }
+.ssh-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.ssh-connection > .muted { margin-top: 13px; font-size: 10px; }
+.ssh-result { border: 1px solid #e1e8da; border-radius: 9px; padding: 16px; margin-top: 16px; background: #f6f9f1; }
+.ssh-result.attention { background: #faf7ed; border-color: #e9e1c6; }
+.ssh-result h4 { margin: 0 0 7px; font-size: 13px; font-weight: 550; }
+.ssh-result p { font-size: 11px; color: #869478; }
+.ssh-result dl { display: grid; gap: 10px; font-size: 11px; margin: 16px 0; }
+.ssh-result dl > div { display: flex; gap: 15px; justify-content: space-between; }
+.ssh-result dd { overflow-wrap: anywhere; text-align: right; }
+.ssh-fingerprint { display: grid; gap: 7px; font-size: 10px; color: #8c987e; margin: 16px 0; }
+.ssh-fingerprint code { color: #627c54; overflow-wrap: anywhere; font-size: 11px; }
 @media(max-height: 760px) and (min-width: 901px) {
   .topbar { height: 48px; } .desktop-main { padding-top: 17px; } .intro h1 { font-size: 28px; } .metrics { margin-top: 16px; } .metrics > div { padding-block: 9px; } .metrics strong { font-size: 21px; } .access-strip { padding-block: 8px; margin-top: 10px; } .app-footer { height: 28px; } .inspector-body { padding: 13px 17px; } .inspector-title { padding-block: 12px; } .inspector-body .notice { margin-top: 10px; } .section-label { margin-top: 13px; }
 }

@@ -88,7 +88,7 @@ Block elevation if fresh-auth behavior or result clearing is unproven; do not we
 
 ## T014 — Enforce safe operation and output boundaries
 
-<!-- atlas-ticket: {"id":"T014","feature":"F06","status":"todo","depends_on":["T003","T010","T032"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T014","feature":"F06","status":"todo","depends_on":["T003","T010","T032","T033"],"evidence":null} -->
 
 ### Outcome and included work
 
@@ -102,7 +102,7 @@ Generic remote scripting API, unrestricted Tauri shell permissions or bypasses f
 
 Execute typed allowlisted operation requests, validate server/session/workload/path ownership, use bounded time/output and safe process argument handling, and separate terminal input from file/service commands. Return structured redacted failures; no arbitrary frontend shell command for managed operations.
 
-**Ticket dependencies:** [T003](F02-domain-persistence.md), [T010](F05-device-pairing.md), [T032](F04-native-shells.md).
+**Ticket dependencies:** [T003](F02-domain-persistence.md), [T010](F05-device-pairing.md), [T032](F04-native-shells.md), [T033](F04-native-shells.md). T033 proves desktop connection checks only; actual protected/coordinator operations remain this ticket.
 
 ### Acceptance criteria
 

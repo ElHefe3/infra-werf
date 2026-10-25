@@ -20,3 +20,7 @@ path = "src/bin/atlas-data.rs"
 [[bin]]
 name = "export-contracts"
 path = "src/bin/export-contracts.rs"
+
+[[bin]]
+name = "atlas-ssh"
+path = "src/bin/atlas-ssh.rs"

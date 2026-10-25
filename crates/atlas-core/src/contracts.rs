@@ -421,5 +421,6 @@ pub fn typescript_contracts() -> String {
         OperationProgress
     );
     output.push_str(&crate::operations::typescript_contracts(&cfg));
+    output.push_str(&crate::ssh::typescript_contracts(&cfg));
     output
 }

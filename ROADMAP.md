@@ -14,4 +14,4 @@ The current roadmap is in [agent/AGENT.md](agent/AGENT.md). Product/release boun
 | A05 | S07 | Deferred restricted discovery agents and always-on operation |
 | A06 | S05 | Monitoring, terminal and scoped workload operations |
 
-Current plan: 27 core tickets across 12 features/6 scopes, then 5 deferred tickets across 2 features/2 scopes. T032 splits T014's desktop guard foundation from its later phone/SSH integration; product scope is unchanged. Core targets full controls on native Windows and Android over LAN/existing VPN. Latest stable tools are pinned through mise. S01 foundations and T006–T008 desktop map/lifecycle are complete; current status is in the agent guide/checkpoint.
+Current plan: 28 core tickets across 12 features/6 scopes, then 5 deferred tickets across 2 features/2 scopes. T032/T033 separate desktop guard/connection verification from later paired integration; product scope is unchanged. Core targets full controls on native Windows and Android over LAN/existing VPN. Latest stable tools are pinned through mise. S01 foundations and T006–T008 desktop map/lifecycle are complete; current status is in the agent guide/checkpoint.

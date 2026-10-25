@@ -5,6 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Background, BackgroundVariant, Handle, MarkerType, Position, ReactFlow, ReactFlowProvider, useNodesInitialized, useNodesState, useReactFlow, type Connection, type Node, type NodeProps } from "@xyflow/react";
 import { createWorkspaceClient } from "./workspace-client";
+import { SshConnection } from "./ssh-connection";
 import type { MapServer, MapState, Relationship, WorkspaceStatus } from "./contracts.gen";
 import { errorMessage, inventoryRows, matches, observedLabel, workloads } from "./map-model";
 import "@xyflow/react/dist/style.css";
@@ -100,12 +101,13 @@ function SavedInventory({ state, query, open, single = false }: { state: MapStat
 function ServerWorkspace({ server, state, close, edit }: { server: MapServer; state: MapState; close: () => void; edit: () => void }) {
   const [tab, setTab] = useState<WorkspaceTab>("Services");
   const [filter, setFilter] = useState("");
-  return <Dialog title={server.name} close={close} wide><div className="workspace-server-line"><span>{server.host}</span><span>{observedLabel(server)} · {date(server.inventory?.collected_at)}</span></div>
-    <div className="workspace-tabs" role="tablist" aria-label="Server workspace">{workspaceTabs.map(name => <button key={name} role="tab" aria-selected={tab === name} onClick={() => setTab(name)}>{name}</button>)}</div>
+  const [checkingSsh, setCheckingSsh] = useState(false);
+  return <Dialog title={server.name} close={close} wide busy={checkingSsh}><div className="workspace-server-line"><span>{server.host}</span><span>{observedLabel(server)} · {date(server.inventory?.collected_at)}</span></div>
+    <div className="workspace-tabs" role="tablist" aria-label="Server workspace">{workspaceTabs.map(name => <button key={name} role="tab" disabled={checkingSsh} aria-selected={tab === name} onClick={() => setTab(name)}>{name}</button>)}</div>
     <section className="workspace-body" role="tabpanel" aria-label={tab}>
       {tab === "Services" && <><div className="section-heading"><div><h3>Saved services & containers</h3><p>The last approved inventory. Live inspection and controls require SSH.</p></div><input aria-label="Filter saved workloads" placeholder="Find a workload…" value={filter} onChange={e => setFilter(e.target.value)} /></div><SavedInventory state={{ ...state, servers: [server] }} query={filter} open={() => {}} single /></>}
       {tab === "System" && <><h3>Saved system inventory</h3>{server.inventory ? <><dl className="system-grid"><div><dt>Hostname</dt><dd>{server.inventory.hostname}</dd></div><div><dt>Logical CPUs</dt><dd>{server.inventory.cpus}</dd></div><div><dt>Total memory</dt><dd>{memory(server.inventory.memory_total_kib)}</dd></div><div><dt>Collected</dt><dd>{date(server.inventory.collected_at)}</dd></div></dl><Notice>These are saved hardware details. Live utilisation and reachability checks are not available yet.</Notice></> : <Notice>No saved system inventory is available for this server.</Notice>}</>}
-      {tab === "Settings" && <><h3>Map details</h3><dl className="system-grid"><div><dt>Name</dt><dd>{server.name}</dd></div><div><dt>Host</dt><dd>{server.host}</dd></div></dl><button className="primary" onClick={edit}>Edit server details</button><Notice>SSH identities, host trust and authenticated sessions will be configured when connections are available.</Notice></>}
+      {tab === "Settings" && <><h3>Map details</h3><dl className="system-grid"><div><dt>Name</dt><dd>{server.name}</dd></div><div><dt>Host</dt><dd>{server.host}</dd></div></dl><button className="primary" disabled={checkingSsh} onClick={edit}>Edit server details</button><SshConnection key={`${server.id}:${server.host}`} server={server} onBusy={setCheckingSsh} /></>}
       {["Files", "Terminal", "Transfers"].includes(tab) && <div className="unavailable"><span className="unavailable-icon">⌁</span><h3>{tab === "Files" ? "Your files stay on your server." : tab === "Terminal" ? "A deliberate connection." : "Transfers need a connection."}</h3><p>{tab} {tab === "Terminal" ? "access is" : "are"} unavailable until authenticated SSH and {tab === "Transfers" ? "transfer controls" : "session controls"} are implemented.</p><span className="state-pill">Not connected · operation unavailable</span></div>}
     </section><footer className="workspace-footer">Saved inventory only · No authenticated server session</footer>
   </Dialog>;

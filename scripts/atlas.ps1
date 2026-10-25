@@ -65,6 +65,11 @@ switch ($Action) {
             Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-core', '--test', 'operations', '--locked')
             Run-AtlasCommand 'cargo' @('run', '-p', 'atlas-core', '--bin', 'export-contracts', '--locked', '--', '--check')
             Run-AtlasCommand 'pnpm' @('check')
+        } elseif ($Feature -eq 'T033') {
+            Run-AtlasCommand 'cargo' @('test', '--workspace', '--locked')
+            Run-AtlasCommand 'cargo' @('run', '-p', 'atlas-core', '--bin', 'export-contracts', '--locked', '--', '--check')
+            Run-AtlasCommand 'pnpm' @('check')
+            Run-AtlasCommand 'node' @('--test', 'ui/client.test.ts', 'ui/map-model.test.ts')
         } else { Write-Error "No implemented test map for feature '$Feature'."; exit 2 }
         Run-AtlasCommand 'python' @('agent/check_tracker.py', '--self-test')
     }
@@ -87,6 +92,15 @@ switch ($Action) {
     }
     'start-desktop' { & (Join-Path $PSScriptRoot 'start-desktop.ps1') }
     'test-desktop' { Run-AtlasCommand 'node' @('scripts/verify_desktop.mjs') }
+    'ssh-fixture' {
+        if (-not (Test-Path -LiteralPath '.tools/ssh-fixture-venv/Scripts/python.exe')) { Run-AtlasCommand 'python' @('-m', 'venv', '.tools/ssh-fixture-venv') }
+        Run-AtlasCommand '.tools/ssh-fixture-venv/Scripts/python.exe' @('-m', 'pip', 'install', '--disable-pip-version-check', '-r', 'scripts/ssh-fixture-requirements.txt')
+    }
+    'test-ssh' {
+        Run-AtlasCommand 'cargo' @('build', '-p', 'atlas-core', '--bin', 'atlas-ssh', '--locked')
+        Run-AtlasCommand '.tools/ssh-fixture-venv/Scripts/python.exe' @('scripts/verify_ssh.py')
+    }
+    'test-ssh-native' { Run-AtlasCommand 'node' @('scripts/verify_native_ssh.mjs') }
     'dev-android' { Run-AtlasCommand 'pnpm' @('tauri', 'android', 'dev') }
     'smoke-desktop' { Run-AtlasCommand 'pnpm' @('tauri', 'build', '--debug', '--no-bundle', '--', '--locked') }
     'smoke-android' { Run-AtlasCommand 'pnpm' @('tauri', 'android', 'build', '--debug', '--target', 'aarch64', '--apk', '--', '--locked') }

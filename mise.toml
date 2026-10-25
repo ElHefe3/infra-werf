@@ -44,6 +44,18 @@ run = "powershell -NoProfile -File scripts/atlas.ps1 start-desktop"
 description = "Actual Windows WebView2/Rust IPC save, restart and error proof on synthetic data (build first)"
 run = "powershell -NoProfile -File scripts/atlas.ps1 test-desktop"
 
+[tasks."ssh:fixture"]
+description = "Prepare the pinned isolated loopback SSH test runtime; no services or real identities"
+run = "powershell -NoProfile -File scripts/atlas.ps1 ssh-fixture"
+
+[tasks."test:ssh"]
+description = "Real OpenSSH strict-trust/auth/error proof against fixture-only loopback servers"
+run = "powershell -NoProfile -File scripts/atlas.ps1 test-ssh"
+
+[tasks."test:ssh-native"]
+description = "Actual native SSH Settings/cancel/close guard proof on fixture-only data (build first)"
+run = "powershell -NoProfile -File scripts/atlas.ps1 test-ssh-native"
+
 [tasks."dev:android"]
 run = "powershell -NoProfile -File scripts/atlas.ps1 dev-android"
 

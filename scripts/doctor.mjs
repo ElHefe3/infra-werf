@@ -80,6 +80,6 @@ const webview = 'C:/Program Files (x86)/Microsoft/EdgeWebView/Application';
 check('webview2', existsSync(webview) && readdirSync(webview).some(n => /^\d/.test(n)), 'Installed runtime directory; native launch proves actual usability');
 check('android-signing', false, 'Release signing is not configured (T025)', false);
 check('physical-phone', false, 'Actual-device acceptance remains T026', false);
-check('ssh-fixture', false, 'Controlled SSH/sudo fixture not established yet (before F06)', false);
+check('ssh-fixture', existsSync('.tools/ssh-fixture-venv/Scripts/python.exe'), 'Isolated SSH fixture runtime presence; test:ssh proves operation. Sudo fixture remains future work.', false);
 console.log(JSON.stringify({ platform: process.platform, checks: report }, null, 2));
 if (report.some(r => r.required && !r.ready)) process.exitCode = 2;

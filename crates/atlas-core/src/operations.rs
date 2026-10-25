@@ -138,6 +138,7 @@ impl ScopedPath {
 
 #[derive(Clone)]
 pub enum InspectionPlan {
+    ConnectionCheck,
     SystemSummary,
     FileMetadata(ScopedPath),
     ServiceStatus { workload_id: String },
@@ -208,7 +209,7 @@ enum Phase {
 }
 struct Job {
     actor: String,
-    session_id: SessionId,
+    session_id: Option<SessionId>,
     target: ServerTarget,
     plan: InspectionPlan,
     expires: Instant,
@@ -354,15 +355,19 @@ impl OperationBroker {
         if actor.id != job.actor {
             return Err(error(ErrorCode::Denied));
         }
-        let session = registry
-            .sessions
-            .get(job.session_id.as_str())
-            .ok_or_else(|| error(ErrorCode::ExpiredSession))?;
-        if session.actor != actor.id || session.target != job.target {
+        if let Some(id) = &job.session_id {
+            let session = registry
+                .sessions
+                .get(id.as_str())
+                .ok_or_else(|| error(ErrorCode::ExpiredSession))?;
+            if session.actor != actor.id || session.target != job.target {
+                return Err(error(ErrorCode::Denied));
+            }
+            if Instant::now() >= session.expires {
+                return Err(error(ErrorCode::ExpiredSession));
+            }
+        } else if !matches!(job.plan, InspectionPlan::ConnectionCheck) {
             return Err(error(ErrorCode::Denied));
-        }
-        if Instant::now() >= session.expires {
-            return Err(error(ErrorCode::ExpiredSession));
         }
         if job.cancelled.load(Ordering::Acquire) {
             return Err(error(ErrorCode::Cancelled));
@@ -397,13 +402,41 @@ impl OperationBroker {
         let expires = (Instant::now() + self.duration).min(session.expires);
         let job = Arc::new(Job {
             actor: actor.id.clone(),
-            session_id: request.session_id,
+            session_id: Some(request.session_id),
             target: current_target.clone(),
             plan,
             expires,
             phase: Mutex::new(Phase::Prepared),
             cancelled: AtomicBool::new(false),
         });
+        Self::insert_job(&mut registry, job, expires)
+    }
+    /// Backend-only authentication bootstrap. It permits one fixed connection
+    /// check, grants no SSH session, and cannot run protected inspections.
+    pub fn prepare_connection_check(
+        &self,
+        authority: Option<&Authority>,
+        target: &ServerTarget,
+    ) -> Result<OperationTicket, AtlasError> {
+        let mut registry = lock(&self.shared.registry)?;
+        let actor = self.actor(&registry, authority)?;
+        let expires = Instant::now() + self.duration;
+        let job = Arc::new(Job {
+            actor: actor.id.clone(),
+            session_id: None,
+            target: target.clone(),
+            plan: InspectionPlan::ConnectionCheck,
+            expires,
+            phase: Mutex::new(Phase::Prepared),
+            cancelled: AtomicBool::new(false),
+        });
+        Self::insert_job(&mut registry, job, expires)
+    }
+    fn insert_job(
+        registry: &mut Registry,
+        job: Arc<Job>,
+        expires: Instant,
+    ) -> Result<OperationTicket, AtlasError> {
         registry.jobs.retain(|_, old| {
             old.expires > Instant::now()
                 || lock(&old.phase).is_ok_and(|phase| *phase == Phase::Running)
@@ -493,6 +526,54 @@ impl OperationBroker {
             + 'static,
     {
         let job = self.job(authority, id)?;
+        let session_id = job
+            .session_id
+            .clone()
+            .ok_or_else(|| error(ErrorCode::Denied))?;
+        if matches!(job.plan, InspectionPlan::ConnectionCheck) {
+            return Err(error(ErrorCode::Denied));
+        }
+        let expires = job.expires;
+        let text = self.execute_job(authority, id, current_target, job, executor)?;
+        Ok(ProtectedText {
+            session_id,
+            operation_id: id.clone(),
+            expires_at: (Utc::now() + expires.saturating_duration_since(Instant::now()))
+                .to_rfc3339(),
+            text,
+        })
+    }
+    pub fn execute_connection_check<F>(
+        &self,
+        authority: Option<&Authority>,
+        id: &OperationId,
+        current_target: &ServerTarget,
+        executor: F,
+    ) -> Result<String, AtlasError>
+    where
+        F: FnOnce(&InspectionPlan, &mut ExecutionContext) -> Result<(), AtlasError>
+            + Send
+            + 'static,
+    {
+        let job = self.job(authority, id)?;
+        if job.session_id.is_some() || !matches!(job.plan, InspectionPlan::ConnectionCheck) {
+            return Err(error(ErrorCode::Denied));
+        }
+        self.execute_job(authority, id, current_target, job, executor)
+    }
+    fn execute_job<F>(
+        &self,
+        authority: Option<&Authority>,
+        id: &OperationId,
+        current_target: &ServerTarget,
+        job: Arc<Job>,
+        executor: F,
+    ) -> Result<String, AtlasError>
+    where
+        F: FnOnce(&InspectionPlan, &mut ExecutionContext) -> Result<(), AtlasError>
+            + Send
+            + 'static,
+    {
         if job.target != *current_target {
             return Err(error(ErrorCode::Denied));
         }
@@ -506,6 +587,7 @@ impl OperationBroker {
             job: job.clone(),
             output: String::new(),
             failure: None,
+            consumed: 0,
         };
         let shared = self.shared.clone();
         let spawned = std::thread::Builder::new()
@@ -555,13 +637,7 @@ impl OperationBroker {
         if registry.audit.len() > 200 {
             registry.audit.pop_front();
         }
-        result.map(|text| ProtectedText {
-            session_id: job.session_id.clone(),
-            operation_id: id.clone(),
-            expires_at: (Utc::now() + job.expires.saturating_duration_since(Instant::now()))
-                .to_rfc3339(),
-            text,
-        })
+        result
     }
 }
 
@@ -573,6 +649,7 @@ pub struct ExecutionContext {
     job: Arc<Job>,
     output: String,
     failure: Option<ErrorCode>,
+    consumed: usize,
 }
 impl ExecutionContext {
     fn run<F>(mut self, executor: F) -> Result<String, AtlasError>
@@ -598,11 +675,17 @@ impl ExecutionContext {
         self.broker.validate_job(Some(&self.authority), &self.job)
     }
     pub fn write(&mut self, text: &str) -> Result<(), AtlasError> {
+        self.account_output(text.len())?;
+        self.output.push_str(text);
+        Ok(())
+    }
+    /// Account captured subprocess bytes without exposing them as a response.
+    pub fn account_output(&mut self, bytes: usize) -> Result<(), AtlasError> {
         let result = self.checkpoint().and_then(|_| {
-            if self.output.len().saturating_add(text.len()) > self.broker.output_limit {
+            if self.consumed.saturating_add(bytes) > self.broker.output_limit {
                 return Err(error(ErrorCode::OutputLimit));
             }
-            self.output.push_str(text);
+            self.consumed += bytes;
             Ok(())
         });
         if let Err(failure) = &result {
@@ -681,6 +764,7 @@ mod tests {
             job,
             output: String::new(),
             failure: None,
+            consumed: 0,
         };
         broker.revoke(&caller).unwrap();
         let error = context

@@ -1,9 +1,61 @@
 mod workspace;
 
 use atlas_core::*;
+use atlas_core::{operations::OperationTicket, ssh::SshVerification};
 use std::sync::Arc;
 use tauri::{Emitter, Manager, State};
 use workspace::{Paths, Workspace};
+
+fn local_desktop(window: &tauri::WebviewWindow) -> Result<(), AtlasError> {
+    if !cfg!(desktop) || window.label() != "main" {
+        return Err(AtlasError::new(ErrorCode::Denied));
+    }
+    let url = window
+        .url()
+        .map_err(|_| AtlasError::new(ErrorCode::Denied))?;
+    let bundled = (url.scheme() == "http" && url.host_str() == Some("tauri.localhost"))
+        || (url.scheme() == "tauri" && url.host_str() == Some("localhost"));
+    let development = cfg!(debug_assertions)
+        && url.scheme() == "http"
+        && matches!(url.host_str(), Some("localhost" | "127.0.0.1"))
+        && url.port() == Some(1420);
+    if bundled || development {
+        Ok(())
+    } else {
+        Err(AtlasError::new(ErrorCode::Denied))
+    }
+}
+#[tauri::command]
+fn ssh_prepare(
+    window: tauri::WebviewWindow,
+    workspace: State<'_, Arc<Workspace>>,
+    server_id: ServerId,
+) -> Result<OperationTicket, AtlasError> {
+    local_desktop(&window)?;
+    workspace.inner().prepare_ssh(&server_id)
+}
+#[tauri::command]
+async fn ssh_verify(
+    window: tauri::WebviewWindow,
+    workspace: State<'_, Arc<Workspace>>,
+    server_id: ServerId,
+    operation_id: OperationId,
+) -> Result<SshVerification, AtlasError> {
+    local_desktop(&window)?;
+    let workspace = workspace.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || workspace.verify_ssh(&server_id, &operation_id))
+        .await
+        .map_err(|_| AtlasError::new(ErrorCode::IoFailure))?
+}
+#[tauri::command]
+fn ssh_cancel(
+    window: tauri::WebviewWindow,
+    workspace: State<'_, Arc<Workspace>>,
+    operation_id: OperationId,
+) -> Result<(), AtlasError> {
+    local_desktop(&window)?;
+    workspace.cancel_ssh(&operation_id)
+}
 
 #[tauri::command]
 fn foundation_status() -> FoundationStatus {
@@ -138,7 +190,7 @@ pub fn run() {
             }
         }
     })
-    .invoke_handler(tauri::generate_handler![foundation_status, workspace_status, map_state, retry_workspace, add_server, update_server, remove_server, add_relationship, remove_relationship, import_reports])
+    .invoke_handler(tauri::generate_handler![foundation_status, workspace_status, map_state, retry_workspace, add_server, update_server, remove_server, add_relationship, remove_relationship, import_reports, ssh_prepare, ssh_verify, ssh_cancel])
     .run(tauri::generate_context!())
     .expect("Atlas native runtime failed");
 }

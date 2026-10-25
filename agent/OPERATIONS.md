@@ -1,6 +1,6 @@
 # Managed operation guard foundation (T032)
 
-The shared `atlas_core::operations` module is a **library foundation**, not SSH authentication, a generic executor API or a production transport. No new Tauri/coordinator operation endpoint exists. T012/T014 must integrate actual authentication/execution; phone pairing, sudo and mutations remain unavailable.
+The shared `atlas_core::operations` module guards typed operations. T033 adds one backend-only connection-check bootstrap path and three purpose-specific native commands, with no authenticated SSH session grant. T012/T014 must still integrate protected/coordinator execution; phone pairing, sudo and mutations remain unavailable. There is no generic executor or grant endpoint.
 
 ## Trusted inputs and lifecycle
 
@@ -9,6 +9,8 @@ The shared `atlas_core::operations` module is a **library foundation**, not SSH 
 The adapter takes `ServerTarget` from the current Rust store before both prepare and execute. Caller/session/server/host mismatches deny access. Actual SSH resolution must also bind the resolved endpoint and trusted key in T012; this foundation has no SSH config resolver. Workload IDs and canonical roots originate in authenticated discovery, not frontend claims.
 
 The backend prepares an opaque single-use ticket; execute accepts its ID and a fresh backend target, with no replacement command or arguments. Only read-only SystemSummary, FileMetadata and ServiceStatus plans exist. Unknown fields, shell, terminal, sudo and mutation requests fail closed. Native/coordinator adapters should use `InspectionRequest::decode` for a 32 KiB wire limit and fixed redacted parse failures.
+
+T033's ConnectionCheck plan is backend-only and cannot be requested through InspectionRequest or executed as protected access. Conversely, a protected ticket cannot be substituted for a bootstrap ticket. `account_output` consumes captured process bytes without exposing raw diagnostics as a result. Native settings resolve one selected alias and verify a fixed nonce, requiring genuine publickey success; none auth cannot verify an identity. No SSH session is invented before authentication.
 
 ## Execution, bounds and cleanup
 
@@ -24,4 +26,4 @@ FileMetadata plans retain literal POSIX paths, not shell strings. Component-awar
 
 ## Verification
 
-`mise run test:feature -- T032` runs focused broker tests plus generated contract/type/tracker checks. Tests use private in-memory grants and fake executors, including hostile requests, competing callers, replay, cancellation/revocation, sticky output failure, deadline return and worker saturation/recovery. No keys, known-host files or real infrastructure are read or modified. Actual SSH/SFTP/native/phone journeys remain their existing tickets.
+`mise run test:feature -- T032` runs controlled broker tests. T033 adds real fixture-only OpenSSH/native proof via `test:ssh` and `test:ssh-native`, plus `test:feature -- T033`. No real keys/trust/infrastructure are test targets. Protected-session, actual SFTP and phone journeys remain their integration tickets; connection verification alone does not complete them.

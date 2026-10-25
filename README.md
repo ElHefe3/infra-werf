@@ -6,9 +6,9 @@ A native infrastructure map and server workspace, with a Windows desktop and a s
 
 ## Agent and delivery tracker
 
-Start with [.agent.md](.agent.md) or [the main agent guide](agent/AGENT.md). The guide contains the roadmap and links to 32 tickets grouped into 14 features and 8 scopes. [Product scope](agent/SCOPE.md) defines the 27-ticket core release and five deferred agent/rsync tickets. T032 splits the desktop operation guard from T014's later phone/SSH integration without expanding the product scope. [Discoveries](agent/discovery/README.md) and [the checkpoint](agent/evidence/CHECKPOINT.md) preserve findings and efficient restart context.
+Start with [.agent.md](.agent.md) or [the main agent guide](agent/AGENT.md). The guide contains the roadmap and links to 33 tickets grouped into 14 features and 8 scopes. [Product scope](agent/SCOPE.md) defines the 28-ticket core release and five deferred agent/rsync tickets. T032/T033 separate desktop guard/SSH verification from later paired integration without expanding product scope. [Discoveries](agent/discovery/README.md) and [the checkpoint](agent/evidence/CHECKPOINT.md) preserve findings and efficient restart context.
 
-The core is native Windows/Android with full phone controls through the Windows PC over LAN or an existing VPN. S01 foundations are complete. S02 prioritises the Windows map, saved-inventory workspace and native lifecycle; the separate compact phone composition remains T009. SSH, authenticated phone access and transfers are later tickets and show as unavailable. [BUILDING.md](BUILDING.md) records commands and [F02 acceptance](agent/evidence/F02-acceptance.md) records preservation proof.
+The core is native Windows/Android with full phone controls through the Windows PC over LAN or an existing VPN. S01 foundations are complete. S02 prioritises the Windows map, saved inventory, native lifecycle and SSH connection verification; the compact phone composition remains T009. Protected sessions, authenticated phone access and transfers remain later work. [BUILDING.md](BUILDING.md) records commands and [F02 acceptance](agent/evidence/F02-acceptance.md) records preservation proof.
 
 ## Native Windows desktop
 
@@ -16,9 +16,13 @@ Build with `mise run smoke:desktop`, then open **Atlas Desktop.cmd** or run `mis
 
 The launcher supplies the reference database for a **one-time read-only copy** into Atlas's own application-data folder. The original `data/atlas.sqlite3` stays available to the Python reference; a private legacy recovery copy is retained beside the new native database. Existing native data wins on subsequent launches. This is separate storage, not cross-application sync.
 
-Desktop capabilities: add/edit/remove map entries, drag positions, directed labelled relationships, host/workload search, full saved service/container inventory, inspector/activity, and keyboard-accessible workspace tabs. Saved observation state never implies current reachability. Files/Terminal/Transfers and SSH controls remain unavailable until their respective tickets pass. The phone coordinator has no listener yet.
+Desktop capabilities: add/edit/remove map entries, drag positions, directed labelled relationships, host/workload search, full saved inventory, inspector/activity, workspace tabs and strict SSH connection verification. Saved observations do not imply current reachability. Protected sessions, Files/Terminal/Transfers and privileged/service controls remain unavailable. The phone coordinator has no listener yet.
 
 `mise run test:desktop` exercises the **actual Tauri WebView2/Rust IPC** against synthetic data, including restart and failure paths. Build first. Private test databases/screenshots/results remain under ignored `.tools/`.
+
+Open a server → **Settings → Verify SSH access** to check its concrete alias using the PC's system OpenSSH configuration and existing public-key identities/agent. Atlas requires strict host trust and shows the resolved endpoint/fingerprint; it never copies private keys or changes known-host files. Unknown/changed fingerprints must be verified independently and resolved through your existing SSH trust workflow. A completed verification is a short check, not an open protected session. Direct aliases are supported; jump/proxy/known-host helper configurations are explicitly unavailable. Files, terminal, sudo and service controls remain unavailable.
+
+Controlled SSH proof: `mise run ssh:fixture` prepares a private pinned test runtime; `mise run test:ssh` tests real OpenSSH against loopback servers; `mise run test:ssh-native` exercises the actual Settings UI (build first). Test-only keys/data stay ignored; no real hosts or trust files are changed.
 
 ## Python reference
 

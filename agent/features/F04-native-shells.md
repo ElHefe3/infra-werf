@@ -122,3 +122,39 @@ Focused Rust tests using controlled executors, including an uncooperative read-o
 ### Stop conditions
 
 Do not expose a generic executor or authority-grant endpoint to Tauri/coordinator callers. Stop any live adapter integration until actual trust/authentication, cancellation and output-retention proof passes.
+
+## T033 — Verify desktop SSH access with strict host trust
+
+<!-- atlas-ticket: {"id":"T033","feature":"F04","status":"done","depends_on":["T008","T032"],"evidence":"../evidence/T033-acceptance.md"} -->
+
+### Outcome and included work
+
+In native desktop server settings, resolve the selected concrete OpenSSH alias and perform one real, bounded public-key authentication check. This extracts desktop connection verification from T012/T014; paired transport and protected-session/operation acceptance stay there.
+
+### Exclusions
+
+Password/key onboarding, automatic trust acceptance/known-host writes, jump/proxy/helper configuration, persistent SSH sessions, sudo, file/terminal/service controls and live owner infrastructure changes.
+
+### Implementation and contracts
+
+Use the system OpenSSH binary and existing configuration/agent/key references. A backend-only, single-use connection-check ticket uses the T032 authority/resource/cancellation guard without inventing an authenticated SSH session. Execute only a fixed echo nonce with strict host checking and no forwarding/multiplexing/backgrounding/helper/trust updates. Show resolved host/user/port, safe host fingerprint and distinct unknown/changed/authentication/network/config/client outcomes. Never return raw stdout/stderr, key contents or private-key paths. Close/cancel/timeout must terminate/reap the owned child and retain the native lifecycle lease until cleanup. Refuse unsupported proxy/jump/helper configurations explicitly.
+
+**Ticket dependencies:** [T008](F04-native-shells.md), [T032](F04-native-shells.md).
+
+### Acceptance criteria
+
+- [x] Native settings perform a real strict-trust OpenSSH verification using configured public-key identity references, with honest transient results and no persistent SSH-session claim.
+- [x] Controlled trusted/unknown/changed/rejected-auth/unreachable cases are distinct; fingerprints require independent verification and no known-host/config contents are changed by Atlas.
+- [x] Missing client, unsupported config, output overflow, cancellation and timeout fail safely; native close protects active work, no raw diagnostics/credentials reach UI/SQLite, and no generic shell/grant endpoint is added.
+
+### Verification
+
+Isolated loopback SSH server and synthetic fixture-only keys/config/trust files, real system OpenSSH, focused broker/process tests and one actual native WebView2 journey. Independent bounded review. Reuse unaffected map acceptance; no Android UI/APK rebuild.
+
+### Evidence and closure
+
+[T033 acceptance](../evidence/T033-acceptance.md) records passing real-process/native proof, data/trust preservation, resolved independent review and explicit limits. [D016](../discovery/D016-real-openssh-verification.md) records learned OpenSSH and cleanup constraints.
+
+### Stop conditions
+
+Never auto-accept unknown/changed real keys or use a trust bypass to finish. Only the explicitly controlled fixture may generate temporary test identities. Actual user trust/credential changes require their applicable authorization.

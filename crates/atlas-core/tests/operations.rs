@@ -580,3 +580,80 @@ fn concurrent_worker_budget_stays_bounded_and_recovers_after_completion() {
         "recovered"
     );
 }
+
+#[test]
+fn connection_bootstrap_never_grants_or_substitutes_for_an_ssh_session() {
+    let (broker, authority, target, session) = fixture(Duration::from_secs(1), 128);
+    assert_eq!(
+        code(broker.prepare_connection_check(None, &target)),
+        ErrorCode::Unauthenticated
+    );
+    let ticket = broker
+        .prepare_connection_check(Some(&authority), &target)
+        .unwrap();
+    assert_eq!(
+        code(broker.execute(
+            Some(&authority),
+            &ticket.operation_id,
+            &target,
+            |_, _| panic!("bootstrap is not protected access")
+        )),
+        ErrorCode::Denied
+    );
+    let text = broker
+        .execute_connection_check(
+            Some(&authority),
+            &ticket.operation_id,
+            &target,
+            |plan, context| {
+                assert!(matches!(plan, InspectionPlan::ConnectionCheck));
+                context.write("connection evidence only")
+            },
+        )
+        .unwrap();
+    assert_eq!(text, "connection evidence only");
+    let fake_session = SessionId::parse(ticket.operation_id.as_str()).unwrap();
+    assert_eq!(
+        code(broker.prepare(
+            Some(&authority),
+            &target,
+            request(&target, &fake_session, Inspection::SystemSummary {})
+        )),
+        ErrorCode::ExpiredSession
+    );
+    let protected = broker
+        .prepare(
+            Some(&authority),
+            &target,
+            request(&target, &session, Inspection::SystemSummary {}),
+        )
+        .unwrap();
+    assert_eq!(
+        code(broker.execute_connection_check(
+            Some(&authority),
+            &protected.operation_id,
+            &target,
+            |_, _| panic!("wrong ticket kind")
+        )),
+        ErrorCode::Denied
+    );
+}
+
+#[test]
+fn captured_subprocess_bytes_use_the_same_sticky_output_budget() {
+    let (broker, authority, target, _) = fixture(Duration::from_secs(1), 8);
+    let ticket = broker
+        .prepare_connection_check(Some(&authority), &target)
+        .unwrap();
+    let result = broker.execute_connection_check(
+        Some(&authority),
+        &ticket.operation_id,
+        &target,
+        |_, context| {
+            context.account_output(5)?;
+            let _ = context.write("safe");
+            Ok(())
+        },
+    );
+    assert_eq!(code(result), ErrorCode::OutputLimit);
+}

@@ -3,6 +3,7 @@
 pub mod contracts;
 pub mod inventory;
 pub mod operations;
+pub mod ssh;
 pub mod store;
 pub mod validation;
 

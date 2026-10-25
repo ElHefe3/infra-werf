@@ -35,6 +35,9 @@ export function errorMessage(error: unknown): string {
       incompatible_version: "This workspace uses an incompatible data version. Use the matching Atlas build; do not replace the database.",
       io_failure: "Atlas could not open or save its workspace. Check disk access and whether another process is using the database, then retry.",
       denied: "This operation is unavailable in the current workspace.",
+      cancelled: "The SSH check was cancelled. No authenticated session is open.",
+      timed_out: "The SSH check exceeded its time limit and was stopped. Check the host/VPN connection before retrying.",
+      output_limit: "The SSH check produced more output than allowed and was stopped. No partial result was retained.",
     };
     return messages[String(error.code)] ?? "Atlas could not complete the operation. Try again.";
   }

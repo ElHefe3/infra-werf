@@ -31,3 +31,6 @@ export type OperationProgress = { operation_id: OperationId, session_id: Session
 export type Inspection = { "kind": "system_summary", } | { "kind": "file_metadata", path: string, } | { "kind": "service_status", workload_id: string, };
 export type InspectionRequest = { server_id: ServerId, session_id: SessionId, inspection: Inspection, };
 export type OperationTicket = { operation_id: OperationId, expires_at: string, };
+export type SshProfile = { alias: string, hostname: string, user: string, port: number, identity_files: number, };
+export type SshCheckState = "verified" | "unknown_host" | "changed_host" | "authentication_failed" | "unreachable" | "unsupported_configuration" | "client_unavailable" | "failed";
+export type SshVerification = { contract_version: number, state: SshCheckState, profile: SshProfile | null, fingerprint: string | null, key_type: string | null, checked_at: string, };

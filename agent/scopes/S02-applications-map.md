@@ -19,7 +19,7 @@ Owner priority on 2026-10-25: desktop first. Deliver F03's desktop map/workspace
 | Feature | Tickets | Journey |
 | --- | --- | --- |
 | [F03](../features/F03-react-map.md) | T006, T007 | Desktop load → search/edit/connect → inspect workspace → reload. Compact-phone/touch composition remains in T009. |
-| [F04](../features/F04-native-shells.md) | T008, T009, T032 | Native lifecycle and desktop operation guard, followed by compact phone/native adapters. |
+| [F04](../features/F04-native-shells.md) | T008, T009, T032, T033 | Native lifecycle, desktop guard/SSH verification, then compact phone/native adapters. |
 
 Ticket status is canonical in the feature packets; scope progress is derived. Do not mark this gate complete merely because its files or implementation exist.
 
@@ -36,7 +36,7 @@ One shared map save/reload journey; targeted layout/focus checks at laptop and 3
 
 Link actual feature/gate proof and revision in [the checkpoint](../evidence/CHECKPOINT.md). Use the proportional evidence rules in [AGENT.md](../AGENT.md) and do not record native/owner tests as passed if unavailable.
 
-Desktop progress: T006–T008 passed; [F03 proof](../evidence/F03-acceptance.md), [Windows lifecycle proof](../evidence/F04-desktop-acceptance.md). T009 and combined scope gates stay open. Remote phone/transfer close warnings must be verified as those features are enabled.
+Desktop progress: T006–T008, T032 and T033 passed; [map proof](../evidence/F03-acceptance.md), [Windows proof](../evidence/F04-desktop-acceptance.md), [SSH verification proof](../evidence/T033-acceptance.md). T009 and combined scope gates stay open. Remote phone/transfer close warnings must be verified as those features are enabled.
 
 ## Exclusions and stop boundary
 

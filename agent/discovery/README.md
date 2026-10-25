@@ -29,3 +29,4 @@ Link important discoveries from affected feature packets and the checkpoint. Nev
 - [D013 Desktop-first delivery and native WebView2 proof](D013-native-desktop-proof.md)
 - [D014 Desktop operation foundation before phone integration](D014-desktop-guard-phasing.md)
 - [D015 Strict operation decoding and cancellation admission](D015-operation-decoding-and-admission.md)
+- [D016 Real OpenSSH trust/identity verification and native cleanup](D016-real-openssh-verification.md)

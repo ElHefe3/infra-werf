@@ -1,4 +1,8 @@
 use atlas_core::*;
+use atlas_core::{
+    operations::{Authority, OperationBroker, OperationTicket, ServerTarget},
+    ssh::{SshOptions, SshVerification},
+};
 use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
@@ -55,15 +59,25 @@ pub struct Workspace {
     paths: Paths,
     store: Mutex<Result<Store, AtlasError>>,
     lifecycle: Mutex<Lifecycle>,
+    broker: OperationBroker,
+    authority: Authority,
+    ssh: SshOptions,
 }
 
 impl Workspace {
     pub fn new(paths: Paths) -> Arc<Self> {
         let store = paths.open();
+        let broker = OperationBroker::default();
+        let authority = broker
+            .issue_backend_authority()
+            .expect("fresh local broker authority");
         Arc::new(Self {
             paths,
             store: Mutex::new(store),
             lifecycle: Mutex::new(Lifecycle::default()),
+            broker,
+            authority,
+            ssh: SshOptions::system(),
         })
     }
 
@@ -131,6 +145,49 @@ impl Workspace {
             store.import_reports(path)?;
             store.snapshot()
         })
+    }
+    fn ssh_target(&self, id: &ServerId) -> Result<ServerTarget, AtlasError> {
+        let state = self.with_store(|store| store.snapshot())?;
+        let server = state
+            .servers
+            .into_iter()
+            .find(|server| server.id == *id)
+            .ok_or_else(|| AtlasError::new(ErrorCode::NotFound))?;
+        ServerTarget::new(server.id, &server.host)
+    }
+    pub fn prepare_ssh(self: &Arc<Self>, id: &ServerId) -> Result<OperationTicket, AtlasError> {
+        let _admission = self.begin()?;
+        self.broker
+            .prepare_connection_check(Some(&self.authority), &self.ssh_target(id)?)
+    }
+    pub fn verify_ssh(
+        self: &Arc<Self>,
+        id: &ServerId,
+        operation: &OperationId,
+    ) -> Result<SshVerification, AtlasError> {
+        let admission = self.begin()?;
+        let target = self.ssh_target(id)?;
+        let alias = target.host().to_owned();
+        let options = self.ssh.clone();
+        let text = self.broker.execute_connection_check(
+            Some(&self.authority),
+            operation,
+            &target,
+            move |_, context| {
+                // Retain the native lease for actual child/pipe cleanup, even if
+                // the caller's cancellation/deadline has already returned.
+                let _admission = admission;
+                let result = options.verify(&alias, context)?;
+                context.write(&serde_json::to_string(&result).map_err(|_| failure())?)
+            },
+        )?;
+        if self.ssh_target(id)? != target {
+            return Err(AtlasError::new(ErrorCode::Denied));
+        }
+        serde_json::from_str(&text).map_err(|_| failure())
+    }
+    pub fn cancel_ssh(&self, operation: &OperationId) -> Result<(), AtlasError> {
+        self.broker.cancel(Some(&self.authority), operation)
     }
 }
 

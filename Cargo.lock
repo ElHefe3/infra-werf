@@ -220,6 +220,7 @@ version = "0.1.0"
 dependencies = [
  "atlas-core",
  "serde",
+ "serde_json",
  "tauri",
  "tauri-build",
  "tauri-plugin-single-instance",
