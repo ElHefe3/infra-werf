@@ -15,6 +15,8 @@ python atlas.py --inventory-dir '..\server map\dashboard\data'
 
 `Start-Atlas.ps1` locates the bundled Codex Python runtime when Python is not on PATH. The coordinator stays in the terminal; Ctrl+C stops it. Port 8770 is separate from the existing infrastructure progress dashboard.
 
+To keep Atlas running after the launching terminal or chat turn closes, run `./Start-Atlas.ps1 -Background`. This starts a hidden Python process with logs in `data/server.stdout.log` and `data/server.stderr.log`, and records its process ID in `data/server.pid`. It does not install a startup service or survive a PC reboot.
+
 The server currently binds to loopback only. The mobile interface can be reviewed on this computer at a phone viewport. Access from a physical phone requires a later authenticated network-access increment; the hosted prototype remains available separately. This build is not uploaded to Sites and private inventory is not published there.
 
 ## Implemented
