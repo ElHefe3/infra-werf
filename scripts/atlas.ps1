@@ -33,19 +33,41 @@ switch ($Action) {
     }
     'deps' { Run-AtlasCommand 'pnpm' @('install', '--frozen-lockfile') }
     'tracker-check' { Run-AtlasCommand 'python' @('agent/check_tracker.py', '--self-test') }
+    'contracts-generate' { Run-AtlasCommand 'cargo' @('run', '-p', 'atlas-core', '--bin', 'export-contracts', '--locked', '--', '--write') }
+    'contracts-check' { Run-AtlasCommand 'cargo' @('run', '-p', 'atlas-core', '--bin', 'export-contracts', '--locked', '--', '--check') }
     'doctor' { Invoke-AtlasDoctor }
     'check' {
+        Run-AtlasCommand 'cargo' @('run', '-p', 'atlas-core', '--bin', 'export-contracts', '--locked', '--', '--check')
         Run-AtlasCommand 'pnpm' @('check')
+        Run-AtlasCommand 'cargo' @('fmt', '--all', '--', '--check')
         Run-AtlasCommand 'cargo' @('check', '--workspace', '--locked')
     }
     'test-feature' {
         $Feature = ($TaskArguments | Where-Object { $_ -ne '--' } | Select-Object -First 1)
-        if ($Feature -ne 'F01') { Write-Error "No implemented test map for feature '$Feature'."; exit 2 }
-        Invoke-AtlasDoctor
-        Run-AtlasCommand 'pnpm' @('check')
+        if ($Feature -eq 'F01') {
+            Invoke-AtlasDoctor
+            Run-AtlasCommand 'pnpm' @('check')
+        } elseif ($Feature -eq 'F02') {
+            Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-core', '--locked')
+            Run-AtlasCommand 'cargo' @('run', '-p', 'atlas-core', '--bin', 'export-contracts', '--locked', '--', '--check')
+            Run-AtlasCommand 'pnpm' @('check')
+            Run-AtlasCommand 'node' @('--test', 'ui/client.test.ts')
+        } else { Write-Error "No implemented test map for feature '$Feature'."; exit 2 }
         Run-AtlasCommand 'python' @('agent/check_tracker.py', '--self-test')
     }
-    'test-integration' { Write-Error 'Domain integration suite is not implemented yet (F02 and later).'; exit 2 }
+    'test-integration' {
+        Run-AtlasCommand 'cargo' @('build', '-p', 'atlas-core', '--bin', 'atlas-data', '--locked')
+        Run-AtlasCommand 'python' @('scripts/verify_data.py')
+    }
+    'check-android-core' {
+        $AtlasNdkBins = Join-Path $env:NDK_HOME 'toolchains/llvm/prebuilt/windows-x86_64/bin'
+        $AtlasAndroidCompiler = Join-Path $AtlasNdkBins 'aarch64-linux-android24-clang.cmd'
+        if (-not (Test-Path -LiteralPath $AtlasAndroidCompiler)) { Write-Error 'Configured Android NDK ARM64 compiler is unavailable.'; exit 2 }
+        $env:CC_aarch64_linux_android = $AtlasAndroidCompiler
+        $env:AR_aarch64_linux_android = Join-Path $AtlasNdkBins 'llvm-ar.exe'
+        $env:CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER = $AtlasAndroidCompiler
+        Run-AtlasCommand 'cargo' @('check', '-p', 'atlas-core', '--target', 'aarch64-linux-android', '--locked')
+    }
     'dev-desktop' { Run-AtlasCommand 'pnpm' @('tauri', 'dev') }
     'dev-android' { Run-AtlasCommand 'pnpm' @('tauri', 'android', 'dev') }
     'smoke-desktop' { Run-AtlasCommand 'pnpm' @('tauri', 'build', '--debug', '--no-bundle', '--', '--locked') }

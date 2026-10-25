@@ -1,6 +1,6 @@
 # S01 — Foundations
 
-<!-- atlas-scope: {"id":"S01","features":["F01","F02"],"depends_on":[],"window":1,"deferred":false} -->
+<!-- atlas-scope: {"id":"S01","features":["F01","F02"],"depends_on":[],"window":1,"deferred":false,"evidence":"../evidence/F02-acceptance.md"} -->
 
 ## Outcome
 
@@ -27,8 +27,8 @@ Ticket status is canonical in the feature packets; scope progress is derived. Do
 
 - [x] Mise selects current stable pinned tools and a Windows MSVC Rust host; prerequisite gaps are explicit.
 - [x] Thin Windows x64 and Android ARM64 builds are demonstrated, rather than inferred from installed folders.
-- [ ] Rust persistence/import preserve IDs, layout, relationships, source timestamps and owner edits on controlled copies; invalid migration/import is recoverable.
-- [ ] Inventory retention classification and shared contracts respect protected-information boundaries; F02 risk review is recorded when available.
+- [x] Rust persistence/import preserve IDs, layout, relationships, source timestamps and owner edits on controlled copies; invalid migration/import is recoverable.
+- [x] Inventory retention classification and shared contracts respect protected-information boundaries; F02 risk review is recorded when available.
 
 ## Verification and refinement
 

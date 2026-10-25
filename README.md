@@ -8,7 +8,7 @@ A local infrastructure workspace with separate desktop and mobile interfaces bac
 
 Start with [.agent.md](.agent.md) or [the main agent guide](agent/AGENT.md). The guide contains the roadmap and links to 31 tickets grouped into 14 features and 8 scopes. [Product scope](agent/SCOPE.md) defines the 26-ticket core release and five deferred agent/rsync tickets. [Discoveries](agent/discovery/README.md) and [the checkpoint](agent/evidence/CHECKPOINT.md) preserve findings and efficient restart context.
 
-The core is native Windows/Android with full phone controls through the Windows PC over LAN or an existing VPN. Native foundation implementation has started. [BUILDING.md](BUILDING.md) records the pinned mise setup and build commands; ticket evidence records actual verification. The Python interfaces below remain the reference while the native migration proceeds.
+The core is native Windows/Android with full phone controls through the Windows PC over LAN or an existing VPN. The S01 foundation is complete: native Windows/Android build proof, shared Rust/TypeScript contracts, safe-copy SQLite migration and classified inventory import. [BUILDING.md](BUILDING.md) records commands and [F02 acceptance](agent/evidence/F02-acceptance.md) records preservation proof. The native window remains the foundation composition; React Flow desktop/mobile map migration is S02. The Python interfaces below remain the working reference.
 
 ## Run
 
@@ -27,7 +27,7 @@ To keep Atlas running after the launching terminal or chat turn closes, run `./S
 
 The server currently binds to loopback only. The mobile interface can be reviewed on this computer at a phone viewport. Access from a physical phone requires a later authenticated network-access increment; the hosted prototype remains available separately. This build is not uploaded to Sites and private inventory is not published there.
 
-## Implemented
+## Python reference features
 
 - Shared HTTP API and persistent SQLite storage at `data/atlas.sqlite3`.
 - Add and rename hosts; update their connection hostname.

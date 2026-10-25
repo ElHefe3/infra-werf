@@ -16,7 +16,7 @@ Read [SCOPE.md](../SCOPE.md) for access boundaries; use [AGENT.md](../AGENT.md) 
 
 ## T003 — Define shared domain and operation contracts
 
-<!-- atlas-ticket: {"id":"T003","feature":"F02","status":"ready","depends_on":["T002"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T003","feature":"F02","status":"done","depends_on":["T002"],"evidence":"../evidence/F02-T003.md"} -->
 
 ### Outcome and included work
 
@@ -34,9 +34,9 @@ Represent servers/edges, observation source/time/freshness, workload identity, s
 
 ### Acceptance criteria
 
-- [ ] Both clients consume one contract definition/version with stable IDs and no duplicated business rules.
-- [ ] Errors distinguish invalid input, unauthenticated/denied, host-trust failure, expired session and I/O failure.
-- [ ] Protected result types are separated from persistable approved baseline records; private keys/passwords are not serialisable domain data.
+- [x] Both clients consume one contract definition/version with stable IDs and no duplicated business rules.
+- [x] Errors distinguish invalid input, unauthenticated/denied, host-trust failure, expired session and I/O failure.
+- [x] Protected result types are separated from persistable approved baseline records; private keys/passwords are not serialisable domain data.
 
 ### Verification
 
@@ -44,7 +44,7 @@ Focused serialization/validation tests for representative DTOs and error mapping
 
 ### Evidence and closure
 
-Use a concise [feature acceptance record](../evidence/README.md), map results to T003, attach its relative path in ticket metadata, then check only proven criteria. Record tested revision/platform/fixtures, failures, limits and rollback as applicable. Current proof: **not run**. Use [the checkpoint](../evidence/CHECKPOINT.md) at handoff.
+Shared contract and adapter checks passed; see [T003 proof](../evidence/F02-T003.md) and [final F02 acceptance](../evidence/F02-acceptance.md). Runtime authentication and native map UI remain later scopes.
 
 ### Stop conditions
 
@@ -52,7 +52,7 @@ Record a contract decision if requirements conflict with access boundaries or ex
 
 ## T004 — Port SQLite and preserve map data
 
-<!-- atlas-ticket: {"id":"T004","feature":"F02","status":"todo","depends_on":["T003"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T004","feature":"F02","status":"done","depends_on":["T003"],"evidence":"../evidence/F02-acceptance.md"} -->
 
 ### Outcome and included work
 
@@ -70,9 +70,9 @@ Use synthetic fixtures and a SQLite backup/copy, never the only live database. P
 
 ### Acceptance criteria
 
-- [ ] CRUD, duplicate validation, coordinate rules and directional relationship semantics have parity across restart.
-- [ ] Migration preserves existing IDs/layout/relationships and approved records without destructive replacement.
-- [ ] Failure leaves the original/copy recoverable; rollback is exercised and concurrent Python/Rust writing to one database is prevented.
+- [x] CRUD, duplicate validation, coordinate rules and directional relationship semantics have parity across restart.
+- [x] Migration preserves existing IDs/layout/relationships and approved records without destructive replacement.
+- [x] Failure leaves the original/copy recoverable; rollback is exercised and concurrent Python/Rust writing to one database is prevented.
 
 ### Verification
 
@@ -80,7 +80,7 @@ Port meaningful persistence/migration cases from the ten-test reference suite; c
 
 ### Evidence and closure
 
-Use a concise [feature acceptance record](../evidence/README.md), map results to T004, attach its relative path in ticket metadata, then check only proven criteria. Record tested revision/platform/fixtures, failures, limits and rollback as applicable. Current proof: **not run**. Use [the checkpoint](../evidence/CHECKPOINT.md) at handoff.
+Persistence, safe-copy parity, recovery and concurrent-writer checks passed. The independent review's two guard findings were fixed and rechecked; see [final F02 acceptance](../evidence/F02-acceptance.md). No live cutover occurred.
 
 ### Stop conditions
 
@@ -88,7 +88,7 @@ Stop before any irreversible data transformation or unexplained parity mismatch;
 
 ## T005 — Classify and import approved inventory
 
-<!-- atlas-ticket: {"id":"T005","feature":"F02","status":"todo","depends_on":["T004"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T005","feature":"F02","status":"done","depends_on":["T004"],"evidence":"../evidence/F02-acceptance.md"} -->
 
 ### Outcome and included work
 
@@ -106,9 +106,9 @@ Audit each retained field against the original access model. Permit approved bas
 
 ### Acceptance criteria
 
-- [ ] A recorded field classification explains what is retained, excluded or requires on-demand authenticated collection.
-- [ ] Valid newer imports preserve stable identity/layout/owner edits; duplicate/older and invalid batches behave correctly.
-- [ ] Views label reports as saved/stale and protected/raw fields never enter persistent overview state.
+- [x] A recorded field classification explains what is retained, excluded or requires on-demand authenticated collection.
+- [x] Valid newer imports preserve stable identity/layout/owner edits; duplicate/older and invalid batches behave correctly.
+- [x] Views label reports as saved/stale and protected/raw fields never enter persistent overview state.
 
 ### Verification
 
@@ -116,7 +116,7 @@ Focused allowlist, timestamp/order, size/type, atomicity and preservation tests 
 
 ### Evidence and closure
 
-Use a concise [feature acceptance record](../evidence/README.md), map results to T005, attach its relative path in ticket metadata, then check only proven criteria. Record tested revision/platform/fixtures, failures, limits and rollback as applicable. Current proof: **not run**. Use [the checkpoint](../evidence/CHECKPOINT.md) at handoff.
+Classification, atomic/bounded import and saved/stale snapshot-view checks passed; see [INVENTORY.md](../INVENTORY.md) and [final F02 acceptance](../evidence/F02-acceptance.md). Actual native map rendering remains S02.
 
 ### Stop conditions
 

@@ -24,3 +24,5 @@ Link important discoveries from affected feature packets and the checkpoint. Nev
 - [D008 Android native-library symbolic-link permission](D008-android-symlink-permission.md)
 - [D009 Tracker fixture preconditions after real ticket completion](D009-tracker-fixture-state.md)
 - [D010 Android SDK platform package metadata](D010-android-sdk-package-metadata.md)
+- [D011 SQLite ownership, recovery and concurrent writers](D011-sqlite-owner-and-writer-boundary.md)
+- [D012 Migration schema-prefix and WAL-size review findings](D012-snapshot-review-guards.md)

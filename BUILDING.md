@@ -60,7 +60,9 @@ mise run build:desktop
 mise run build:android
 ```
 
-Smoke tasks produce debug native artifacts; release packaging/signing and actual phone execution are separate acceptance work. `test:integration` and unmapped feature checks fail explicitly until their suites exist. Doctor distinguishes required build prerequisites from deferred signing, device and controlled SSH-fixture checks.
+Smoke tasks produce debug native artifacts; release packaging/signing and actual phone execution are separate acceptance work. `test:integration` now runs the actual Python/Rust parity, rollback, lock and import journey on synthetic copies. Unmapped feature checks still fail explicitly. Doctor distinguishes required build prerequisites from deferred signing, device and controlled SSH-fixture checks.
+
+F02 adds `mise run contracts:generate` (explicitly writes bindings), `contracts:check` (read-only comparison), `test:feature -- F02` and `check:android-core`. The Android core check uses the configured NDK's API 24 compiler without creating JNI symbolic links or rebuilding APKs. [CONTRACTS.md](agent/CONTRACTS.md), [INVENTORY.md](agent/INVENTORY.md) and [STORAGE.md](agent/STORAGE.md) describe the types, retention boundary and safe-copy migration. No live database cutover is automatic.
 
 All tasks use `scripts/atlas.ps1` to prepend bins returned by `mise bin-paths`. This is required on the observed desktop: direct `mise exec -- node --version` was correct while child commands still found system Node 14 and skipped TypeScript's native optional package. Use `mise run exec -- <command> <args>` for one-off commands that launch children. A locked reinstall with `--force` repaired the original skipped package; it is recovery evidence, not the normal dependency command.
 

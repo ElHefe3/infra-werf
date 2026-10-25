@@ -1,18 +1,12 @@
-use serde::Serialize;
-
-#[derive(Serialize)]
-struct FoundationStatus {
-    version: &'static str,
-    platform: &'static str,
-    phase: &'static str,
-}
+use atlas_core::{CONTRACT_VERSION, FoundationStatus};
 
 #[tauri::command]
 fn foundation_status() -> FoundationStatus {
     FoundationStatus {
-        version: env!("CARGO_PKG_VERSION"),
-        platform: std::env::consts::OS,
-        phase: "native shell; domain migration pending",
+        contract_version: CONTRACT_VERSION,
+        version: env!("CARGO_PKG_VERSION").into(),
+        platform: std::env::consts::OS.into(),
+        phase: "native shell; domain migration pending".into(),
     }
 }
 

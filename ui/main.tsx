@@ -1,16 +1,16 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
-import { invoke, isTauri } from "@tauri-apps/api/core";
+import { isTauri } from "@tauri-apps/api/core";
+import { createNativeClient } from "./client";
+import type { FoundationStatus } from "./contracts.gen";
 import "./style.css";
-
-interface FoundationStatus { version: string; platform: string; phase: string }
 
 function App() {
   const [status, setStatus] = React.useState<FoundationStatus | null>(null);
   const [error, setError] = React.useState("");
   React.useEffect(() => {
     if (!isTauri()) return;
-    invoke<FoundationStatus>("foundation_status").then(setStatus).catch((e: unknown) => setError(String(e)));
+    createNativeClient().status().then(setStatus).catch((e: unknown) => setError(String(e)));
   }, []);
   return <main>
     <header><span className="brand">a<span>·</span></span><span>PERSONAL WORKSPACE / ATLAS</span></header>

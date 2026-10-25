@@ -2,8 +2,8 @@
 
 ## Active checkpoint
 
-- **State:** S01 in progress; F01's Windows/Android native-build gate passed on 2026-10-25.
-- **Active:** [T003 in F02](features/F02-domain-persistence.md) is ready. [F01 acceptance](evidence/F01-acceptance.md) records the native artifacts, Windows launch, cache proof and limits. Next: shared contracts, safe-copy persistence and classified inventory import.
+- **State:** S01 complete on 2026-10-25: T001–T005 passed with native-build, safe-copy data and review evidence.
+- **Next:** [T006 in F03](features/F03-react-map.md) is ready for S02's React Flow desktop/mobile map migration. [F01 acceptance](evidence/F01-acceptance.md) and [F02 acceptance](evidence/F02-acceptance.md) record proof and limits. Native build milestone **23663d2**; the original Python database remains unchanged.
 - **Core target:** native Windows and Android, Windows-hosted coordinator, full phone controls over LAN/existing VPN.
 - **Budget target:** two five-hour usage windows; a prioritisation target, not a quota or elapsed-time guarantee.
 - **Baseline:** A01 Python/SQLite/browser work is historical, with evidence in [IMPLEMENTATION.md](../IMPLEMENTATION.md). It does not complete new Rust/React/native tickets.

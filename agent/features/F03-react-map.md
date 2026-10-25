@@ -16,7 +16,7 @@ Read [SCOPE.md](../SCOPE.md) for access boundaries; use [AGENT.md](../AGENT.md) 
 
 ## T006 — Replace handwritten map with React Flow
 
-<!-- atlas-ticket: {"id":"T006","feature":"F03","status":"todo","depends_on":["T003","T004","T005"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T006","feature":"F03","status":"ready","depends_on":["T003","T004","T005"],"evidence":null} -->
 
 ### Outcome and included work
 

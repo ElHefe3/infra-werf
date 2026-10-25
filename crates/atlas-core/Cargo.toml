@@ -1,0 +1,22 @@
+[package]
+name = "atlas-core"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99.1"
+
+[dependencies]
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.154"
+chrono = { version = "=0.4.45", default-features = false, features = ["clock", "std"] }
+uuid = { version = "=1.29.0", features = ["v4"] }
+ts-rs = "=12.0.1"
+rusqlite = { version = "=0.41.0", features = ["bundled", "backup"] }
+tempfile = "=3.27.0"
+
+[[bin]]
+name = "atlas-data"
+path = "src/bin/atlas-data.rs"
+
+[[bin]]
+name = "export-contracts"
+path = "src/bin/export-contracts.rs"

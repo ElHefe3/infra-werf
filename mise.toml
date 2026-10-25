@@ -30,7 +30,7 @@ description = "Run the selected feature's bounded checks"
 run = "powershell -NoProfile -File scripts/atlas.ps1 test-feature"
 
 [tasks."test:integration"]
-description = "Run integration checks when an implemented suite exists"
+description = "Run Python/Rust parity, rollback, writer-lock and import checks on private synthetic copies"
 run = "powershell -NoProfile -File scripts/atlas.ps1 test-integration"
 
 [tasks."dev:desktop"]
@@ -58,3 +58,15 @@ run = "powershell -NoProfile -File scripts/atlas.ps1 build-android"
 [tasks.exec]
 description = "Run a one-off command with the same verified child-process PATH as tasks"
 run = "powershell -NoProfile -File scripts/atlas.ps1 exec"
+
+[tasks."contracts:generate"]
+description = "Explicitly regenerate TypeScript from the shared Rust contracts"
+run = "powershell -NoProfile -File scripts/atlas.ps1 contracts-generate"
+
+[tasks."contracts:check"]
+description = "Verify generated bindings without rewriting them"
+run = "powershell -NoProfile -File scripts/atlas.ps1 contracts-check"
+
+[tasks."check:android-core"]
+description = "Compile the portable Rust/SQLite core for ARM64 using the configured NDK"
+run = "powershell -NoProfile -File scripts/atlas.ps1 check-android-core"
