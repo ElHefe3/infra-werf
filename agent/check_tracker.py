@@ -188,13 +188,31 @@ def self_test(root):
     f13 = next((root/'agent'/'features').glob('F13-*.md'))
     scope = next((root/'agent'/'scopes').glob('S01-*.md'))
 
+    # Rejection fixtures need controlled preconditions. They must not stop
+    # testing a rule merely because the live dependency has since been done.
+    packets = {p: p.read_text(encoding='utf-8-sig') for p in (root/'agent'/'features').glob('*.md')}
+    deferred = {json.loads(m[2])['id']: json.loads(m[2])['deferred']
+                for text in packets.values() for m in META.finditer(text) if m[1] == 'feature'}
+
+    def reset_ticket(match):
+        data = json.loads(match[2])
+        if match[1] == 'ticket':
+            data['status'] = 'deferred' if deferred[data['feature']] else 'todo'
+            if data['id'] == 'T001':
+                data['status'] = 'ready'
+            data['evidence'] = None
+        return '<!-- atlas-'+match[1]+': '+json.dumps(data)+' -->'
+
+    baseline = {p: META.sub(reset_ticket, text).replace('- [x]', '- [ ]').replace('- [X]', '- [ ]')
+                for p, text in packets.items()}
+
     def change(path, kind, ident, edits):
         def replace(match):
             data = json.loads(match[2])
             if match[1] == kind and data['id'] == ident:
                 data.update(edits)
             return '<!-- atlas-'+match[1]+': '+json.dumps(data)+' -->'
-        return {path: META.sub(replace, path.read_text(encoding='utf-8'))}
+        return {**baseline, path: META.sub(replace, baseline.get(path, path.read_text(encoding='utf-8-sig')))}
 
     cases = [
         ('unknown dependency', change(f01, 'ticket', 'T001', {'depends_on': ['T999']})),
@@ -204,9 +222,9 @@ def self_test(root):
         ('unchecked acceptance', change(f01, 'ticket', 'T001', {'status': 'done'})),
         ('evidence file missing', change(f01, 'ticket', 'T001', {'status': 'done', 'evidence': '../evidence/missing.md'})),
         ('membership mismatch', change(scope, 'scope', 'S01', {'features': ['F01', 'F03']})),
-        ('broken link', {f01: f01.read_text(encoding='utf-8')+'\n[bad](missing.md)\n'}),
-        ('missing section', {f01: f01.read_text(encoding='utf-8').replace('### Verification', '### Missing proof', 1)}),
-        ('duplicate ticket', {f01: f01.read_text(encoding='utf-8')+'\n<!-- atlas-ticket: {"id":"T001","feature":"F01","status":"todo","depends_on":[]} -->\n'}),
+        ('broken link', {**baseline, f01: baseline[f01]+'\n[bad](missing.md)\n'}),
+        ('missing section', {**baseline, f01: baseline[f01].replace('### Verification', '### Missing proof', 1)}),
+        ('duplicate ticket', {**baseline, f01: baseline[f01]+'\n<!-- atlas-ticket: {"id":"T001","feature":"F01","status":"todo","depends_on":[]} -->\n'}),
     ]
     for expected, overrides in cases:
         errors, _, _ = validate(root, overrides)

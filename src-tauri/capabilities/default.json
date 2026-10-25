@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "foundation",
+  "description": "Foundation window: core native capabilities, no shell or filesystem plugins",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

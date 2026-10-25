@@ -2,3 +2,17 @@ data/
 __pycache__/
 *.pyc
 .venv/
+.mise.local.toml
+mise.local.toml
+node_modules/
+dist/
+target/
+.tools/
+src-tauri/gen/android/.gradle/
+src-tauri/gen/android/.idea/
+src-tauri/gen/android/local.properties
+src-tauri/gen/android/**/build/
+src-tauri/gen/schemas/
+*.jks
+*.keystore
+*.p12

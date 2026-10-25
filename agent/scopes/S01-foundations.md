@@ -25,8 +25,8 @@ Ticket status is canonical in the feature packets; scope progress is derived. Do
 
 ## Acceptance gate
 
-- [ ] Mise selects current stable pinned tools and a Windows MSVC Rust host; prerequisite gaps are explicit.
-- [ ] Thin Windows x64 and Android ARM64 builds are demonstrated, rather than inferred from installed folders.
+- [x] Mise selects current stable pinned tools and a Windows MSVC Rust host; prerequisite gaps are explicit.
+- [x] Thin Windows x64 and Android ARM64 builds are demonstrated, rather than inferred from installed folders.
 - [ ] Rust persistence/import preserve IDs, layout, relationships, source timestamps and owner edits on controlled copies; invalid migration/import is recoverable.
 - [ ] Inventory retention classification and shared contracts respect protected-information boundaries; F02 risk review is recorded when available.
 

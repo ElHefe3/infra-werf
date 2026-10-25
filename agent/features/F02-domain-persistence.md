@@ -16,7 +16,7 @@ Read [SCOPE.md](../SCOPE.md) for access boundaries; use [AGENT.md](../AGENT.md) 
 
 ## T003 — Define shared domain and operation contracts
 
-<!-- atlas-ticket: {"id":"T003","feature":"F02","status":"todo","depends_on":["T002"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T003","feature":"F02","status":"ready","depends_on":["T002"],"evidence":null} -->
 
 ### Outcome and included work
 

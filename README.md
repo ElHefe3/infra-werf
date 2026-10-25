@@ -8,7 +8,7 @@ A local infrastructure workspace with separate desktop and mobile interfaces bac
 
 Start with [.agent.md](.agent.md) or [the main agent guide](agent/AGENT.md). The guide contains the roadmap and links to 31 tickets grouped into 14 features and 8 scopes. [Product scope](agent/SCOPE.md) defines the 26-ticket core release and five deferred agent/rsync tickets. [Discoveries](agent/discovery/README.md) and [the checkpoint](agent/evidence/CHECKPOINT.md) preserve findings and efficient restart context.
 
-The core is native Windows/Android with full phone controls through the Windows PC over LAN or an existing VPN. T001 will resolve latest stable Node Current/Rust/pnpm and compatible dependencies, pin them locally and establish mise commands. Those tools/tasks and application features have not been implemented by the documentation task.
+The core is native Windows/Android with full phone controls through the Windows PC over LAN or an existing VPN. Native foundation implementation has started. [BUILDING.md](BUILDING.md) records the pinned mise setup and build commands; ticket evidence records actual verification. The Python interfaces below remain the reference while the native migration proceeds.
 
 ## Run
 

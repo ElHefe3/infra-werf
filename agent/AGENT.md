@@ -2,8 +2,8 @@
 
 ## Active checkpoint
 
-- **State:** tracker established; application implementation has not started under this tracker.
-- **Next:** [T001 in F01](features/F01-build-environment.md), once S01/application implementation is authorised.
+- **State:** S01 in progress; F01's Windows/Android native-build gate passed on 2026-10-25.
+- **Active:** [T003 in F02](features/F02-domain-persistence.md) is ready. [F01 acceptance](evidence/F01-acceptance.md) records the native artifacts, Windows launch, cache proof and limits. Next: shared contracts, safe-copy persistence and classified inventory import.
 - **Core target:** native Windows and Android, Windows-hosted coordinator, full phone controls over LAN/existing VPN.
 - **Budget target:** two five-hour usage windows; a prioritisation target, not a quota or elapsed-time guarantee.
 - **Baseline:** A01 Python/SQLite/browser work is historical, with evidence in [IMPLEMENTATION.md](../IMPLEMENTATION.md). It does not complete new Rust/React/native tickets.
@@ -42,7 +42,7 @@ Use this order by default. S05 depends on S03, so an authorised independent feat
 
 ## Mise/toolchain command contract
 
-T001 creates the actual project-local `mise.toml`, pins and tasks. These task names are required deliverables, **not commands already implemented**:
+T001 established project-local `mise.toml`, pins and tasks. [BUILDING.md](../BUILDING.md) records exact versions and prerequisites; the tasks below are implemented, with native build acceptance tracked separately in T002:
 
 | Command | Purpose |
 | --- | --- |
@@ -55,7 +55,7 @@ T001 creates the actual project-local `mise.toml`, pins and tasks. These task na
 | `mise run test:integration` | Shared storage/auth/transport integration |
 | `mise run build:desktop` / `mise run build:android` | Reproducible release artifacts |
 
-Use `mise exec -- ...` for one-off commands. Resolve latest stable Node Current, Rust, pnpm and compatible dependencies once, then commit exact tool pins and package/Cargo lockfiles. Use the MSVC Rust host and needed Android targets without changing the global GNU default. Select JDK/SDK/NDK supported by the chosen stable Tauri/Gradle; record exceptions, never downgrade silently. Do not upgrade working dependencies mid-feature. Keep private/machine-specific values in ignored local configuration.
+Use `mise run exec -- ...` for one-off commands that launch children; [D007](discovery/D007-native-setup-boundaries.md) records the observed Windows PATH issue. Resolve latest stable Node Current, Rust, pnpm and compatible dependencies once, then commit exact tool pins and package/Cargo lockfiles. Use the MSVC Rust host and needed Android targets without changing the global GNU default. Select JDK/SDK/NDK supported by the chosen stable Tauri/Gradle; record exceptions, never downgrade silently. Do not upgrade working dependencies mid-feature. Keep private/machine-specific values in ignored local configuration.
 
 Before T001, the documentation checker works with an existing Python 3.11+: `python agent/check_tracker.py`. Using an already available interpreter for this check does not authorise new toolchain installation or application implementation.
 

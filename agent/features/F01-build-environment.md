@@ -12,11 +12,11 @@
 
 Read [SCOPE.md](../SCOPE.md) for access boundaries; use [AGENT.md](../AGENT.md) for execution/proof rules. Ticket dependencies, not numeric ordering, control implementation. Feature completion is derived from its tickets and scope gate, not independently marked done.
 
-**Relevant discoveries:** [D001](../discovery/D001-runtime-selection.md), [D002](../discovery/D002-rust-host.md), [D003](../discovery/D003-android-prerequisites.md), [D005](../discovery/D005-edit-approval-observations.md).
+**Relevant discoveries:** [D001](../discovery/D001-runtime-selection.md), [D002](../discovery/D002-rust-host.md), [D003](../discovery/D003-android-prerequisites.md), [D005](../discovery/D005-edit-approval-observations.md), [D007](../discovery/D007-native-setup-boundaries.md).
 
 ## T001 — Pin current tools and establish mise tasks
 
-<!-- atlas-ticket: {"id":"T001","feature":"F01","status":"ready","depends_on":[],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T001","feature":"F01","status":"done","depends_on":[],"evidence":"../evidence/F01-T001.md"} -->
 
 ### Outcome and included work
 
@@ -34,9 +34,9 @@ Resolve official stable releases once, select the Windows MSVC Rust host per pro
 
 ### Acceptance criteria
 
-- [ ] Effective Node/Rust/pnpm versions run through mise and are exact project pins; Node 14 and the global GNU host are not selected accidentally.
-- [ ] Doctor identifies MSVC/linker/WebView2, JDK/SDK/NDK, signing/device and controlled SSH-fixture readiness; missing items are explicit.
-- [ ] Required tasks execute the appropriate check or explicitly report that no implementation/test exists yet; no fake pass. Version and compatibility choices are recorded.
+- [x] Effective Node/Rust/pnpm versions run through mise and are exact project pins; Node 14 and the global GNU host are not selected accidentally.
+- [x] Doctor identifies MSVC/linker/WebView2, JDK/SDK/NDK, signing/device and controlled SSH-fixture readiness; missing items are explicit.
+- [x] Required tasks execute the appropriate check or explicitly report that no implementation/test exists yet; no fake pass. Version and compatibility choices are recorded.
 
 ### Verification
 
@@ -44,7 +44,7 @@ Run doctor and effective-version checks once; validate task/config parsing. Do n
 
 ### Evidence and closure
 
-Use a concise [feature acceptance record](../evidence/README.md), map results to T001, attach its relative path in ticket metadata, then check only proven criteria. Record tested revision/platform/fixtures, failures, limits and rollback as applicable. Current proof: **not run**. Use [the checkpoint](../evidence/CHECKPOINT.md) at handoff.
+Tool selection, diagnostics and task checks passed; see [T001 evidence](../evidence/F01-T001.md). Native platform acceptance is tracked separately in T002. Use [the checkpoint](../evidence/CHECKPOINT.md) at handoff.
 
 ### Stop conditions
 
@@ -52,7 +52,7 @@ Stop the affected setup on missing licences/permissions or incompatible current 
 
 ## T002 — Prove thin Windows and Android native builds
 
-<!-- atlas-ticket: {"id":"T002","feature":"F01","status":"todo","depends_on":["T001"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T002","feature":"F01","status":"done","depends_on":["T001"],"evidence":"../evidence/F01-acceptance.md"} -->
 
 ### Outcome and included work
 
@@ -70,9 +70,9 @@ Use the pinned toolchain and common frontend. Compile the native shells before i
 
 ### Acceptance criteria
 
-- [ ] A thin Windows native application builds and launches.
-- [ ] An Android ARM64 native artifact builds; emulator/device execution status is recorded separately rather than inferred.
-- [ ] Re-running the documented mise build commands uses the pinned setup and preserves successful dependency/build caches.
+- [x] A thin Windows native application builds and launches.
+- [x] An Android ARM64 native artifact builds; emulator/device execution status is recorded separately rather than inferred.
+- [x] Re-running the documented mise build commands uses the pinned setup and preserves successful dependency/build caches.
 
 ### Verification
 
@@ -80,7 +80,7 @@ One thin native build per platform; smoke launch where available. Physical-phone
 
 ### Evidence and closure
 
-Use a concise [feature acceptance record](../evidence/README.md), map results to T002, attach its relative path in ticket metadata, then check only proven criteria. Record tested revision/platform/fixtures, failures, limits and rollback as applicable. Current proof: **not run**. Use [the checkpoint](../evidence/CHECKPOINT.md) at handoff.
+Windows native build/launch, the Android ARM64 debug APK, repeat builds/cache reuse and the focused F01 checks passed. See [F01 acceptance](../evidence/F01-acceptance.md). Android runtime execution and release signing remain separate, untested gates. The historical permission failure is retained in [T002 progress](../evidence/F01-T002-progress.md).
 
 ### Stop conditions
 

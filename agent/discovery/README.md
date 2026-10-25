@@ -17,3 +17,10 @@ Link important discoveries from affected feature packets and the checkpoint. Nev
 
 - [D005 Edit-approval observations and limits](D005-edit-approval-observations.md)
 - [D006 Separate SSH catalog version error](D006-separate-ssh-catalog-error.md)
+
+## Findings during implementation
+
+- [D007 Native tool paths, sandbox context, UAC and Android prerequisites](D007-native-setup-boundaries.md)
+- [D008 Android native-library symbolic-link permission](D008-android-symlink-permission.md)
+- [D009 Tracker fixture preconditions after real ticket completion](D009-tracker-fixture-state.md)
+- [D010 Android SDK platform package metadata](D010-android-sdk-package-metadata.md)
