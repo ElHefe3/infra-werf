@@ -51,9 +51,12 @@ Gradle installed API 37.0 revision 2 and Build Tools 36.0.0 with licences alread
 
 ```powershell
 mise run dev:desktop
+mise run start:desktop
 mise run dev:android
 mise run check
 mise run test:feature -- F01
+mise run test:feature -- F03
+mise run test:desktop
 mise run smoke:desktop
 mise run smoke:android
 mise run build:desktop

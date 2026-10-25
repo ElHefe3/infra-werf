@@ -1,16 +1,26 @@
 # Atlas
 
-A local infrastructure workspace with separate desktop and mobile interfaces backed by one SQLite database. This is the first working increment after the approved Atlas prototypes.
+A native infrastructure map and server workspace, with a Windows desktop and a separate compact Android interface planned on the shared Rust domain.
 
-**Stack reconciliation:** The target is **React + TypeScript + React Flow, Tauri on Windows and native Android, Rust, SQLite and system OpenSSH/SSH agent**, with SFTP first and rsync later. The Python build below is provisional and has not yet been migrated. See [STACK.md](STACK.md) for the original source and requirements.
+**Stack:** **React + TypeScript + React Flow, Tauri on Windows and native Android, Rust, SQLite and system OpenSSH/SSH agent**, with SFTP first and rsync later. The desktop map now uses React Flow and real Rust persistence. See [STACK.md](STACK.md) for the original source and requirements.
 
 ## Agent and delivery tracker
 
 Start with [.agent.md](.agent.md) or [the main agent guide](agent/AGENT.md). The guide contains the roadmap and links to 31 tickets grouped into 14 features and 8 scopes. [Product scope](agent/SCOPE.md) defines the 26-ticket core release and five deferred agent/rsync tickets. [Discoveries](agent/discovery/README.md) and [the checkpoint](agent/evidence/CHECKPOINT.md) preserve findings and efficient restart context.
 
-The core is native Windows/Android with full phone controls through the Windows PC over LAN or an existing VPN. The S01 foundation is complete: native Windows/Android build proof, shared Rust/TypeScript contracts, safe-copy SQLite migration and classified inventory import. [BUILDING.md](BUILDING.md) records commands and [F02 acceptance](agent/evidence/F02-acceptance.md) records preservation proof. The native window remains the foundation composition; React Flow desktop/mobile map migration is S02. The Python interfaces below remain the working reference.
+The core is native Windows/Android with full phone controls through the Windows PC over LAN or an existing VPN. S01 foundations are complete. S02 prioritises the Windows map, saved-inventory workspace and native lifecycle; the separate compact phone composition remains T009. SSH, authenticated phone access and transfers are later tickets and show as unavailable. [BUILDING.md](BUILDING.md) records commands and [F02 acceptance](agent/evidence/F02-acceptance.md) records preservation proof.
 
-## Run
+## Native Windows desktop
+
+Build with `mise run smoke:desktop`, then open **Atlas Desktop.cmd** or run `mise run start:desktop`. The built application runs without Python or a development server. `mise run dev:desktop` starts the native development window.
+
+The launcher supplies the reference database for a **one-time read-only copy** into Atlas's own application-data folder. The original `data/atlas.sqlite3` stays available to the Python reference; a private legacy recovery copy is retained beside the new native database. Existing native data wins on subsequent launches. This is separate storage, not cross-application sync.
+
+Desktop capabilities: add/edit/remove map entries, drag positions, directed labelled relationships, host/workload search, full saved service/container inventory, inspector/activity, and keyboard-accessible workspace tabs. Saved observation state never implies current reachability. Files/Terminal/Transfers and SSH controls remain unavailable until their respective tickets pass. The phone coordinator has no listener yet.
+
+`mise run test:desktop` exercises the **actual Tauri WebView2/Rust IPC** against synthetic data, including restart and failure paths. Build first. Private test databases/screenshots/results remain under ignored `.tools/`.
+
+## Python reference
 
 Python 3.11 or newer; no third-party packages required.
 

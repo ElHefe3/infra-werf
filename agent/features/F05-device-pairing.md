@@ -30,6 +30,8 @@ Public hosting, VPN installation, account/team identity providers or publishing 
 
 Use TLS with explicit certificate trust/pinning, a cryptographically random single-use pairing secret expiring after five minutes, visible desktop approval and revocable per-device identity. Keep secrets in protected OS storage and out of QR screenshots/evidence/logs.
 
+Register active authenticated remote work with T008's shared lifecycle admission guard before enabling it. Verify ordinary desktop close/quit shows an explicit warning and preserves active phone work; transfer jobs in F08/F09 must retain registration for the full background job, not merely its initial request. See [D013](../discovery/D013-native-desktop-proof.md) and [Windows lifecycle evidence](../evidence/F04-desktop-acceptance.md).
+
 **Ticket dependencies:** [T008](F04-native-shells.md), [T009](F04-native-shells.md).
 
 ### Acceptance criteria

@@ -7,6 +7,7 @@ export type EdgeId = string;
 export type SessionId = string;
 export type OperationId = string;
 export type FoundationStatus = { contract_version: number, version: string, platform: string, phase: string, };
+export type WorkspaceStatus = { contract_version: number, storage_ready: boolean, report_import_available: boolean, coordinator_available: boolean, pending_operations: number, };
 export type ObservationSource = "saved_inventory" | "network_check" | "authenticated_ssh";
 export type Observation = { source: ObservationSource, observed_at: string, };
 export type Freshness = "saved" | "stale" | "unknown";

@@ -3,7 +3,7 @@
 ## Active checkpoint
 
 - **State:** S01 complete on 2026-10-25: T001–T005 passed with native-build, safe-copy data and review evidence.
-- **Next:** [T006 in F03](features/F03-react-map.md) is ready for S02's React Flow desktop/mobile map migration. [F01 acceptance](evidence/F01-acceptance.md) and [F02 acceptance](evidence/F02-acceptance.md) record proof and limits. Native build milestone **23663d2**; the original Python database remains unchanged.
+- **Active:** Owner priority: Windows desktop first (2026-10-25). **T006–T008 passed:** native React Flow map, saved-inventory workspace and local lifecycle. [F03 proof](evidence/F03-acceptance.md), [Windows proof](evidence/F04-desktop-acceptance.md). Compact phone composition/touch/native adapters remain core work in ready T009; S02 stays open. SSH, remote coordinator and transfers are unavailable pending their tickets. Original Python data is unchanged.
 - **Core target:** native Windows and Android, Windows-hosted coordinator, full phone controls over LAN/existing VPN.
 - **Budget target:** two five-hour usage windows; a prioritisation target, not a quota or elapsed-time guarantee.
 - **Baseline:** A01 Python/SQLite/browser work is historical, with evidence in [IMPLEMENTATION.md](../IMPLEMENTATION.md). It does not complete new Rust/React/native tickets.

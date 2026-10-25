@@ -52,6 +52,10 @@ switch ($Action) {
             Run-AtlasCommand 'cargo' @('run', '-p', 'atlas-core', '--bin', 'export-contracts', '--locked', '--', '--check')
             Run-AtlasCommand 'pnpm' @('check')
             Run-AtlasCommand 'node' @('--test', 'ui/client.test.ts')
+        } elseif ($Feature -eq 'F03' -or $Feature -eq 'F04') {
+            Run-AtlasCommand 'pnpm' @('check')
+            Run-AtlasCommand 'node' @('--test', 'ui/client.test.ts', 'ui/map-model.test.ts')
+            Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-native', '--lib', '--locked')
         } else { Write-Error "No implemented test map for feature '$Feature'."; exit 2 }
         Run-AtlasCommand 'python' @('agent/check_tracker.py', '--self-test')
     }
@@ -68,7 +72,12 @@ switch ($Action) {
         $env:CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER = $AtlasAndroidCompiler
         Run-AtlasCommand 'cargo' @('check', '-p', 'atlas-core', '--target', 'aarch64-linux-android', '--locked')
     }
-    'dev-desktop' { Run-AtlasCommand 'pnpm' @('tauri', 'dev') }
+    'dev-desktop' {
+        if (-not $env:ATLAS_LEGACY_DB -and (Test-Path -LiteralPath 'data/atlas.sqlite3')) { $env:ATLAS_LEGACY_DB = Join-Path (Get-Location) 'data/atlas.sqlite3' }
+        Run-AtlasCommand 'pnpm' @('tauri', 'dev')
+    }
+    'start-desktop' { & (Join-Path $PSScriptRoot 'start-desktop.ps1') }
+    'test-desktop' { Run-AtlasCommand 'node' @('scripts/verify_desktop.mjs') }
     'dev-android' { Run-AtlasCommand 'pnpm' @('tauri', 'android', 'dev') }
     'smoke-desktop' { Run-AtlasCommand 'pnpm' @('tauri', 'build', '--debug', '--no-bundle', '--', '--locked') }
     'smoke-android' { Run-AtlasCommand 'pnpm' @('tauri', 'android', 'build', '--debug', '--target', 'aarch64', '--apk', '--', '--locked') }

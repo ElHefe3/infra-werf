@@ -36,6 +36,14 @@ run = "powershell -NoProfile -File scripts/atlas.ps1 test-integration"
 [tasks."dev:desktop"]
 run = "powershell -NoProfile -File scripts/atlas.ps1 dev-desktop"
 
+[tasks."start:desktop"]
+description = "Open the built Windows map; imports a separate copy of the reference on first launch"
+run = "powershell -NoProfile -File scripts/atlas.ps1 start-desktop"
+
+[tasks."test:desktop"]
+description = "Actual Windows WebView2/Rust IPC save, restart and error proof on synthetic data (build first)"
+run = "powershell -NoProfile -File scripts/atlas.ps1 test-desktop"
+
 [tasks."dev:android"]
 run = "powershell -NoProfile -File scripts/atlas.ps1 dev-android"
 

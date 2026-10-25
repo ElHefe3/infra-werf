@@ -369,6 +369,15 @@ impl OperationProgress {
 }
 
 /// Bindings are generated explicitly; ordinary tests/checks never rewrite them.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+pub struct WorkspaceStatus {
+    pub contract_version: u32,
+    pub storage_ready: bool,
+    pub report_import_available: bool,
+    pub coordinator_available: bool,
+    pub pending_operations: u32,
+}
+
 pub fn typescript_contracts() -> String {
     let cfg = Config::default();
     let mut output = format!(
@@ -383,6 +392,7 @@ pub fn typescript_contracts() -> String {
         SessionId,
         OperationId,
         FoundationStatus,
+        WorkspaceStatus,
         ObservationSource,
         Observation,
         Freshness,

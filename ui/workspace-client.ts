@@ -1,0 +1,24 @@
+import { invoke } from "@tauri-apps/api/core";
+import { CONTRACT_VERSION, type AddRelationship, type AddServer, type MapState, type UpdateServer, type WorkspaceStatus } from "./contracts.gen.ts";
+
+export type NativeTransport = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
+export function createWorkspaceClient(transport: NativeTransport = invoke) {
+  async function request<T extends { contract_version: number }>(command: string, args?: Record<string, unknown>): Promise<T> {
+    const value = await transport<T>(command, args);
+    if (value.contract_version !== CONTRACT_VERSION) throw new Error("Atlas contract version is incompatible.");
+    return value;
+  }
+  const map = (command: string, args?: Record<string, unknown>) => request<MapState>(command, args);
+  return {
+    status: () => request<WorkspaceStatus>("workspace_status"),
+    load: () => map("map_state"),
+    retry: () => map("retry_workspace"),
+    add: (input: AddServer) => map("add_server", { input }),
+    update: (id: string, input: UpdateServer) => map("update_server", { id, input }),
+    remove: (id: string) => map("remove_server", { id }),
+    connect: (input: AddRelationship) => map("add_relationship", { input }),
+    disconnect: (id: string) => map("remove_relationship", { id }),
+    importReports: () => map("import_reports"),
+  };
+}
+export type WorkspaceClient = ReturnType<typeof createWorkspaceClient>;

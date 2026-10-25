@@ -26,3 +26,4 @@ Link important discoveries from affected feature packets and the checkpoint. Nev
 - [D010 Android SDK platform package metadata](D010-android-sdk-package-metadata.md)
 - [D011 SQLite ownership, recovery and concurrent writers](D011-sqlite-owner-and-writer-boundary.md)
 - [D012 Migration schema-prefix and WAL-size review findings](D012-snapshot-review-guards.md)
+- [D013 Desktop-first delivery and native WebView2 proof](D013-native-desktop-proof.md)
