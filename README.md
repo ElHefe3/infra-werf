@@ -2,6 +2,8 @@
 
 A local infrastructure workspace with separate desktop and mobile interfaces backed by one SQLite database. This is the first working increment after the approved Atlas prototypes.
 
+**Stack reconciliation:** The original conversation has now been recovered. The agreed target is **React + TypeScript + React Flow, Tauri, Rust, SQLite and system OpenSSH/SSH agent**, with SFTP first and rsync later. The Python build below is provisional and has not yet been migrated. See [STACK.md](STACK.md) for the source, requirements and migration comparison, and M01 in [ROADMAP.md](ROADMAP.md) for the next increment.
+
 ## Run
 
 Python 3.11 or newer; no third-party packages required.

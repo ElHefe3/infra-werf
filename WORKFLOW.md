@@ -4,14 +4,14 @@ Use **Atlas implementation** as the active working chat on both Android Remote a
 
 The earlier **Build Infrastructure Map** conversation is a ChatGPT Work conversation, ID `6add26e2-c1e8-83ea-8e53-361dec360bcc`, in the linked ChatGPT Random GPT project. The desktop inventory lists both histories. Equal project names do not make the two conversations or history stores identical. Official documentation: https://learn.chatgpt.com/docs/projects and https://learn.chatgpt.com/docs/remote-connections.
 
-The supported chat reader currently exposes only five recent exchanges from the earlier conversation, including after following its pagination cursor. Those exchanges do not contain the earlier technology-stack discussion. Do not claim that the whole earlier conversation was read or that a missing passage proves a sync failure. Direct opening on the phone is a separate access test.
+The supported chat reader exposed only five recent exchanges from the earlier conversation, including after following its pagination cursor. The owner then supplied the complete available conversation as `../atlas-chat-dump.md`, which has now been read. Its earlier stack discussion is recorded in STACK.md. The owner also confirmed the original chat opens on the phone using its direct ChatGPT link; the missing sidebar listing itself has not been repaired.
 
 ## Decisions to preserve
 
 - Keep the approved Atlas desktop appearance and the separate compact phone design.
 - A server workspace contains Services, System, Files, Terminal, Settings and Transfers. File operations need authenticated SSH; privileged actions need deliberate sudo.
 - Support SSH-only hosts and optional restricted discovery agents, with an optional always-on coordinator.
-- **The owner expects Tauri and says a technology stack was provided in the earlier chat. The remaining original stack has not yet been recovered.** The current Python/SQLite/vanilla-JavaScript build is a provisional implementation, not confirmation of the originally agreed stack. Recover and record that decision before continuing architecture-dependent implementation. Do not substitute a newly guessed stack.
+- **The recovered original stack is React + TypeScript + React Flow, Tauri, Rust, SQLite and system OpenSSH/local SSH agent, with SFTP first and optional rsync later.** See STACK.md for the exact responsibilities, access requirements and unresolved choices. The current Python/SQLite/vanilla-JavaScript build is provisional and needs migration; preserve its data and approved designs.
 
 ## Current code and data
 
