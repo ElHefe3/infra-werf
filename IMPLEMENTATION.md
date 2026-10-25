@@ -26,4 +26,4 @@ Touch gesture handling supports pan and two-pointer zoom; actual hardware pinch 
 
 ## Next
 
-A02: choose the coordinator host and implement authenticated phone access, session expiry and deployment. A03 then adds SSH host-key verification and authenticated sessions before Files/Terminal or remote mutations become active. Their workspace tabs currently explain that they are not connected.
+This document is historical A01 evidence. The current [agent roadmap](agent/AGENT.md) and [scope](agent/SCOPE.md) govern new work: latest-stable mise foundations, Rust/React parity and native Windows/Android shells precede authenticated pairing, SSH, files and operations. Always-on deployment is deferred; the first coordinator runs on the PC. No new tracker ticket is complete because A01 existed.

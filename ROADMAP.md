@@ -1,13 +1,17 @@
-# Atlas implementation
+# Atlas roadmap
 
-| ID | Increment | State | Acceptance |
-| --- | --- | --- | --- |
-| M01 | Align A01 with the recovered original technology stack | Next | React/TypeScript + React Flow interfaces, Tauri desktop, Rust domain/persistence layer; preserve SQLite IDs/data/layout and prove parity before replacing the Python reference |
-| A01 | Local coordinator, database, shared desktop/mobile map and saved inventory | Done | Persistent servers/positions/connections; truthful observations; API and browser checks recorded in IMPLEMENTATION.md |
-| A02 | Authenticated phone access and coordinator deployment | Planned | Choose host, authenticate owner, expire sessions, verify access on actual phone |
-| A03 | SSH sessions and host identity verification | Planned | Verify host keys; use existing local identities; no saved passwords; disconnect/expiry proof |
-| A04 | Files and transfers | Planned | Browse/download/upload over authenticated SSH; explicit destinations; protected-path elevation; transfer progress |
-| A05 | Continuous discovery agents | Planned | Approved modules, single-use enrolment, revocable device identities and stale/offline handling |
-| A06 | Terminal and service operations | Planned | Interactive authenticated session; scoped operations and audit records; deliberate sudo |
+The current roadmap is in [agent/AGENT.md](agent/AGENT.md). Product/release boundaries are in [agent/SCOPE.md](agent/SCOPE.md). Ticket status is canonical only in the feature packets; do not maintain a second status table here.
 
-The approved visual references are the desktop Atlas prototype and the separate phone design. STACK.md records the recovered original stack and requirements. A01 was completed using a provisional Python/vanilla-JavaScript stack; M01 corrects that deviation before further architecture-dependent implementation. This application has its own repository and database; infrastructure migration, existing inventory grants and homelab workloads remain outside A01.
+## Historical increment mapping
+
+| Previous label | Current location | Meaning |
+| --- | --- | --- |
+| A01 | [IMPLEMENTATION.md](IMPLEMENTATION.md) | Completed historical Python/SQLite/browser reference; not completion of the native-stack tickets |
+| M01 | S01–S02 | Mise/toolchains, Rust data parity, React Flow and Windows/native Android shells |
+| A02 | S03 and S06 | PC-first encrypted pairing/sessions and actual phone acceptance; always-on deployment is deferred to S07 |
+| A03 | S03 / F06 | Host trust, SSH and deliberate elevation |
+| A04 | S04 | SFTP file manager and transfers |
+| A05 | S07 | Deferred restricted discovery agents and always-on operation |
+| A06 | S05 | Monitoring, terminal and scoped workload operations |
+
+Current plan: 26 core tickets across 12 features/6 scopes, then 5 deferred tickets across 2 features/2 scopes. Core targets full controls on native Windows and Android over LAN/existing VPN. Latest stable tools are resolved and pinned through mise in T001. Application implementation under the tracker has not started.

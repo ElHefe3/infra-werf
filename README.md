@@ -2,7 +2,13 @@
 
 A local infrastructure workspace with separate desktop and mobile interfaces backed by one SQLite database. This is the first working increment after the approved Atlas prototypes.
 
-**Stack reconciliation:** The original conversation has now been recovered. The agreed target is **React + TypeScript + React Flow, Tauri, Rust, SQLite and system OpenSSH/SSH agent**, with SFTP first and rsync later. The Python build below is provisional and has not yet been migrated. See [STACK.md](STACK.md) for the source, requirements and migration comparison, and M01 in [ROADMAP.md](ROADMAP.md) for the next increment.
+**Stack reconciliation:** The target is **React + TypeScript + React Flow, Tauri on Windows and native Android, Rust, SQLite and system OpenSSH/SSH agent**, with SFTP first and rsync later. The Python build below is provisional and has not yet been migrated. See [STACK.md](STACK.md) for the original source and requirements.
+
+## Agent and delivery tracker
+
+Start with [.agent.md](.agent.md) or [the main agent guide](agent/AGENT.md). The guide contains the roadmap and links to 31 tickets grouped into 14 features and 8 scopes. [Product scope](agent/SCOPE.md) defines the 26-ticket core release and five deferred agent/rsync tickets. [Discoveries](agent/discovery/README.md) and [the checkpoint](agent/evidence/CHECKPOINT.md) preserve findings and efficient restart context.
+
+The core is native Windows/Android with full phone controls through the Windows PC over LAN or an existing VPN. T001 will resolve latest stable Node Current/Rust/pnpm and compatible dependencies, pin them locally and establish mise commands. Those tools/tasks and application features have not been implemented by the documentation task.
 
 ## Run
 

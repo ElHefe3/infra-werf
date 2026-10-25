@@ -48,11 +48,16 @@ The transcript explicitly recommended a local Tauri/Rust desktop application, wi
 
 The Python application remains a provisional working increment and parity reference. Preserve its database and keep it available until the replacement is verified. Saved inventories are historical observations; review which fields qualify for approved baseline retention before carrying them into the final access model.
 
-## Still open; do not infer from the dump
+## Subsequent owner decisions
 
-- Coordinator deployment host, API/transport and phone authentication/session design.
-- Native mobile packaging versus a browser client; only a separate phone interface has been approved.
+The tracker-planning discussion selected a **native Android Tauri app**, **Windows PC first**, **LAN/existing VPN**, and **full core phone controls**. The core excludes custom agents, always-on server deployment and rsync, which remain follow-up scopes. [agent/SCOPE.md](agent/SCOPE.md) and [agent/AGENT.md](agent/AGENT.md) record the acceptance boundary and implementation order.
+
+Use latest stable Node.js Current, Rust, pnpm and compatible dependencies, resolved once and pinned in project-local mise configuration and package/Cargo lockfiles by T001. Select the Windows MSVC host per project; Android JDK/SDK/NDK must meet the current stable Tauri/Gradle compatibility requirements. Record exceptions; do not silently use old PATH tools or change unrelated global defaults. The current Python app remains the parity reference until verified cutover.
+
+## Still open for deferred work
+
+- Always-on coordinator deployment host and its network/credential policy; the core host is already the Windows PC.
 - Agent implementation language/protocol and privileged module exceptions.
 - Windows rsync distribution/runtime.
 
-No frontend/backend framework substitutions, package versions or new permanent privileges are implied by these open choices.
+No framework substitutions or new permanent privileges are implied by these remaining choices. Exact latest-stable version pins are an execution-time T001 deliverable, not historical planning observations.

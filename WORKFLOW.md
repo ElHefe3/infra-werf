@@ -8,6 +8,8 @@ The supported chat reader exposed only five recent exchanges from the earlier co
 
 ## Decisions to preserve
 
+- The current tracker is [agent/AGENT.md](agent/AGENT.md), entered through [.agent.md](.agent.md). Its [scope](agent/SCOPE.md) supersedes older open phone/runtime assumptions: native Android, PC first, full phone controls, LAN/existing VPN, latest stable tools through mise, agents/rsync deferred. Use the active feature packet rather than rereading all chat history.
+
 - Keep the approved Atlas desktop appearance and the separate compact phone design.
 - A server workspace contains Services, System, Files, Terminal, Settings and Transfers. File operations need authenticated SSH; privileged actions need deliberate sudo.
 - Support SSH-only hosts and optional restricted discovery agents, with an optional always-on coordinator.

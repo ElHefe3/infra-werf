@@ -1,0 +1,47 @@
+# S02 — Applications and map
+
+<!-- atlas-scope: {"id":"S02","features":["F03","F04"],"depends_on":["S01"],"window":1,"deferred":false} -->
+
+## Outcome
+
+The approved map and workspaces rendered in real Windows/Android shells using shared React components and real domain persistence.
+
+## Entry and sequence
+
+S01 is complete. Use safe domain fixtures/copies; pairing is not available until S03.
+
+Port React Flow/map state and layouts, then integrate native shells/platform adapters. Thin build scaffolding is reused rather than regenerated.
+
+**Scope dependencies:** [S01](S01-foundations.md). **Budget:** window 1.
+
+## Feature batches
+
+| Feature | Tickets | Journey |
+| --- | --- | --- |
+| [F03](../features/F03-react-map.md) | T006, T007 | Load persisted map → search/edit/connect → inspect workspace → reload, on laptop and compact phone layouts. |
+| [F04](../features/F04-native-shells.md) | T008, T009 | Launch Windows coordinator → open both native clients → navigate the shared map/workspace → handle lifecycle without losing work. |
+
+Ticket status is canonical in the feature packets; scope progress is derived. Do not mark this gate complete merely because its files or implementation exist.
+
+## Acceptance gate
+
+- [ ] Map editing/search/relationships and desktop positions persist without corrupting compact mobile arrangement.
+- [ ] Approved 13-inch and compact phone compositions remain readable, accessible and overflow-free with real report shapes.
+- [ ] Windows Tauri lifecycle/coordinator integration and Android native adapters are proven in the appropriate shells.
+- [ ] Fixture transport and still-unimplemented operations are clearly distinguished from real authentication/control; no fake success.
+
+## Verification and refinement
+
+One shared map save/reload journey; targeted layout/focus checks at laptop and 320/390px widths; one native shell/adapters smoke per platform. Reserve real pairing/device release acceptance for S03/S06.
+
+Link actual feature/gate proof and revision in [the checkpoint](../evidence/CHECKPOINT.md). Use the proportional evidence rules in [AGENT.md](../AGENT.md) and do not record native/owner tests as passed if unavailable.
+
+## Exclusions and stop boundary
+
+Visual redesign, floating-window desktop, public endpoint, agent installation and release/device acceptance claims based only on a browser.
+
+New policy, data-preservation or permission changes stop only the affected work. Capture a discovery/blocker and continue only independently authorised ready work. Do not silently reduce acceptance criteria or bypass prerequisites to meet the usage target.
+
+## Exit
+
+S03; keep native build caches and shared component contracts stable.

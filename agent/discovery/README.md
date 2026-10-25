@@ -1,0 +1,19 @@
+# Discovery records
+
+Use one file per meaningful finding: `D005-short-description.md`, continuing the ID sequence. Record facts that change implementation, constraints, tests or sequencing; do not create entries for routine successful commands.
+
+Each entry needs: ID/title, date, state (`verified`, `hypothesis`, `resolved`, `superseded`), affected ticket IDs, **Finding**, **Evidence**, **Consequence**, **Follow-up**. Evidence names the dated command/file/official source and its small relevant result. Distinguish presence from functional proof. Update disproved hypotheses and link their resolution rather than erasing history.
+
+Link important discoveries from affected feature packets and the checkpoint. Never paste keys, passwords, pairing/device secrets, raw protected configurations, secret environment values or full logs. Use safe summaries/fixtures.
+
+## Seed findings
+
+- [D001 Runtime selection](D001-runtime-selection.md)
+- [D002 Rust host](D002-rust-host.md)
+- [D003 Android prerequisites](D003-android-prerequisites.md)
+- [D004 Migration baseline](D004-migration-baseline.md)
+
+## Findings during tracker establishment
+
+- [D005 Edit-approval observations and limits](D005-edit-approval-observations.md)
+- [D006 Separate SSH catalog version error](D006-separate-ssh-catalog-error.md)
