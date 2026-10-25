@@ -19,7 +19,7 @@ Owner priority on 2026-10-25: desktop first. Deliver F03's desktop map/workspace
 | Feature | Tickets | Journey |
 | --- | --- | --- |
 | [F03](../features/F03-react-map.md) | T006, T007 | Desktop load → search/edit/connect → inspect workspace → reload. Compact-phone/touch composition remains in T009. |
-| [F04](../features/F04-native-shells.md) | T008, T009 | Launch Windows coordinator → open both native clients → navigate the shared map/workspace → handle lifecycle without losing work. |
+| [F04](../features/F04-native-shells.md) | T008, T009, T032 | Native lifecycle and desktop operation guard, followed by compact phone/native adapters. |
 
 Ticket status is canonical in the feature packets; scope progress is derived. Do not mark this gate complete merely because its files or implementation exist.
 

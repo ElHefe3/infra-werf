@@ -2,6 +2,7 @@
 //! same definitions; neither this crate nor a DTO grants authenticated access.
 pub mod contracts;
 pub mod inventory;
+pub mod operations;
 pub mod store;
 pub mod validation;
 

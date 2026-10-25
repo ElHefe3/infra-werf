@@ -4,10 +4,11 @@
 
 - **State:** S01 complete on 2026-10-25: T001–T005 passed with native-build, safe-copy data and review evidence.
 - **Active:** Owner priority: Windows desktop first (2026-10-25). **T006–T008 passed:** native React Flow map, saved-inventory workspace and local lifecycle. [F03 proof](evidence/F03-acceptance.md), [Windows proof](evidence/F04-desktop-acceptance.md). Compact phone composition/touch/native adapters remain core work in ready T009; S02 stays open. SSH, remote coordinator and transfers are unavailable pending their tickets. Original Python data is unchanged.
+- **Latest:** [T032 shared desktop operation guard](evidence/T032-acceptance.md) passed controlled tests and independent review. [OPERATIONS.md](OPERATIONS.md) defines its API and actual-executor obligations. No new protected operation is exposed yet; next desktop work is a bounded SSH trust/authentication journey, with explicit ticket phasing described in [D014](discovery/D014-desktop-guard-phasing.md).
 - **Core target:** native Windows and Android, Windows-hosted coordinator, full phone controls over LAN/existing VPN.
 - **Budget target:** two five-hour usage windows; a prioritisation target, not a quota or elapsed-time guarantee.
 - **Baseline:** A01 Python/SQLite/browser work is historical, with evidence in [IMPLEMENTATION.md](../IMPLEMENTATION.md). It does not complete new Rust/React/native tickets.
-- **Tracker:** 31 tickets / 14 features / 8 scopes: 26 core and 5 deferred tickets. Feature-packet ticket metadata is the sole status authority.
+- **Tracker:** 32 tickets / 14 features / 8 scopes: 27 core and 5 deferred tickets. Feature-packet ticket metadata is the sole status authority. T032 splits T014's desktop guard foundation from its later authenticated transport integration; product scope is unchanged.
 
 ## Read protocol
 
@@ -21,7 +22,7 @@
 | Order | Scope | Feature packets | Tickets | Gate / window |
 | --- | --- | --- | --- | --- |
 | 1 | [S01 Foundations](scopes/S01-foundations.md) | [F01 environment](features/F01-build-environment.md), [F02 persistence](features/F02-domain-persistence.md) | T001–T005 | Both native targets compile; Rust data parity. Window 1 |
-| 2 | [S02 Applications/map](scopes/S02-applications-map.md) | [F03 React map](features/F03-react-map.md), [F04 native shells](features/F04-native-shells.md) | T006–T009 | Approved UI in Windows/Android shells. Window 1 |
+| 2 | [S02 Applications/map](scopes/S02-applications-map.md) | [F03 React map](features/F03-react-map.md), [F04 native shells](features/F04-native-shells.md) | T006–T009, T032 | Approved UI and native operation foundation in Windows/Android shells. Window 1 |
 | 3 | [S03 Connections](scopes/S03-secure-connections.md) | [F05 pairing](features/F05-device-pairing.md), [F06 SSH](features/F06-ssh-elevation.md) | T010–T014 | Revocation, host trust, session/sudo boundaries. Window 1 |
 | 4 | [S04 Files](scopes/S04-files-transfers.md) | [F08 files](features/F08-file-manager.md), [F09 transfers](features/F09-transfers.md) | T015–T018 | End-to-end file journey on both clients. Window 2 |
 | 5 | [S05 Operations](scopes/S05-observe-operate.md) | [F07 monitoring](features/F07-monitoring.md), [F10 terminal](features/F10-terminal.md), [F11 services](features/F11-service-operations.md) | T019–T023 | Truthful health and authenticated control. Window 2 |

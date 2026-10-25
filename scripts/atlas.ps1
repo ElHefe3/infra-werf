@@ -56,6 +56,15 @@ switch ($Action) {
             Run-AtlasCommand 'pnpm' @('check')
             Run-AtlasCommand 'node' @('--test', 'ui/client.test.ts', 'ui/map-model.test.ts')
             Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-native', '--lib', '--locked')
+            if ($Feature -eq 'F04') {
+                Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-core', '--lib', 'operations::', '--locked')
+                Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-core', '--test', 'operations', '--locked')
+            }
+        } elseif ($Feature -eq 'T032') {
+            Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-core', '--lib', 'operations::', '--locked')
+            Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-core', '--test', 'operations', '--locked')
+            Run-AtlasCommand 'cargo' @('run', '-p', 'atlas-core', '--bin', 'export-contracts', '--locked', '--', '--check')
+            Run-AtlasCommand 'pnpm' @('check')
         } else { Write-Error "No implemented test map for feature '$Feature'."; exit 2 }
         Run-AtlasCommand 'python' @('agent/check_tracker.py', '--self-test')
     }

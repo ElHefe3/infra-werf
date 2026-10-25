@@ -6,7 +6,7 @@ A native infrastructure map and server workspace, with a Windows desktop and a s
 
 ## Agent and delivery tracker
 
-Start with [.agent.md](.agent.md) or [the main agent guide](agent/AGENT.md). The guide contains the roadmap and links to 31 tickets grouped into 14 features and 8 scopes. [Product scope](agent/SCOPE.md) defines the 26-ticket core release and five deferred agent/rsync tickets. [Discoveries](agent/discovery/README.md) and [the checkpoint](agent/evidence/CHECKPOINT.md) preserve findings and efficient restart context.
+Start with [.agent.md](.agent.md) or [the main agent guide](agent/AGENT.md). The guide contains the roadmap and links to 32 tickets grouped into 14 features and 8 scopes. [Product scope](agent/SCOPE.md) defines the 27-ticket core release and five deferred agent/rsync tickets. T032 splits the desktop operation guard from T014's later phone/SSH integration without expanding the product scope. [Discoveries](agent/discovery/README.md) and [the checkpoint](agent/evidence/CHECKPOINT.md) preserve findings and efficient restart context.
 
 The core is native Windows/Android with full phone controls through the Windows PC over LAN or an existing VPN. S01 foundations are complete. S02 prioritises the Windows map, saved-inventory workspace and native lifecycle; the separate compact phone composition remains T009. SSH, authenticated phone access and transfers are later tickets and show as unavailable. [BUILDING.md](BUILDING.md) records commands and [F02 acceptance](agent/evidence/F02-acceptance.md) records preservation proof.
 

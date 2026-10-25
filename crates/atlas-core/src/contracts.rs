@@ -20,6 +20,9 @@ pub enum ErrorCode {
     Conflict,
     IncompatibleVersion,
     MigrationFailed,
+    Cancelled,
+    TimedOut,
+    OutputLimit,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -42,6 +45,9 @@ impl AtlasError {
             ErrorCode::Conflict => "The operation conflicts with an existing record or writer.",
             ErrorCode::IncompatibleVersion => "The contract or database version is incompatible.",
             ErrorCode::MigrationFailed => "Migration failed; retain the source and recovery copy.",
+            ErrorCode::Cancelled => "The operation was cancelled.",
+            ErrorCode::TimedOut => "The operation exceeded its time limit.",
+            ErrorCode::OutputLimit => "The operation exceeded its output limit.",
         };
         Self {
             code,
@@ -414,5 +420,6 @@ pub fn typescript_contracts() -> String {
         OperationPhase,
         OperationProgress
     );
+    output.push_str(&crate::operations::typescript_contracts(&cfg));
     output
 }

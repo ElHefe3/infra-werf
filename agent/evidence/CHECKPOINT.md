@@ -1,12 +1,14 @@
 # Atlas restart checkpoint
 
 Date: 2026-10-25
-State: **S01 complete; S02 desktop slice complete (T006–T008)**. T009 phone composition/adapters is ready; S02 stays open. Owner priority remains **desktop first**.
-Revision: desktop working tree based on **0145d7a**; final coherent desktop completion commit is the latest `git log` entry. [F03 proof](F03-acceptance.md) and [Windows lifecycle proof](F04-desktop-acceptance.md) describe the tested slice.
+State: **S01 complete; S02 desktop map/lifecycle (T006–T008) and operation guard foundation (T032) passed**. T009 phone composition/adapters is ready; S02 stays open. Owner priority remains **desktop first**.
+Revision: desktop map **e6760a3**. T032 tested working tree is based on it; latest local completion commit is visible in `git log`. [T032 proof](T032-acceptance.md), [F03 proof](F03-acceptance.md), [Windows proof](F04-desktop-acceptance.md).
 
 ## Resume with this working set
 
 Read [AGENT.md](../AGENT.md), [S02](../scopes/S02-applications-map.md), and the relevant next feature packet. Do not reread the full transcript or redo completed setup. F03 desktop and T008 passed; phone/touch requirements moved intact to T009. Core remains Windows/Android, Windows coordinator, full phone controls and LAN/existing VPN. Agents/rsync remain deferred.
+
+For desktop SSH continuation, read [D014](../discovery/D014-desktop-guard-phasing.md) and [OPERATIONS.md](../OPERATIONS.md), then stage one actual native SSH trust/authentication journey. T014 still includes real paired transport/executor/mutation proof; T012 depends on it. Do not mark those passed because T032's controlled library tests passed. The tracker scope-completion rules were preserved. No controlled SSH server fixture is established yet; Windows OpenSSH 9.5p2 exists, Docker daemon was unavailable. No live identities/trust files were read or changed. Reuse the guard rather than rebuilding it or repeating unrelated UI/native setup.
 
 The Windows app now contains the real React Flow map, inspector, full saved inventory and workspace tabs, backed by native Rust/SQLite. Open **Atlas Desktop.cmd** or `mise run start:desktop`; no Python/dev server is needed at runtime. The original Python database stays untouched and recoverable. The native store is a separate one-time copy, not synchronised with Python. Existing Android APK remains the foundation composition; compact phone UI/adapters and physical execution are unproven. Remote coordinator/SSH/files/terminal/transfers remain unavailable.
 
@@ -20,7 +22,8 @@ The Windows app now contains the real React Flow map, inspector, full saved inve
 - [F03](F03-acceptance.md)/[T008](F04-desktop-acceptance.md): actual WebView2/Rust IPC save/reload/native Quit/relaunch, directed links, full inventory, pan/zoom, keyboard selection/move, duplicate-host/error recovery, two laptop viewports and single instance passed. Final synthetic proof: `.tools/desktop-proof-69031c5b-2947-465a-b4cf-78e665bd5a6c/`. Independent review's two keyboard findings fixed and confirmed resolved.
 - Real owner native copy: **4 servers / 540 saved workloads**, exact IDs/names/hosts/positions and original digest preserved. Private `.tools/owner-desktop-proof-498139e70c744bcb9d7c8eeb0c7886c5/result.json`. Technical proof, not owner release acceptance. No host connection or live operation.
 - Current checks: **18 Rust + 4 client/model tests**, actual native desktop journey, `mise run check`, tracker self-tests and desktop feature mapping passed. No Android rebuild for this desktop-only change.
-- Tracker: 31 tickets / 14 features / 8 scopes; 26 core / 5 deferred. States: done=8, ready=1 (T009), todo=17, deferred=5. S01 complete; all S02 combined Windows/phone gates remain open pending T009.
+- [T032](T032-acceptance.md): final **27 core tests** passed (11 guard tests including reviewed cancellation/entry races + 16 existing regressions), plus shared contract/type/fmt/Windows/Android-core checks. No UI/APK rebuild for a library-only foundation. No SSH/network executor or new protected-operation IPC is enabled. Record actual child termination, resolved endpoint/key binding, native lease lifetime and canonical-path/symlink race proof in the integration tickets.
+- Tracker: 32 tickets / 14 features / 8 scopes; 27 core / 5 deferred. T032 extracts T014's desktop guard, without adding product scope. States: done=9, ready=1 (T009), todo=17, deferred=5. S01 complete; combined S02 Windows/phone gates remain open pending T009.
 
 ## Effective tools and commands
 
