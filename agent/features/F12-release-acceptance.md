@@ -104,7 +104,7 @@ Assuming acceptance, silently retiring the only fallback, installing agents or s
 
 ### Implementation and contracts
 
-Use the actual Windows app on the selected LAN/existing VPN. Verify migration, strict-trust SSH authentication/lock/reconnect, file round trip/protected placement, terminal, health and scoped control on explicitly approved fixtures/targets. Pairing, phone access and Android journeys remain future S09 work. Document availability/restart/rollback and remaining limits.
+Use the actual Windows app on the selected LAN/existing VPN. Verify the existing native data copy and its recovery snapshot before cutover; do not overwrite either. Verify strict-trust SSH authentication/lock/reconnect, file round trip/protected placement, terminal, health and scoped control on explicitly approved fixtures/targets. Pairing, phone access and Android journeys remain future S09 work. Document availability/restart/rollback and remaining limits.
 
 **Ticket dependencies:** [T025](F12-release-acceptance.md).
 
@@ -120,7 +120,7 @@ One concise owner-facing acceptance checklist/journey set; reuse valid technical
 
 ### Evidence and closure
 
-Use a concise [feature acceptance record](../evidence/README.md), map results to T026, attach its relative path in ticket metadata, then check only proven criteria. Record tested revision/platform/fixtures, failures, limits and rollback as applicable. Current proof: **not run**. Use [the checkpoint](../evidence/CHECKPOINT.md) at handoff.
+The prepared [T026 owner checklist](../evidence/T026-owner-checklist.md) is not acceptance evidence. Record the actual Windows-PC owner observations and cutover decision there, then link a passing acceptance record in ticket metadata. Current owner acceptance: **pending**. Do not close T026 from fixture evidence alone; use [the checkpoint](../evidence/CHECKPOINT.md) at handoff.
 
 ### Stop conditions
 

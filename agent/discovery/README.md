@@ -55,3 +55,4 @@ Link important discoveries from affected feature packets and the checkpoint. Nev
 - [D039 Terminal locked-state assertion](D039-terminal-locked-state-assertion.md)
 - [D040 mise roots inside the Codex sandbox](D040-mise-data-root-in-codex-sandbox.md)
 - [D041 Tauri NSIS app-data lifecycle](D041-tauri-nsis-user-data-lifecycle.md)
+- [D042 Existing native store and recovery snapshot](D042-existing-native-store-and-recovery.md)
