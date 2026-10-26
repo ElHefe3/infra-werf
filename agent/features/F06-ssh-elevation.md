@@ -18,7 +18,7 @@ Relevant discoveries: [D014 desktop phasing](../discovery/D014-desktop-guard-pha
 
 ## T012 — Resolve SSH identities and verify host trust
 
-<!-- atlas-ticket: {"id":"T012","feature":"F06","status":"ready","depends_on":["T008","T014"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T012","feature":"F06","status":"done","depends_on":["T008","T014"],"evidence":"../evidence/T012-acceptance.md"} -->
 
 ### Outcome and included work
 
@@ -36,9 +36,9 @@ Resolve known concrete host aliases/user/port/identity references using OpenSSH.
 
 ### Acceptance criteria
 
-- [ ] Existing configured identities/agent are usable without moving keys into UI/database.
-- [ ] Unknown and changed host identities prevent protected operations until explicitly resolved; errors distinguish trust, authentication and reachability.
-- [ ] User/port/host arguments are validated, secrets are redacted and existing known-host/config files are not silently overwritten.
+- [x] Existing configured identities/agent are usable without moving keys into UI/database.
+- [x] Unknown and changed host identities prevent protected operations until explicitly resolved; errors distinguish trust, authentication and reachability.
+- [x] User/port/host arguments are validated, secrets are redacted and existing known-host/config files are not silently overwritten.
 
 ### Verification
 
@@ -46,7 +46,7 @@ Controlled SSH fixture tests for trusted/unknown/changed key, unavailable agent 
 
 ### Evidence and closure
 
-Use a concise [feature acceptance record](../evidence/README.md), map results to T012, attach its relative path in ticket metadata, then check only proven criteria. Record tested revision/platform/fixtures, failures, limits and rollback as applicable. Current proof: **not run**. Use [the checkpoint](../evidence/CHECKPOINT.md) at handoff.
+Passed in [T012 acceptance](../evidence/T012-acceptance.md):14 real OpenSSH cases including actual disposable Windows agent signing, native Settings verification, unchanged trust/config/SQLite and bounded independent review. Owner OS agent-service testing is not claimed.
 
 ### Stop conditions
 
@@ -54,7 +54,7 @@ Stop on unexpected trust changes or unavailable identity; never auto-accept host
 
 ## T013 — Implement protected SSH sessions and per-action sudo
 
-<!-- atlas-ticket: {"id":"T013","feature":"F06","status":"todo","depends_on":["T012","T014"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T013","feature":"F06","status":"ready","depends_on":["T012","T014"],"evidence":null} -->
 
 ### Outcome and included work
 

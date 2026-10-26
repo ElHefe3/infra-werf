@@ -2,13 +2,13 @@
 
 Date: 2026-10-26
 State: S01/S02 desktop complete. T017 transfers now passes; S03–S06 desktop remains authorised. Mobile/coordinator/Android is future S09. Continue all desktop batches without asking routine permission between them.
-Revision: d6da833 + reviewed T017 working tree; its completion commit includes this checkpoint.
+Revision: a6706d8 + T012 proof/documentation working tree; its completion commit contains this checkpoint.
 
 ## Resume
 
-Read [AGENT.md](../AGENT.md), the selected packet and its evidence only. Next: T012 existing SSH identities/agent and host trust, then T013 fresh per-action sudo. After that T019/T020 monitoring, T021 real terminal, T022/T023 services, T018 elevated placement, and T024–T026 Windows release/actual owner acceptance. Do not infer release acceptance or mobile completion from desktop source or fixture tests.
+Read [AGENT.md](../AGENT.md), the selected packet and its evidence only. Next: T013 fresh per-action sudo; T012 existing SSH identities/agent and strict host trust is complete. After that T019/T020 monitoring, T021 real terminal, T022/T023 services, T018 elevated placement, and T024–T026 Windows release/actual owner acceptance. Do not infer release acceptance or mobile completion from desktop source or fixture tests.
 
-T012's configured-key, strict trust, unknown/changed/cert/alias/fallback/authentication/argument handling is already proven by T033/T014. Reuse that evidence; add actual Windows agent-backed signing proof without moving owner keys or changing ssh-agent service/trust. T013 still requires fresh deliberate sudo; protected session lifecycle already exists. Pairing/device revoke stays S09.
+[T012](T012-acceptance.md) passed14 actual OpenSSH cases including a disposable Windows named-pipe agent (1 identity request/1 signature/0 active), and native Settings/trust/cancel/close-guard proof. No production SSH changes or owner agent-service changes were needed. T013 will use actual sudo in an isolated Linux container, retaining the proven protected-session core. See [D022](../discovery/D022-windows-agent-and-fresh-sudo.md).
 
 ## Delivered
 
@@ -34,4 +34,4 @@ Verified tasks: `test:feature -- T017`, `test:files`, `test:file-changes-native`
 
 Computer Use via `cua_repl` works for actual OS file pickers; persistent node_repl still fails kernel asset initialization. Existing CLI native regression harness uses isolated WebView2 CDP; disable debug listeners in the normal owner launcher. A temporary automatic approval usage quota interrupted one native download; genuine expiry cleared its pending grant. Owner then requested continuation; no approval bypass occurred.
 
-Tracker:33 tickets/15 features/9 scopes;25 desktop core/8 deferred. Done14, ready1(T012), todo10, deferred8. Feature packet metadata is authoritative. Full-scope gate rules remain intact. Deferred scopes are not substitute work for desktop blockers.
+Tracker:33 tickets/15 features/9 scopes;25 desktop core/8 deferred. Done15, ready1(T013), todo9, deferred8. Feature packet metadata is authoritative. Full-scope gate rules remain intact. Deferred scopes are not substitute work for desktop blockers.

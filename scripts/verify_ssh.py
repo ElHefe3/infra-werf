@@ -19,7 +19,7 @@ try:
     before = {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in inputs}
     binary = ROOT / 'target/debug/atlas-ssh.exe'
     results = {}
-    for name, expected in [('trusted', 'verified'), ('unknown', 'unknown_host'), ('changed', 'changed_host'), ('rejected', 'authentication_failed'), ('agent-missing', 'authentication_failed'), ('no-auth', 'authentication_failed'), ('certified', 'verified'), ('fallback', 'verified'), ('explicit-alias', 'verified'), ('unreachable', 'unreachable'), ('proxy', 'unsupported_configuration')]:
+    for name, expected in [('trusted', 'verified'), ('agent', 'verified'), ('unknown', 'unknown_host'), ('changed', 'changed_host'), ('rejected', 'authentication_failed'), ('agent-missing', 'authentication_failed'), ('no-auth', 'authentication_failed'), ('certified', 'verified'), ('fallback', 'verified'), ('explicit-alias', 'verified'), ('unreachable', 'unreachable'), ('proxy', 'unsupported_configuration')]:
         response = subprocess.run([str(binary), str(config), 'atlas-' + name, '10000'], capture_output=True, text=True, timeout=15)
         assert response.returncode == 0, (name, response.stderr)
         value = json.loads(response.stdout)
@@ -39,9 +39,11 @@ try:
     for name in ['unknown', 'changed']:
         assert stats[name]['auth_attempts'] == 0 and stats[name]['commands'] == 0, (name, stats[name])
     assert all(value['active'] == 0 for value in stats.values()), stats
+    agent_stats = json.loads((directory / 'agent-stats.json').read_text())
+    assert agent_stats['identities']>0 and agent_stats['signatures']==1 and agent_stats['active']==0, agent_stats
     assert not (directory / 'forbidden-local-command').exists()
     assert {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in inputs} == before
-    proof = {'result': 'pass', 'cases': results, 'trust_config_unchanged': True, 'unknown_changed_stopped_before_auth': True, 'active_connections_after_cleanup': 0, 'directory': str(directory)}
+    proof = {'result': 'pass', 'cases': results, 'agent':agent_stats, 'trust_config_unchanged': True, 'unknown_changed_stopped_before_auth': True, 'active_connections_after_cleanup': 0, 'directory': str(directory)}
     (directory / 'result.json').write_text(json.dumps(proof, indent=2), encoding='utf-8')
     print(json.dumps(proof, indent=2))
 finally:

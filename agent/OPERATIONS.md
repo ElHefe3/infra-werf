@@ -1,6 +1,6 @@
 # Managed operation guard foundation (T032)
 
-The shared `atlas_core::operations` module guards typed operations. T033 supplies connection verification; T014/T015 integrate protected sessions/browsing and T016 adds confirmed desktop SFTP mutations. Phone pairing/coordinator, content transfers, terminal and sudo remain unavailable. There is no generic executor or grant endpoint.
+The shared `atlas_core::operations` module guards typed operations. T033/T012 supply connection/agent/trust verification; T014/T015 integrate protected sessions/browsing, T016 adds confirmed changes and T017 streams desktop transfers. Phone pairing/coordinator is future S09; terminal and sudo remain their tickets. There is no generic executor or grant endpoint.
 
 ## Trusted inputs and lifecycle
 
@@ -14,7 +14,7 @@ ConnectionCheck and SftpOpen bootstrap plans are backend-only, cannot be request
 
 ## Execution, bounds and cleanup
 
-Maximum budgets: 30 seconds per ticket, 64 KiB UTF-8 output, four actual executor workers, 128 active authorities/sessions, 1,024 retained prepared/current tickets and 200 audit entries. Backend tests may lower time/output budgets. Time enforcement uses monotonic Instant; displayed expiries are informational UTC timestamps.
+Maximum budgets: 30 seconds per ordinary ticket, 64 KiB UTF-8 output, four actual executor workers, 128 active authorities/sessions, 1,024 retained prepared/current tickets and 200 audit entries. T017 streaming tickets last at most the protected session's fixed absolute deadline, with an independent30s per-SFTP-request deadline. Backend tests may lower budgets. Time enforcement uses monotonic Instant; displayed expiries are informational UTC timestamps.
 
 Each ticket starts once. Failure/cancellation/expiry/revocation exposes no partial output; returned executor errors are reduced to known error codes/fixed messages. Audit contains operation/server IDs and an optional error code, never payload, paths, credentials or raw diagnostics. Successful `ProtectedText` is transient and has no automatic route to SQLite or baseline inventory.
 
@@ -26,7 +26,7 @@ FileMetadata's lexical/canonical helpers do not prove filesystem confinement and
 
 Each service belongs to one backend principal. Sessions idle after five minutes and expire absolutely after 30; lowered test policies prove both independently. They retain one OpenSSH child and the native admission lease through actual kill/wait/pipe-thread joins. Lock, authority revocation, server edit/removal, timeout/disconnect, leaving Files and document hiding invalidate/clear results. Every close queues a bounded metadata notification; overflow requests clearing all protected views. No session automatically resumes.
 
-Listings contain at most 100 entries and fit the output budget; wire frames are capped at 1 MiB, paths/names at 4 KiB, resource maps at 512 and live sessions at eight. Cursors are single-use and old page entries expire. A denied candidate listing preserves the prior page/handle. Sizes are decimal strings for u64 precision. Results have no Store route. No file-content streaming exists yet.
+Listings contain at most 100 entries and fit the output budget; wire frames are capped at 1 MiB, paths/names at 4 KiB, resource maps at 512 and live sessions at eight. Cursors are single-use and old page entries expire. A denied candidate listing preserves the prior page/handle. Sizes are decimal strings for u64 precision. Results have no Store route. T017 content streams use32KiB chunks and verified private staging/no-clobber publication; see [D021](discovery/D021-transfer-publication-and-build-cache.md). Leaving Files removes visible capabilities but explicitly queued transfers retain their immutable grants until actual cleanup; the hidden session then closes. Lock/expiry still revokes them.
 
 ## Confirmed file changes
 

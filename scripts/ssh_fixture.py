@@ -11,6 +11,7 @@ import socket
 import subprocess
 import sys
 import asyncssh
+from ssh_agent_fixture import start_agent
 
 async def serve(directory):
     directory.mkdir(parents=True, exist_ok=False)
@@ -31,6 +32,7 @@ async def serve(directory):
     else:
         identity.chmod(0o600)
     stats, connections, listeners, ports = {}, set(), [], {}
+    agent, close_agent = await start_agent(directory, client)
     filesystem = directory / 'filesystem'
     home = filesystem / 'home' / 'fixture'
     home.mkdir(parents=True)
@@ -56,7 +58,7 @@ async def serve(directory):
         temporary = directory / 'stats-next.json'
         temporary.write_text(json.dumps(stats), encoding='utf-8')
         temporary.replace(directory / 'stats.json')
-    for name in ['trusted', 'unknown', 'changed', 'rejected', 'agent-missing', 'slow', 'overflow', 'no-auth', 'certified', 'fallback', 'explicit-alias']:
+    for name in ['trusted', 'unknown', 'changed', 'rejected', 'agent-missing', 'slow', 'overflow', 'no-auth', 'certified', 'fallback', 'explicit-alias'] + (['agent'] if agent else []):
         stats[name] = {'auth_attempts': 0, 'authenticated': 0, 'commands': 0, 'active': 0, 'subsystems': 0, 'listings': 0, 'mutations': 0, 'file_reads': 0, 'file_writes': 0, 'max_chunk': 0}
         class Server(asyncssh.SSHServer):
             def __init__(self, name=name): self.name = name
@@ -191,7 +193,8 @@ async def serve(directory):
     lines = []
     for name, port in ports.items():
         lines.extend([f'Host atlas-{name}', '  HostName 127.0.0.1', f'  Port {port}', f'  User {"denied" if name == "rejected" else "fixture"}'])
-        if name == 'agent-missing': lines.extend(['  IdentityFile none', '  IdentityAgent none'])
+        if name == 'agent': lines.extend(['  IdentityFile none', '  IdentitiesOnly no', f'  IdentityAgent {agent}'])
+        elif name == 'agent-missing': lines.extend(['  IdentityFile none', '  IdentityAgent none'])
         else: lines.append(f'  IdentityFile "{identity.as_posix()}"')
         if name == 'explicit-alias': lines.append('  HostKeyAlias fixture-owner-alias')
         if name == 'fallback': lines.append(f'  UserKnownHostsFile "{fallback_known.as_posix()}"')
@@ -205,6 +208,7 @@ async def serve(directory):
     try:
         await asyncio.to_thread(sys.stdin.readline)
     finally:
+        close_agent()
         for listener in listeners: listener.close()
         for connection in list(connections): connection.close()
         await asyncio.gather(*(listener.wait_closed() for listener in listeners))

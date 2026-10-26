@@ -34,7 +34,7 @@ try {
   // plain-object AtlasError into its own unstructured evaluation exception.
   const rejection = (command, args) => page.evaluate(async ({ command, args }) => { try { await window.__TAURI_INTERNALS__.invoke(command, args); return { unexpectedSuccess: true }; } catch (failure) { return failure; } }, { command, args });
   await expect(page.getByText('A clear place to start.', { exact: true })).toBeVisible();
-  const aliases = ['trusted', 'unknown', 'changed', 'rejected', 'unreachable', 'proxy', 'overflow', 'slow', 'certified', 'no-auth'];
+  const aliases = ['trusted', 'agent', 'unknown', 'changed', 'rejected', 'unreachable', 'proxy', 'overflow', 'slow', 'certified', 'no-auth'];
   for (const name of aliases) await invoke('add_server', { input: { name: `${name} fixture`, host: `atlas-${name}` } });
   await page.reload(); await expect(page.locator('.server-card')).toHaveCount(aliases.length);
   const before = await invoke('map_state'); const beforeDb = await digest(database);
@@ -43,7 +43,7 @@ try {
     const dialog = page.getByRole('dialog', { name: `${name} fixture`, exact: true });
     await dialog.getByRole('tab', { name: 'Settings', exact: true }).click(); return dialog;
   }
-  for (const [name, state, title] of [['trusted', 'verified', 'SSH access verified'], ['unknown', 'unknown_host', 'Host identity needs verification'], ['changed', 'changed_host', 'Host identity has changed'], ['rejected', 'authentication_failed', 'SSH authentication failed'], ['unreachable', 'unreachable', 'SSH server could not be reached'], ['proxy', 'unsupported_configuration', 'SSH configuration needs attention'], ['certified', 'verified', 'SSH access verified'], ['no-auth', 'authentication_failed', 'SSH authentication failed']]) {
+  for (const [name, state, title] of [['trusted', 'verified', 'SSH access verified'], ['agent', 'verified', 'SSH access verified'], ['unknown', 'unknown_host', 'Host identity needs verification'], ['changed', 'changed_host', 'Host identity has changed'], ['rejected', 'authentication_failed', 'SSH authentication failed'], ['unreachable', 'unreachable', 'SSH server could not be reached'], ['proxy', 'unsupported_configuration', 'SSH configuration needs attention'], ['certified', 'verified', 'SSH access verified'], ['no-auth', 'authentication_failed', 'SSH authentication failed']]) {
     const dialog = await settings(name);
     await dialog.getByRole('button', { name: 'Verify SSH access', exact: true }).click();
     await expect(dialog.locator(`[data-ssh-state="${state}"]`)).toBeVisible();
@@ -91,8 +91,10 @@ try {
   expect(await digest(info.fallback_known_hosts)).toBe(beforeFallback);
   expect(errors).toEqual([]);
   const stats = JSON.parse(await readFile(info.stats, 'utf8'));
+  const agent = JSON.parse(await readFile(path.join(info.directory,'agent-stats.json'),'utf8'));
+  expect(agent.identities).toBeGreaterThan(0); expect(agent.signatures).toBe(1); expect(agent.active).toBe(0);
   expect(stats.unknown.auth_attempts).toBe(0); expect(stats.changed.auth_attempts).toBe(0);
-  const proof = { result: 'pass', results, configTrustDatabaseUnchanged: true, stoppedBeforeUnknownChangedAuth: true, pageErrors: errors, directory };
+  const proof = { result: 'pass', results, agent, configTrustDatabaseUnchanged: true, stoppedBeforeUnknownChangedAuth: true, pageErrors: errors, directory };
   await writeFile(path.join(directory, 'result.json'), JSON.stringify(proof, null, 2));
   console.log(JSON.stringify(proof, null, 2));
   await page.getByRole('button', { name: 'Quit Atlas', exact: true }).click();
