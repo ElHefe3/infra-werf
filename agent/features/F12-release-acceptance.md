@@ -20,7 +20,7 @@ Read [SCOPE.md](../SCOPE.md) for access boundaries; use [AGENT.md](../AGENT.md) 
 
 ## T024 — Verify integrated core and recovery
 
-<!-- atlas-ticket: {"id":"T024","feature":"F12","status":"in_progress","depends_on":["T018","T020","T021","T023"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T024","feature":"F12","status":"done","depends_on":["T018","T020","T021","T023"],"evidence":"../evidence/T024-acceptance.md"} -->
 
 ### Outcome and included work
 
@@ -38,9 +38,9 @@ Reuse passed feature evidence unless changed; run broader tests only for shared 
 
 ### Acceptance criteria
 
-- [ ] All core feature acceptance has valid evidence and shared contract/storage/auth regression passes.
-- [ ] Migration/restart/rollback preserve identities/layout/relationships and approved data; no simultaneous legacy/replacement writes occur.
-- [ ] Failure/revoke/expiry across file, terminal and service flows leaves no credential or protected-result persistence.
+- [x] All core feature acceptance has valid evidence and shared contract/storage/auth regression passes.
+- [x] Migration/restart/rollback preserve identities/layout/relationships and approved data; no simultaneous legacy/replacement writes occur.
+- [x] Failure/revoke/expiry across file, terminal and service flows leaves no credential or protected-result persistence.
 
 ### Verification
 
@@ -48,7 +48,7 @@ One targeted integrated regression and recovery run, linked to prior feature pro
 
 ### Evidence and closure
 
-Use a concise [feature acceptance record](../evidence/README.md), map results to T024, attach its relative path in ticket metadata, then check only proven criteria. Record tested revision/platform/fixtures, failures, limits and rollback as applicable. Current proof: **not run**. Use [the checkpoint](../evidence/CHECKPOINT.md) at handoff.
+See [T024 acceptance](../evidence/T024-acceptance.md) for the tested revision, synthetic migration and rollback, native Windows restart journey, shared regression results, reused cross-feature evidence, limitations and recovery state. Continue with T025 packaging; T026 owner acceptance remains a separate release gate.
 
 ### Stop conditions
 

@@ -1,13 +1,14 @@
 """Controlled Python/Rust parity and rollback; real source is read-only/optional."""
 from __future__ import annotations
 import argparse
-import asyncio
 import hashlib
 import json
 from pathlib import Path
+import queue
 import sqlite3
 import subprocess
 import sys
+import threading
 import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -51,19 +52,28 @@ def compare(expected, actual):
     for old, new in zip(expected_servers, actual_servers):
         for key in ('id', 'name', 'host', 'x', 'y', 'created_at'):
             assert old[key] == new[key], 'Map field differs: ' + key
-        assert baseline(old['inventory']) == new['inventory'], 'Approved inventory differs'
+        assert baseline(old['inventory']) == baseline(new['inventory']), 'Approved inventory differs'
+        if new['inventory'] is not None:
+            assert new['inventory']['source_binding'] is None and new['inventory']['source_host'] is None, 'Legacy import invented authenticated provenance'
         assert new['reachability']['state'] == 'unknown', 'Invented reachability'
     assert expected['edges'] == actual['edges'], 'Relationship identity/direction differs'
     expected_events = [{**event, 'id': str(event['id'])} for event in expected['events']]
     assert expected_events == actual['events'], 'Activity history differs'
 
 
-async def python_writer_blocked(path):
-    child = await asyncio.create_subprocess_exec(str(BINARY), 'hold-lock', str(path),
-        stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+def python_writer_blocked(path):
+    child = subprocess.Popen([str(BINARY), 'hold-lock', str(path)],
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    lines = queue.Queue(maxsize=1)
+    reader = threading.Thread(target=lambda: lines.put(child.stdout.readline()), daemon=True)
+    reader.start()
     try:
-        ready = await asyncio.wait_for(child.stdout.readline(), 5)
+        try:
+            ready = lines.get(timeout=5)
+        except queue.Empty as error:
+            raise AssertionError('Native data writer did not acquire its SQLite lock') from error
         assert json.loads(ready)['locked'] is True
+        reader.join(timeout=5)
         try:
             with sqlite3.connect(path, timeout=0.05) as writer:
                 writer.execute('UPDATE servers SET name=name')
@@ -71,12 +81,17 @@ async def python_writer_blocked(path):
             assert error.sqlite_errorcode in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED)
         else:
             raise AssertionError('Concurrent Python writer was not rejected')
-        stdout, stderr = await asyncio.wait_for(child.communicate(b'\n'), 5)
-        assert child.returncode == 0 and json.loads(stdout)['released'] is True
+        stdout, stderr = child.communicate(b'\n', timeout=5)
+        assert child.returncode == 0 and json.loads(stdout.splitlines()[-1])['released'] is True
+    except subprocess.TimeoutExpired as error:
+        child.kill()
+        child.communicate(timeout=5)
+        raise AssertionError('Native data writer did not release its SQLite lock') from error
     finally:
-        if child.returncode is None:
+        if child.poll() is None:
             child.kill()
-            await child.wait()
+            child.communicate(timeout=5)
+        reader.join(timeout=5)
 
 
 def verify(source, directory, tag):
@@ -88,7 +103,7 @@ def verify(source, directory, tag):
     counts = command('migrate', source, native, recovery)
     compare(expected, command('state', native))
     assert digest(source) == before, 'Migration changed its source copy'
-    asyncio.run(python_writer_blocked(native))
+    python_writer_blocked(native)
     restored = directory / (tag + '-restored.sqlite3')
     command('restore', recovery, restored)
     rolled_back = ReferenceStore(restored).state()

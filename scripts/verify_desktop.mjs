@@ -20,14 +20,24 @@ let child, browser, page;
 const errors = [];
 const results = [];
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+async function cdpAvailable() {
+  try { return (await fetch(`${endpoint}/json/version`)).ok; } catch { return false; }
+}
+async function waitForCdpState(available, timeout = 15000) {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    if (await cdpAvailable() === available) return;
+    await delay(250);
+  }
+  throw new Error(`WebView CDP endpoint did not become ${available ? 'available' : 'unavailable'} within ${timeout}ms`);
+}
 async function launch(db = database, legacy = config.source) {
   child = spawn(binary, [], { cwd: root, windowsHide: true, env: { ...process.env, ATLAS_NATIVE_DB: db, ATLAS_LEGACY_DB: legacy, ATLAS_REPORTS_DIR: config.reports, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: '--remote-debugging-port=9225 --remote-debugging-address=127.0.0.1', WEBVIEW2_USER_DATA_FOLDER: path.join(directory, 'webview-profile') }, stdio: ['ignore', 'pipe', 'pipe'] });
   child.stdout.on('data', () => {}); child.stderr.on('data', () => {});
-  for (let i = 0; i < 60; i++) {
-    if (child.exitCode !== null) throw new Error(`Native app exited: ${child.exitCode}`);
-    try { const response = await fetch(`${endpoint}/json/version`); if (response.ok) break; } catch {}
-    await delay(250);
-  }
+  // Tauri's Windows process may return success after handing startup to the
+  // GUI process. The WebView endpoint, not the short-lived launcher handle,
+  // determines whether the native window is ready.
+  await waitForCdpState(true);
   browser = await chromium.connectOverCDP(endpoint);
   const context = browser.contexts()[0];
   page = context.pages()[0] || await context.waitForEvent('page');
@@ -35,9 +45,18 @@ async function launch(db = database, legacy = config.source) {
   page.on('pageerror', error => errors.push(error.message));
 }
 async function stop() {
+  if (page && !page.isClosed()) {
+    try {
+      const quit = page.getByRole('button', { name: 'Quit Atlas', exact: true });
+      if (await quit.count()) {
+        await quit.click({ timeout: 2000 });
+        await waitForCdpState(false, 7000);
+      }
+    } catch {}
+  }
   if (browser) { await browser.close().catch(() => {}); browser = null; }
   if (child && child.exitCode === null) { child.kill(); await new Promise(resolve => child.once('exit', resolve)); }
-  child = null; await delay(300);
+  child = null; page = null; await delay(300);
 }
 async function invoke(command, args) {
   return page.evaluate(({ command, args }) => window.__TAURI_INTERNALS__.invoke(command, args), { command, args });
@@ -155,7 +174,7 @@ try {
   await new Promise((resolve, reject) => { const timeout = setTimeout(() => reject(new Error('Second instance did not exit')), 8000); second.once('exit', code => { clearTimeout(timeout); expect(code).toBe(0); resolve(); }); });
   expect(child.pid).toBe(pid);
   await page.getByRole('button', { name: 'Quit Atlas', exact: true }).click();
-  await expect.poll(() => child.exitCode, { timeout: 10000 }).not.toBe(null);
+  await waitForCdpState(false, 10000);
   await stop();
   await launch();
   await expect(page.locator('.server-card')).toHaveCount(5);
@@ -171,7 +190,7 @@ try {
   await expect(workspace.getByRole('button', { name: 'Open file session', exact: true })).toBeVisible();
   await expect(workspace.locator('.file-list')).toHaveCount(0);
   await workspace.getByRole('tab', { name: 'Terminal', exact: true }).click();
-  await expect(workspace.getByText('Operation unavailable', { exact: true })).toBeVisible();
+  await expect(workspace.getByText('A protected SSH session is required.', { exact: true })).toBeVisible();
   await workspace.getByRole('tab', { name: 'System', exact: true }).click();
   await expect(workspace.getByText('16 GiB', { exact: true })).toBeVisible();
   await page.keyboard.press('Escape');
