@@ -1,6 +1,6 @@
 # F13 — Deferred restricted collectors and always-on operation, only after core release and explicit owner activation.
 
-<!-- atlas-feature: {"id":"F13","scope":"S07","depends_on":["F12"],"deferred":true} -->
+<!-- atlas-feature: {"id":"F13","scope":"S07","depends_on":["F12","F05"],"deferred":true} -->
 
 ## Work packet
 

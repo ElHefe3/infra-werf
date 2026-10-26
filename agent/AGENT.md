@@ -3,12 +3,12 @@
 ## Active checkpoint
 
 - **State:** S01 complete on 2026-10-25: T001–T005 passed with native-build, safe-copy data and review evidence.
-- **Active:** Owner priority: Windows desktop first. Map/lifecycle, guard/SSH verification, protected sessions/browsing and **T016 confirmed file mutations passed** on 2026-10-26. Use server workspace → Files → Open file session; select an entry for Rename/Move/Delete or use New folder. Compact phone composition/adapters remain ready T009; S02–S04 stay open. Paired coordinator, terminal, sudo and transfers remain unavailable. Original Python data is unchanged.
-- **Latest:** [T016 proof](evidence/F08-mutations-acceptance.md): actual SFTP/native preview/confirm/cancel/create/rename/move/delete, rejection/uncertain outcomes, resolved review, **40 ordinary Rust + 1 real-SFTP integration + 4 client tests**, static/Android-core checks. No overwrite/recursion/sudo. Reuse [D017 phasing](discovery/D017-desktop-feature-entry.md), [D018 lifecycle](discovery/D018-sftp-process-and-page-lifecycle.md), [D019 mutation outcomes](discovery/D019-sftp-mutation-outcomes.md) and [OPERATIONS.md](OPERATIONS.md). Next desktop slice is T017 transfers: plan its explicit desktop entry without silently dropping T009/T011 paired requirements. Phone/paired/fresh-sudo proof remains intact.
-- **Core target:** native Windows and Android, Windows-hosted coordinator, full phone controls over LAN/existing VPN.
+- **Active:** Owner priority: Windows desktop first. Map/lifecycle, guard/SSH verification, protected sessions/browsing and **T016 confirmed file mutations passed** on 2026-10-26. Use server workspace → Files → Open file session; select an entry for Rename/Move/Delete or use New folder. Mobile is future S09; desktop S02 is complete and S03–S06 remain active. Paired coordinator, terminal, sudo and transfers remain unavailable. Original Python data is unchanged.
+- **Latest:** [T016 proof](evidence/F08-mutations-acceptance.md): actual SFTP/native preview/confirm/cancel/create/rename/move/delete, rejection/uncertain outcomes, resolved review, **40 ordinary Rust + 1 real-SFTP integration + 4 client tests**, static/Android-core checks. No overwrite/recursion/sudo. Reuse [D017 phasing](discovery/D017-desktop-feature-entry.md), [D018 lifecycle](discovery/D018-sftp-process-and-page-lifecycle.md), [D019 mutation outcomes](discovery/D019-sftp-mutation-outcomes.md) and [OPERATIONS.md](OPERATIONS.md). Active desktop slice: T017 transfers, followed by T012/T013 trust/elevation, T019/T020 monitoring, T021 terminal, T022/T023 services, T018 protected placement and T024–T026 desktop release. Mobile/pairing is deferred to S09.
+- **Core target:** Windows desktop 100% by the owner’s explicit 2026-10-26 decision. Mobile/coordinator is future S09; agents/rsync stay deferred. Run all remaining desktop batches sequentially without asking between batches; retain proportional proof/review and actual permission boundaries.
 - **Budget target:** two five-hour usage windows; a prioritisation target, not a quota or elapsed-time guarantee.
 - **Baseline:** A01 Python/SQLite/browser work is historical, with evidence in [IMPLEMENTATION.md](../IMPLEMENTATION.md). It does not complete new Rust/React/native tickets.
-- **Tracker:** 33 tickets / 14 features / 8 scopes: 28 core and 5 deferred tickets. Done=13, ready=1 (T009), todo=14, deferred=5. Feature-packet ticket metadata is the sole status authority. Desktop scoped entry changes scheduling only; product scope is unchanged.
+- **Tracker:** 33 tickets / 15 features / 9 scopes: 25 core and 8 deferred tickets. Done=13, ready=1 (T012), in_progress=1 (T017), todo=10, deferred=8. Feature-packet ticket metadata is the sole status authority. Desktop scoped entry changes scheduling only; product scope is unchanged.
 
 ## Read protocol
 
@@ -21,14 +21,16 @@
 
 | Order | Scope | Feature packets | Tickets | Gate / window |
 | --- | --- | --- | --- | --- |
-| 1 | [S01 Foundations](scopes/S01-foundations.md) | [F01 environment](features/F01-build-environment.md), [F02 persistence](features/F02-domain-persistence.md) | T001–T005 | Both native targets compile; Rust data parity. Window 1 |
-| 2 | [S02 Applications/map](scopes/S02-applications-map.md) | [F03 React map](features/F03-react-map.md), [F04 native shells](features/F04-native-shells.md) | T006–T009, T032–T033 | Approved UI, guard and desktop SSH verification. Window 1 |
-| 3 | [S03 Connections](scopes/S03-secure-connections.md) | [F05 pairing](features/F05-device-pairing.md), [F06 SSH](features/F06-ssh-elevation.md) | T010–T014 | Revocation, host trust, session/sudo boundaries. Window 1 |
-| 4 | [S04 Files](scopes/S04-files-transfers.md) | [F08 files](features/F08-file-manager.md), [F09 transfers](features/F09-transfers.md) | T015–T018 | End-to-end file journey on both clients. Window 2 |
+| 1 | [S01 Foundations](scopes/S01-foundations.md) | [F01 environment](features/F01-build-environment.md), [F02 persistence](features/F02-domain-persistence.md) | T001–T005 | Pinned foundation builds and Rust data parity. Window 1 |
+| 2 | [S02 Applications/map](scopes/S02-applications-map.md) | [F03 React map](features/F03-react-map.md), [F04 native shells](features/F04-native-shells.md) | T006–T008, T032–T033 | Approved UI, guard and desktop SSH verification. Window 1 |
+| 3 | [S03 Connections](scopes/S03-secure-connections.md) | [F05 pairing](features/F05-device-pairing.md), [F06 SSH](features/F06-ssh-elevation.md) | T012–T014 | Revocation, host trust, session/sudo boundaries. Window 1 |
+| 4 | [S04 Files](scopes/S04-files-transfers.md) | [F08 files](features/F08-file-manager.md), [F09 transfers](features/F09-transfers.md) | T015–T018 | End-to-end Windows file journey. Window 2 |
 | 5 | [S05 Operations](scopes/S05-observe-operate.md) | [F07 monitoring](features/F07-monitoring.md), [F10 terminal](features/F10-terminal.md), [F11 services](features/F11-service-operations.md) | T019–T023 | Truthful health and authenticated control. Window 2 |
-| 6 | [S06 Release](scopes/S06-core-release.md) | [F12 acceptance](features/F12-release-acceptance.md) | T024–T026 | Installable builds, physical-phone journey, owner acceptance. Window 2 |
+| 6 | [S06 Release](scopes/S06-core-release.md) | [F12 acceptance](features/F12-release-acceptance.md) | T024–T026 | Windows installer, recovery, desktop owner acceptance. Window 2 |
 | 7 | [S07 Agents](scopes/S07-discovery-agents.md) | [F13 discovery](features/F13-discovery-agents.md) | T027–T029 | Deferred; separate owner authorisation |
 | 8 | [S08 Sync](scopes/S08-synchronisation.md) | [F14 rsync](features/F14-rsync.md) | T030–T031 | Deferred; separate owner authorisation |
+
+[S09 Future mobile](scopes/S09-future-mobile.md) retains T009–T011, Android adapters, pairing and phone acceptance for separate activation after desktop completion.
 
 Use this order by default. S05 depends on S03, so an authorised independent feature can proceed when S04 is externally blocked. Do not enter deferred scopes just to fill time. Old roadmap labels are mapped in [ROADMAP.md](../ROADMAP.md).
 

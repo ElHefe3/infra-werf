@@ -1,6 +1,6 @@
 # S07 — Deferred discovery agents
 
-<!-- atlas-scope: {"id":"S07","features":["F13"],"depends_on":["S06"],"window":null,"deferred":true} -->
+<!-- atlas-scope: {"id":"S07","features":["F13"],"depends_on":["S06","S09"],"window":null,"deferred":true} -->
 
 ## Outcome
 

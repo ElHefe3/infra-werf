@@ -1,6 +1,8 @@
 # F06 — Host-verified, scoped SSH access and deliberate sudo without credential leakage.
 
-<!-- atlas-feature: {"id":"F06","scope":"S03","depends_on":["F05","F02"],"deferred":false} -->
+<!-- atlas-feature: {"id":"F06","scope":"S03","depends_on":["F04","F02"],"deferred":false} -->
+
+Current owner decision (2026-10-26): desktop is the complete release target. Phone/coordinator/APK requirements are preserved in [S09](../scopes/S09-future-mobile.md), separately deferred. All desktop batches are authorised sequentially.
 
 ## Work packet
 
@@ -8,7 +10,7 @@
 
 **User journey:** Approve permitted operation → verify host key → authenticate existing identity → inspect → elevate one action → expire/lock and deny reuse.
 
-**Scope:** [S03](../scopes/S03-secure-connections.md). **Feature prerequisites:** [F05](F05-device-pairing.md), [F02](F02-domain-persistence.md).
+**Scope:** [S03](../scopes/S03-secure-connections.md). **Feature prerequisites:** [F04](F04-native-shells.md), [F02](F02-domain-persistence.md).
 
 Read [SCOPE.md](../SCOPE.md) for access boundaries; use [AGENT.md](../AGENT.md) for execution/proof rules. Ticket dependencies, not numeric ordering, control implementation. Feature completion is derived from its tickets and scope gate, not independently marked done.
 
@@ -16,7 +18,7 @@ Relevant discoveries: [D014 desktop phasing](../discovery/D014-desktop-guard-pha
 
 ## T012 — Resolve SSH identities and verify host trust
 
-<!-- atlas-ticket: {"id":"T012","feature":"F06","status":"todo","depends_on":["T008","T014"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T012","feature":"F06","status":"ready","depends_on":["T008","T014"],"evidence":null} -->
 
 ### Outcome and included work
 
@@ -52,7 +54,7 @@ Stop on unexpected trust changes or unavailable identity; never auto-accept host
 
 ## T013 — Implement protected SSH sessions and per-action sudo
 
-<!-- atlas-ticket: {"id":"T013","feature":"F06","status":"todo","depends_on":["T012","T011"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T013","feature":"F06","status":"todo","depends_on":["T012","T014"],"evidence":null} -->
 
 ### Outcome and included work
 
@@ -68,7 +70,7 @@ Default SSH session idle timeout is five minutes and absolute duration 30 minute
 
 Reuse T014's proven desktop protected-session/clearing core. This ticket still needs paired integration and fresh per-action sudo; do not duplicate session/transport foundations or infer elevation from the read-only proof.
 
-**Ticket dependencies:** [T012](F06-ssh-elevation.md), [T011](F05-device-pairing.md).
+**Ticket dependencies:** [T012](F06-ssh-elevation.md), [T014](F06-ssh-elevation.md).
 
 ### Acceptance criteria
 
@@ -94,7 +96,7 @@ Block elevation if fresh-auth behavior or result clearing is unproven; do not we
 
 ### Outcome and included work
 
-Integrate T032/T033 with native protected session lifecycle and real read-only execution. Desktop-first entry uses the completed native prerequisites explicitly; paired coordinator integration and real revocation journeys remain required in T010/T011. Completion of this desktop/core slice does not complete S03's paired/sudo gates.
+Integrate T032/T033 with native protected session lifecycle and real read-only execution. Desktop-first entry uses the completed native prerequisites explicitly; paired coordinator integration and real revocation journeys remain required in T010/T011. Completion of this desktop/core slice does not complete S03's sudo gate; pairing is future S09.
 
 ### Exclusions
 

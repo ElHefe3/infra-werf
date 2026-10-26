@@ -4,7 +4,7 @@
 
 ## Outcome
 
-Truthful health/approved inventory and authenticated terminal/service control on both clients.
+Truthful health/approved inventory and authenticated terminal/service control on Windows.
 
 ## Entry and sequence
 
@@ -28,7 +28,7 @@ Ticket status is canonical in the feature packets; scope progress is derived. Do
 
 - [ ] HTTP/TCP checks expose independent host/service/freshness states with bounded scheduling and explicit failures.
 - [ ] SSH inventory updates retain identity/owner edits and do not persist unapproved protected output.
-- [ ] Terminal input/resize/backpressure and actual Android keyboard/lifecycle work; stale sessions cannot receive replayed input.
+- [ ] Desktop terminal input/resize/backpressure and lifecycle work; stale sessions cannot receive replayed input.
 - [ ] Systemd and declared core container operations have correct scope, deliberate action/elevation and actual observed outcomes; logs remain protected.
 
 ## Verification and refinement

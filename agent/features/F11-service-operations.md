@@ -2,6 +2,8 @@
 
 <!-- atlas-feature: {"id":"F11","scope":"S05","depends_on":["F07","F06"],"deferred":false} -->
 
+Current owner decision (2026-10-26): desktop is the complete release target. Phone/coordinator/APK requirements are preserved in [S09](../scopes/S09-future-mobile.md), separately deferred. All desktop batches are authorised sequentially.
+
 ## Work packet
 
 **Outcome:** Scoped authenticated workload inspection and deliberate service/container control.

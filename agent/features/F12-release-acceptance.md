@@ -1,12 +1,16 @@
-# F12 — An installable core release with cross-feature proof, data recovery and actual-owner phone acceptance.
+# F12 — An installable core release with cross-feature proof, data recovery and desktop owner acceptance.
 
 <!-- atlas-feature: {"id":"F12","scope":"S06","depends_on":["F09","F07","F10","F11"],"deferred":false} -->
 
+Mobile/APK/pairing/physical-phone requirements are retained in [future S09](../scopes/S09-future-mobile.md); they do not gate desktop completion.
+
+Current owner decision (2026-10-26): desktop is the complete release target. Phone/coordinator/APK requirements are preserved in [S09](../scopes/S09-future-mobile.md), separately deferred. All desktop batches are authorised sequentially.
+
 ## Work packet
 
-**Outcome:** An installable core release with cross-feature proof, data recovery and actual-owner phone acceptance.
+**Outcome:** An installable core release with cross-feature proof, data recovery and desktop owner acceptance.
 
-**User journey:** Migrate safe copy → install both apps → pair/control/transfer → restart/recover → owner accepts cutover.
+**User journey:** Migrate safe copy → install Windows app → authenticate/control/transfer → restart/recover → owner accepts cutover.
 
 **Scope:** [S06](../scopes/S06-core-release.md). **Feature prerequisites:** [F09](F09-transfers.md), [F07](F07-monitoring.md), [F10](F10-terminal.md), [F11](F11-service-operations.md).
 
@@ -50,13 +54,13 @@ Use a concise [feature acceptance record](../evidence/README.md), map results to
 
 Retain the Python reference/original data and block packaging/cutover for unresolved critical data/auth failures.
 
-## T025 — Package Windows and signed Android artifacts
+## T025 — Package Windows desktop artifacts
 
 <!-- atlas-ticket: {"id":"T025","feature":"F12","status":"todo","depends_on":["T024"],"evidence":null} -->
 
 ### Outcome and included work
 
-Produce installable Windows x64 and signed sideloadable Android ARM64 artifacts through pinned mise tasks.
+Produce installable Windows x64 artifacts through pinned mise tasks.
 
 ### Exclusions
 
@@ -64,19 +68,19 @@ Google Play/Microsoft Store publication, iOS, public hosting or purchasing signi
 
 ### Implementation and contracts
 
-Use the verified current stable toolchain and lockfiles. Keep Android release signing material protected/outside Git with authorised creation/use; record checksums/signature verification and clean install/restart instructions. No paid Windows certificate or store publication is assumed.
+Use the verified current stable toolchain and lockfiles. Record Windows artifact checksums, signing/unsigned status honestly, and clean install/restart instructions; Android signing remains S09. No paid Windows certificate or store publication is assumed.
 
 **Ticket dependencies:** [T024](F12-release-acceptance.md).
 
 ### Acceptance criteria
 
-- [ ] Documented mise tasks produce reproducible-configuration Windows installer and signed Android APK artifacts.
+- [ ] Documented mise tasks produce reproducible-configuration Windows installer artifacts.
 - [ ] Artifact checksums/signature validation and actual install/launch results are recorded; debug artifacts are not labelled release.
 - [ ] Signing secrets are not in repository/logs, and uninstall/update/data-location behavior is documented and checked.
 
 ### Verification
 
-One release build per target and controlled installation smoke; reuse caches, do not rebuild unchanged artifacts for documentation edits.
+One Windows release build and controlled installation smoke; reuse caches, do not rebuild unchanged artifacts for documentation edits.
 
 ### Evidence and closure
 
@@ -100,13 +104,13 @@ Assuming acceptance, silently retiring the only fallback, installing agents or s
 
 ### Implementation and contracts
 
-Use the actual Android phone and Windows app on the selected LAN/existing VPN. Verify migration, pair/revoke/reconnect, file round trip/protected placement, terminal, health and scoped control on explicitly approved fixtures/targets. Document availability/restart/rollback and remaining limits.
+Use the actual Windows app on the selected LAN/existing VPN. Verify migration, pair/revoke/reconnect, file round trip/protected placement, terminal, health and scoped control on explicitly approved fixtures/targets. Document availability/restart/rollback and remaining limits.
 
 **Ticket dependencies:** [T025](F12-release-acceptance.md).
 
 ### Acceptance criteria
 
-- [ ] Owner/device evidence covers full core controls on native Android and Windows, including session/host-trust failures and phone lifecycle.
+- [ ] Owner/device evidence covers full core controls on Windows, including session/host-trust failures and application lifecycle.
 - [ ] Cutover preserves data with verified recovery; reference/original backups are retained until acceptance and retirement is separately deliberate.
 - [ ] Roadmap/tickets/evidence/release instructions accurately state what shipped, what is deferred and any unresolved blocker.
 

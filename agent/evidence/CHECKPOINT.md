@@ -1,14 +1,14 @@
 # Atlas restart checkpoint
 
 Date: 2026-10-26
-State: **S01 complete; desktop map/lifecycle, guard/verification, protected sessions/browsing and T016 confirmed file mutations passed**. T009 phone composition/adapters is ready; S02–S04 stay open. Owner priority remains **desktop first**.
+State: **S01 complete; desktop map/lifecycle, guard/verification, protected sessions/browsing and T016 confirmed file mutations passed**. Owner now requests desktop 100%; T009–T011 moved to future S09. Desktop S02 passes on existing proof; S03–S06 remain open. Owner priority remains **desktop first**.
 Revision: latest tested base **14ea114** + reviewed T016 working tree; the completion commit contains this checkpoint. [T016 proof](F08-mutations-acceptance.md), [T014/T015 proof](F06-F08-desktop-acceptance.md), [T033 proof](T033-acceptance.md).
 
 ## Resume with this working set
 
 Read [AGENT.md](../AGENT.md), [S02](../scopes/S02-applications-map.md), and the relevant next feature packet. Do not reread the full transcript or redo completed setup. F03 desktop and T008 passed; phone/touch requirements moved intact to T009. Core remains Windows/Android, Windows coordinator, full phone controls and LAN/existing VPN. Agents/rsync remain deferred.
 
-For desktop continuation, read [D019](../discovery/D019-sftp-mutation-outcomes.md), [OPERATIONS.md](../OPERATIONS.md) and F09's T017 packet. Next is native upload/download with file picking, streaming, progress/cancel/retry. Plan explicit desktop phasing as in [D017](../discovery/D017-desktop-feature-entry.md): T017's T009/T011 dependencies still retain phone/paired acceptance and must not be silently erased. Reuse session/resources/admission/fixture and the uncertain-outcome rule. T012 retains OS-agent/trust proof, T010/T011 paired transport/revocation, T013 fresh sudo. Full scope/release/phone gates remain open.
+For desktop continuation, read [D019](../discovery/D019-sftp-mutation-outcomes.md), [OPERATIONS.md](../OPERATIONS.md) and F09's T017 packet. Next is native upload/download with file picking, streaming, progress/cancel/retry. Plan explicit desktop phasing as in [D017](../discovery/D017-desktop-feature-entry.md): The owner rebaselined mobile/pairing to future S09, removing those as desktop dependencies while preserving their requirements. Reuse session/resources/admission/fixture and the uncertain-outcome rule. T012 retains OS-agent/trust proof, T010/T011 paired transport/revocation, T013 fresh sudo. Full scope/release/phone gates remain open.
 
 The Windows app includes the React Flow map, saved inventory, **Settings → Verify SSH access**, and **Files → Open file session**. No Python/dev server is needed at runtime. Files supports browse/stat, New folder, Rename, Move and confirmed Delete. Move pins a source while browsing to a destination; overwrite/recursive delete are unavailable. After uncertain delivery, reconnect and inspect before any new attempt. Sessions idle after five minutes/expire after 30; leaving Files/hiding/lock/invalidation/disconnect clear results. Confirmed writes block ordinary tab/dialog exit; explicit Lock remains available. Lock sessions before quitting. Original Python data is preserved; native data is a separate copy. Paired coordinator, transfers, terminal and sudo remain unavailable; Android APK remains a foundation artifact.
 
@@ -30,7 +30,7 @@ The owner confirmed server 01 is offline due to corruption. Router addresses for
 - Normal Atlas was reopened after proof: one native window, zero temporary CDP listeners, original reference DB digest unchanged. The new Files journey is ready for owner use; this is not owner/release/physical-phone acceptance.
 - [T016](F08-mutations-acceptance.md): **40 ordinary Rust + 1 actual-SFTP integration + 4 client tests**, final combined native browse/mutation journey, static/build/Android-core proof passed. Reviews of confirmation admission, atomic outcome publication and ambiguous escape labels are resolved. Final private proof `.tools/native-files-proof-9d6dbaaf-ba10-4b39-9ce4-2898613699d7/`; eleven counted fixture mutation requests include an expected rejection. No real host files were changed. [D019](../discovery/D019-sftp-mutation-outcomes.md).
 - Normal Atlas reopened after T016: one window/process, zero temporary debug listeners and original reference DB digest unchanged. New controls are available for owner use; release/phone acceptance is still open.
-- Tracker: 33 tickets / 14 features / 8 scopes; 28 core / 5 deferred. States: done=13, ready=1 (T009), todo=14, deferred=5. S01 complete; S02–S04 phone/paired/sudo/transfer gates remain open. Desktop Files uses explicit scoped entry; full-scope gating is unchanged.
+- Tracker: 33 tickets / 15 features / 9 scopes; 25 desktop core / 8 deferred. States after rebaseline: done=13, ready=1 (T012), in_progress=1 (T017), todo=10, deferred=8. S01 complete; S02–S04 phone/paired/sudo/transfer gates remain open. Desktop Files uses explicit scoped entry; full-scope gating is unchanged.
 
 ## Effective tools and commands
 

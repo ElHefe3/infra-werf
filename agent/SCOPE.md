@@ -2,18 +2,22 @@
 
 ## Goal and owner decisions
 
-Atlas is a personal infrastructure map and authenticated server workspace on the owner's Windows PC and native Android phone. Preserve the approved light desktop and compact phone designs while replacing the provisional Python/vanilla-JavaScript architecture.
+Atlas is a personal infrastructure map and authenticated server workspace on the owner's Windows PC. Native Android is future development (S09). Preserve the approved light desktop and compact phone designs while replacing the provisional Python/vanilla-JavaScript architecture.
 
 Owner decisions, 25 October 2026: **core release first; native Android; Windows PC first; LAN/existing VPN; full core phone controls; latest stable tools through mise.** Two usage windows are an efficiency target, not permission to omit security, data preservation, packaging or acceptance.
 
-## Core release
+## Current desktop release
+
+Owner decision, 2026-10-26: **get desktop 100%; mobile is future development**. All remaining desktop batches are authorised. Preserve mobile requirements in [S09](scopes/S09-future-mobile.md); do not treat them as desktop release gates.
+
+## Desktop capabilities
 
 | Capability | Required behavior |
 | --- | --- |
-| Native clients | Windows x64 Tauri application and signed sideloadable Android ARM64 APK; shared typed React components with distinct compositions |
+| Native clients | Windows x64 Tauri application; compact Android composition/APK retained in future S09 |
 | Map/inventory | React Flow editing, directional relationships, saved layout, searchable hosts/workloads, collection timestamps and honest stale/unknown state |
-| Phone access | Authenticated Windows coordinator over LAN/existing VPN with full core controls; no public endpoint or new VPN |
-| Workspaces | Files, Services, Terminal, System, Settings and Transfers, usable on 13-inch laptops and small phones |
+| Phone access | Deferred to S09: authenticated Windows coordinator over LAN/existing VPN, with no public endpoint/new VPN |
+| Workspaces | Files, Services, Terminal, System, Settings and Transfers, usable on 13-inch laptops; small-phone composition is future S09 |
 | Health | Independent host reachability/service health, last check/success/failure and freshness; no invented utilisation |
 | SSH | Existing system OpenSSH configuration/local agent, explicit host trust and protected session lifecycle |
 | Files | SFTP navigation/stat/permissions, mkdir, rename/move and explicitly confirmed deletion |
@@ -47,15 +51,15 @@ Owner decisions, 25 October 2026: **core release first; native Android; Windows 
 - No iOS/macOS/Linux packages, public endpoint, new VPN, multi-user roles, app-store publication or cloud sync.
 - No automatic network/proxy/deployment rewiring from diagram edges, infrastructure migrations, broad root/container grants, floating-window desktop, remote-desktop streaming or visual redesign.
 
-## Core acceptance
+## Desktop release acceptance
 
-- [ ] Pinned mise tools build installable Windows and native Android artifacts, with actual phone interaction verified.
+- [ ] Pinned mise tools build an installable Windows release with actual native interaction verified.
 - [ ] IDs/names/layout/relationships/approved inventories survive migration and restart; tested rollback preserves the reference and original data until acceptance.
-- [ ] Both clients share domain data and retain approved styling/usability.
-- [ ] Pair/revoke, failed/changed host trust, expiry/reconnect and protected-result clearing pass controlled tests.
+- [ ] Desktop retains approved styling/usability and shared domain contracts for future clients.
+- [ ] Failed/changed host trust, lock, expiry/reconnect and protected-result clearing pass desktop controlled tests; pairing/device revoke remains S09.
 - [ ] Protected inspection/fresh sudo rules hold without secret or protected-result leakage to persistent public state/logs.
-- [ ] File browse/edit/upload/download, interruption recovery, terminal and scoped service journeys pass on both clients.
+- [ ] File browse/edit/upload/download, interruption recovery, terminal and scoped service journeys pass on Windows.
 - [ ] Reachability and service health stay distinct; failed checks and old observations remain truthful.
-- [ ] Every core ticket and owner/device acceptance has evidence; unresolved release blockers remain open.
+- [ ] Every desktop core ticket and owner acceptance has evidence; unresolved release blockers remain open.
 
 These are requirements, not current implementation claims. [AGENT.md](AGENT.md) defines sequencing and status authority.

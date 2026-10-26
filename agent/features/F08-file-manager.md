@@ -2,6 +2,8 @@
 
 <!-- atlas-feature: {"id":"F08","scope":"S04","depends_on":["F06","F03"],"deferred":false} -->
 
+Current owner decision (2026-10-26): desktop is the complete release target. Phone/coordinator/APK requirements are preserved in [S09](../scopes/S09-future-mobile.md), separately deferred. All desktop batches are authorised sequentially.
+
 ## Work packet
 
 **Outcome:** An authenticated remote filesystem workspace with safe navigation and deliberate mutations.
@@ -20,7 +22,7 @@ Relevant discoveries: [D017 desktop feature entry](../discovery/D017-desktop-fea
 
 ### Outcome and included work
 
-Browse remote directories/metadata through actual SFTP on desktop with shared contracts. Compact-phone navigation and paired result-clearing proof are retained in T009/T010; they remain core release requirements.
+Browse remote directories/metadata through actual SFTP on desktop with shared contracts. Compact-phone navigation and paired result-clearing proof are retained in T009/T010; they are future S09 requirements.
 
 ### Exclusions
 
@@ -40,7 +42,7 @@ Support breadcrumbs/back, selection, stat/permissions/ownership and bounded/page
 
 ### Verification
 
-Controlled real SFTP fixture with large/unusual/denied directories and an actual native Windows navigation/stat/clearing journey. Compact-phone/paired journeys remain T009/T010, with physical-device acceptance T026.
+Controlled real SFTP fixture with large/unusual/denied directories and an actual native Windows navigation/stat/clearing journey. Compact-phone/paired journeys remain T009/T010, with physical-phone acceptance in S09.
 
 ### Evidence and closure
 
@@ -58,7 +60,7 @@ Stop a path/encoding ambiguity before normalising away meaningful remote names o
 
 Create directories, rename/move entries and explicitly confirm targeted deletion within an authenticated session.
 
-Desktop-first slice authorised by the owner's “next” request. Reuse T014/T015; compact-phone mutation/confirmation/error/clearing proof remains T009/T010 and the S04 release gate. No overwrite or recursive delete is enabled in this slice. Proof: real SFTP fixture plus one native create/rename/move/delete/cancel journey, with stale/collision/denial/uncertain-result negatives and independent review. Stop after this bounded journey is recorded; do not start transfers automatically.
+Desktop-first slice authorised by the owner's “next” request. Reuse T014/T015; compact-phone mutation/confirmation/error/clearing proof remains T009/T010 in future S09. No overwrite or recursive delete is enabled in this slice. Proof: real SFTP fixture plus one native create/rename/move/delete/cancel journey, with stale/collision/denial/uncertain-result negatives and independent review. Stop after this bounded journey is recorded; do not start transfers automatically.
 
 ### Exclusions
 
@@ -82,7 +84,7 @@ Actual-system SFTP fixture tests plus native Windows create/rename/move/delete/c
 
 ### Evidence and closure
 
-Passed the desktop slice in [T016 acceptance](../evidence/F08-mutations-acceptance.md), including actual SFTP/native proof and resolved independent review. S04 retains paired/phone/transfer acceptance. See [D019](../discovery/D019-sftp-mutation-outcomes.md) and [the checkpoint](../evidence/CHECKPOINT.md).
+Passed the desktop slice in [T016 acceptance](../evidence/F08-mutations-acceptance.md), including actual SFTP/native proof and resolved independent review. S04 retains desktop transfer/elevation acceptance; phone is future S09. See [D019](../discovery/D019-sftp-mutation-outcomes.md) and [the checkpoint](../evidence/CHECKPOINT.md).
 
 ### Stop conditions
 

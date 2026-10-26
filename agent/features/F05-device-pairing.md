@@ -1,6 +1,6 @@
 # F05 — An explicitly paired, encrypted and revocable Android connection to the Windows coordinator.
 
-<!-- atlas-feature: {"id":"F05","scope":"S03","depends_on":["F04"],"deferred":false} -->
+<!-- atlas-feature: {"id":"F05","scope":"S09","depends_on":["F15","F04","F08"],"deferred":true} -->
 
 ## Work packet
 
@@ -16,7 +16,7 @@ No seed discovery applies beyond the shared scope. Link new findings when materi
 
 ## T010 — Implement encrypted pairing and device revocation
 
-<!-- atlas-ticket: {"id":"T010","feature":"F05","status":"todo","depends_on":["T008","T009"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T010","feature":"F05","status":"deferred","depends_on":["T008","T009"],"evidence":null} -->
 
 ### Outcome and included work
 
@@ -32,7 +32,7 @@ Use TLS with explicit certificate trust/pinning, a cryptographically random sing
 
 Register active authenticated remote work with T008's shared lifecycle admission guard before enabling it. Verify ordinary desktop close/quit shows an explicit warning and preserves active phone work; transfer jobs in F08/F09 must retain registration for the full background job, not merely its initial request. See [D013](../discovery/D013-native-desktop-proof.md) and [Windows lifecycle evidence](../evidence/F04-desktop-acceptance.md).
 
-**Ticket dependencies:** [T008](F04-native-shells.md), [T009](F04-native-shells.md).
+**Ticket dependencies:** [T008](F04-native-shells.md), [T009](F15-future-mobile.md).
 
 ### Acceptance criteria
 
@@ -56,7 +56,7 @@ Pause exposure if trusted transport/OS storage cannot be proved; do not use clea
 
 ## T011 — Implement session expiry and reconnect
 
-<!-- atlas-ticket: {"id":"T011","feature":"F05","status":"todo","depends_on":["T010"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T011","feature":"F05","status":"deferred","depends_on":["T010"],"evidence":null} -->
 
 ### Outcome and included work
 

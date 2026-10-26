@@ -1,10 +1,12 @@
-# F09 — Visible recoverable SFTP transfers, including reviewed privileged placement, on Windows and native Android.
+# F09 — Visible recoverable SFTP transfers, including reviewed privileged placement, on Windows.
 
 <!-- atlas-feature: {"id":"F09","scope":"S04","depends_on":["F08","F04"],"deferred":false} -->
 
+Current owner decision (2026-10-26): desktop is the complete release target. Phone/coordinator/APK requirements are preserved in [S09](../scopes/S09-future-mobile.md), separately deferred. All desktop batches are authorised sequentially.
+
 ## Work packet
 
-**Outcome:** Visible recoverable SFTP transfers, including reviewed privileged placement, on Windows and native Android.
+**Outcome:** Visible recoverable SFTP transfers, including reviewed privileged placement, on Windows.
 
 **User journey:** Pick local file → choose remote destination → transfer/cancel/retry → download and compare → stage and elevate protected placement.
 
@@ -16,7 +18,7 @@ Read [SCOPE.md](../SCOPE.md) for access boundaries; use [AGENT.md](../AGENT.md) 
 
 ## T017 — Implement streamed transfer jobs
 
-<!-- atlas-ticket: {"id":"T017","feature":"F09","status":"todo","depends_on":["T015","T009","T011"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T017","feature":"F09","status":"in_progress","depends_on":["T015","T016","T008"],"evidence":null,"scope_entry":{"S03":["T014"]}} -->
 
 ### Outcome and included work
 
@@ -28,15 +30,15 @@ rsync, mirror deletion, background privileged transfer or unrestricted phone sto
 
 ### Implementation and contracts
 
-Stream bytes rather than buffering whole files, supporting Windows paths and Android content URIs. Jobs carry server/session/destination identity, structured state and bounded progress. Explicitly handle collisions/partial files; do not replay mutations on reconnect.
+Stream bytes rather than buffering whole files, supporting native Windows selection and bounded file streams; Android content URIs remain future S09. Jobs carry server/session/destination identity, structured state and bounded progress. Explicitly handle collisions/partial files; do not replay mutations on reconnect.
 
-**Ticket dependencies:** [T015](F08-file-manager.md), [T009](F04-native-shells.md), [T011](F05-device-pairing.md).
+**Ticket dependencies:** [T015](F08-file-manager.md), [T016](F08-file-manager.md), [T008](F04-native-shells.md).
 
 ### Acceptance criteria
 
-- [ ] Upload/download round trips match checksums for empty, small and representative large files on both clients.
+- [ ] Upload/download round trips match checksums for empty, small and representative large files on Windows.
 - [ ] Progress/queue/cancel/failure/retry reflect actual byte/job state; interrupted reconnect does not silently duplicate writes.
-- [ ] Android scoped file selection/URI access works; expired/revoked sessions stop protected work and require reauthentication before retry.
+- [ ] Windows native selection authorises only the chosen file/destination; locked/expired sessions stop protected work and require reauthentication before retry. Android URI proof remains S09.
 
 ### Verification
 
