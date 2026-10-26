@@ -2,7 +2,7 @@
 
 Date: 2026-10-27
 State: S01–S05 desktop gates complete. T019 bounded health, T020 approved SSH inventory refresh, T021 native interactive terminal, T022 protected workload inspection/logs, T023 scoped workload control and T024 integrated recovery pass. T013 native Windows sudo/elevation journey, T018 isolated SSH/SFTP/sudo fixture, and T019–T025 native Windows journeys pass. T025 Windows packaging is complete; T026 owner acceptance and cutover remain in progress. Mobile/coordinator/Android is future S09. Continue all authorised desktop batches without asking routine permission between them.
-Revision: T026 preparation based on T025 commit `19b15e7`; release artifact built from application source at `7f9ba84`. Continue with [T026 owner checklist](T026-owner-checklist.md); [D042](../discovery/D042-existing-native-store-and-recovery.md) records the existing native store/recovery snapshot.
+Revision: T026 verification based on preparation commit `f7bedb1`; release artifact built from application source at `7f9ba84`. Read-only data parity/recovery passed; the Windows UI bridge failed and the OpenSSH agent has no identities. See [T026 owner checklist](T026-owner-checklist.md), [D042](../discovery/D042-existing-native-store-and-recovery.md) and [D043](../discovery/D043-current-ssh-agent-has-no-loaded-identities.md).
 
 ## Resume
 

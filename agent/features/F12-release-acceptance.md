@@ -111,8 +111,8 @@ Use the actual Windows app on the selected LAN/existing VPN. Verify the existing
 ### Acceptance criteria
 
 - [ ] Owner evidence on the actual Windows PC covers the full desktop core, including session/host-trust failures and application lifecycle.
-- [ ] Cutover preserves data with verified recovery; reference/original backups are retained until acceptance and retirement is separately deliberate.
-- [ ] Roadmap/tickets/evidence/release instructions accurately state what shipped, what is deferred and any unresolved blocker.
+- [x] Cutover preserves data with verified recovery; reference/original backups are retained until acceptance and retirement is separately deliberate.
+- [x] Roadmap/tickets/evidence/release instructions accurately state what shipped, what is deferred and any unresolved blocker.
 
 ### Verification
 
@@ -120,7 +120,7 @@ One concise owner-facing acceptance checklist/journey set; reuse valid technical
 
 ### Evidence and closure
 
-The prepared [T026 owner checklist](../evidence/T026-owner-checklist.md) is not acceptance evidence. Record the actual Windows-PC owner observations and cutover decision there, then link a passing acceptance record in ticket metadata. Current owner acceptance: **pending**. Do not close T026 from fixture evidence alone; use [the checkpoint](../evidence/CHECKPOINT.md) at handoff.
+The prepared [T026 owner checklist](../evidence/T026-owner-checklist.md) records the verified recovery and documentation criteria. The actual Windows-PC owner observation remains pending; live SSH authentication to hosts 02–04 was inconclusive because the current agent had no loaded identities ([D043](../discovery/D043-current-ssh-agent-has-no-loaded-identities.md)). Add owner observations and cutover decision before linking a passing acceptance record or closing T026; use [the checkpoint](../evidence/CHECKPOINT.md) at handoff.
 
 ### Stop conditions
 
