@@ -56,7 +56,7 @@ Retain the Python reference/original data and block packaging/cutover for unreso
 
 ## T025 — Package Windows desktop artifacts
 
-<!-- atlas-ticket: {"id":"T025","feature":"F12","status":"todo","depends_on":["T024"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T025","feature":"F12","status":"done","depends_on":["T024"],"evidence":"../evidence/T025-acceptance.md"} -->
 
 ### Outcome and included work
 
@@ -74,9 +74,9 @@ Use the verified current stable toolchain and lockfiles. Record Windows artifact
 
 ### Acceptance criteria
 
-- [ ] Documented mise tasks produce reproducible-configuration Windows installer artifacts.
-- [ ] Artifact checksums/signature validation and actual install/launch results are recorded; debug artifacts are not labelled release.
-- [ ] Signing secrets are not in repository/logs, and uninstall/update/data-location behavior is documented and checked.
+- [x] Documented mise tasks produce reproducible-configuration Windows installer artifacts.
+- [x] Artifact checksums/signature validation and actual install/launch results are recorded; debug artifacts are not labelled release.
+- [x] Signing secrets are not in repository/logs, and uninstall/update/data-location behavior is documented and checked.
 
 ### Verification
 
@@ -84,7 +84,7 @@ One Windows release build and controlled installation smoke; reuse caches, do no
 
 ### Evidence and closure
 
-Use a concise [feature acceptance record](../evidence/README.md), map results to T025, attach its relative path in ticket metadata, then check only proven criteria. Record tested revision/platform/fixtures, failures, limits and rollback as applicable. Current proof: **not run**. Use [the checkpoint](../evidence/CHECKPOINT.md) at handoff.
+See [T025 acceptance](../evidence/T025-acceptance.md) for the release build, checksum/signature status, installed-binary journey, same-version update, uninstall/reinstall, data-preservation boundary and remaining distribution limitations. T026 owner acceptance remains open; see [the checkpoint](../evidence/CHECKPOINT.md).
 
 ### Stop conditions
 
@@ -92,7 +92,7 @@ Record signing/installer/device approval blocks explicitly; never embed keys or 
 
 ## T026 — Complete Windows desktop acceptance and cutover
 
-<!-- atlas-ticket: {"id":"T026","feature":"F12","status":"todo","depends_on":["T025"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T026","feature":"F12","status":"in_progress","depends_on":["T025"],"evidence":null} -->
 
 ### Outcome and included work
 

@@ -14,7 +14,9 @@ if (fixture.status !== 0) throw new Error(fixture.stderr || 'Fixture creation fa
 const config = JSON.parse(fixture.stdout);
 const original = createHash('sha256').update(await readFile(config.source)).digest('hex');
 const database = path.join(directory, 'native.sqlite3');
-const binary = path.join(root, 'target', 'debug', 'atlas-native.exe');
+const binary = process.env.ATLAS_DESKTOP_BINARY
+  ? path.resolve(process.env.ATLAS_DESKTOP_BINARY)
+  : path.join(root, 'target', 'debug', 'atlas-native.exe');
 const endpoint = 'http://127.0.0.1:9225';
 let child, browser, page;
 const errors = [];

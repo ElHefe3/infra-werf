@@ -1,8 +1,8 @@
 # T024 acceptance — Integrated desktop recovery
 
-Date: 2026-10-26<br>
-Revision: application source at `7812aae` plus the T024 verification-harness changes in this working tree; no application Rust or UI source changed.<br>
-Result: pass<br>
+Date: 2026-10-26
+Revision: application source at `7812aae` plus the T024 verification-harness changes in this working tree; no application Rust or UI source changed.
+Result: pass
 Feature/ticket: F12 / T024
 
 ## Environment and target

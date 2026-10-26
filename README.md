@@ -1,26 +1,26 @@
 # Atlas
 
-A native infrastructure map and server workspace, with a Windows desktop and a separate compact Android interface planned on the shared Rust domain.
+A native infrastructure map and server workspace, with a Windows desktop as the release target. A separate compact Android interface and phone pairing are future S09 work.
 
 **Stack:** **React + TypeScript + React Flow, Tauri on Windows and native Android, Rust, SQLite and system OpenSSH/SSH agent**, with SFTP first and rsync later. The desktop map now uses React Flow and real Rust persistence. See [STACK.md](STACK.md) for the original source and requirements.
 
 ## Agent and delivery tracker
 
-Start with [.agent.md](.agent.md) or [the main agent guide](agent/AGENT.md). The guide contains the roadmap and links to 33 tickets grouped into 14 features and 8 scopes. [Product scope](agent/SCOPE.md) defines the 28-ticket core release and five deferred agent/rsync tickets. T032/T033 separate desktop guard/SSH verification from later paired integration without expanding product scope. [Discoveries](agent/discovery/README.md) and [the checkpoint](agent/evidence/CHECKPOINT.md) preserve findings and efficient restart context.
+Start with [.agent.md](.agent.md) or [the main agent guide](agent/AGENT.md). The guide contains the roadmap and links to 33 tickets grouped into 15 features and 9 scopes. [Product scope](agent/SCOPE.md) defines 25 core tickets and 8 deferred tickets. T032/T033 separate desktop guard/SSH verification from later paired integration without expanding product scope. [Discoveries](agent/discovery/README.md) and [the checkpoint](agent/evidence/CHECKPOINT.md) preserve findings and efficient restart context.
 
-The core is native Windows/Android with full phone controls through the Windows PC over LAN or an existing VPN. S01 foundations are complete. S02 prioritises the Windows map, saved inventory, native lifecycle and SSH connection verification; the compact phone composition remains T009. Protected sessions, authenticated phone access and transfers remain later work. [BUILDING.md](BUILDING.md) records commands and [F02 acceptance](agent/evidence/F02-acceptance.md) records preservation proof.
+The current release target is the Windows desktop. Phone controls over LAN or VPN, authenticated pairing and Android packaging remain future S09 work. [BUILDING.md](BUILDING.md) records development and packaging commands; [F02 acceptance](agent/evidence/F02-acceptance.md) records the original data-preservation proof.
 
 ## Native Windows desktop
 
-Build with `mise run smoke:desktop`, then open **Atlas Desktop.cmd** or run `mise run start:desktop`. The built application runs without Python or a development server. `mise run dev:desktop` starts the native development window.
+Build a debug version with `mise run smoke:desktop`, then open **Atlas Desktop.cmd** or run `mise run start:desktop`. Build the release installer with `mise run build:desktop`; [the release guide](agent/RELEASE.md) explains install, saved-data location, update and uninstall. The app runs without Python or a development server. `mise run dev:desktop` starts the native development window.
 
-The launcher supplies the reference database for a **one-time read-only copy** into Atlas's own application-data folder. The original `data/atlas.sqlite3` stays available to the Python reference; a private legacy recovery copy is retained beside the new native database. Existing native data wins on subsequent launches. This is separate storage, not cross-application sync.
+The debug launcher (`Atlas Desktop.cmd` or `mise run start:desktop`) supplies the reference database for a **one-time read-only copy** into Atlas's own application-data folder. The installed release does not import it automatically; T026 tracks any owner-approved first migration. The original `data/atlas.sqlite3` stays available to the Python reference, and a configured migration retains a private legacy recovery copy beside the new native database. Existing native data wins on subsequent launches. This is separate storage, not cross-application sync.
 
-Desktop capabilities: add/edit/remove map entries, drag positions, directed labelled relationships, host/workload search, full saved inventory, inspector/activity, workspace tabs and strict SSH connection verification. Saved observations do not imply current reachability. Protected sessions, Files/Terminal/Transfers and privileged/service controls remain unavailable. The phone coordinator has no listener yet.
+Desktop capabilities include editable map entries and relationships, saved inventory and search, strict-trust SSH verification, protected SFTP Files and Transfers, interactive Terminal, health, workload inspection/logs and scoped service/container control. Saved observations do not imply current reachability. Protected operations require an authenticated SSH session; no phone coordinator is active.
 
 `mise run test:desktop` exercises the **actual Tauri WebView2/Rust IPC** against synthetic data, including restart and failure paths. Build first. Private test databases/screenshots/results remain under ignored `.tools/`.
 
-Open a server → **Settings → Verify SSH access** to check its concrete alias using the PC's system OpenSSH configuration and existing public-key identities/agent. Atlas requires strict host trust and shows the resolved endpoint/fingerprint; it never copies private keys or changes known-host files. Unknown/changed fingerprints must be verified independently and resolved through your existing SSH trust workflow. A completed verification is a short check, not an open protected session. Direct aliases are supported; jump/proxy/known-host helper configurations are explicitly unavailable. Files, terminal, sudo and service controls remain unavailable.
+Open a server → **Settings → Verify SSH access** to check its concrete alias using the PC's system OpenSSH configuration and existing public-key identities/agent. Atlas requires strict host trust and shows the resolved endpoint/fingerprint; it never copies private keys or changes known-host files. Unknown/changed fingerprints must be verified independently and resolved through your existing SSH trust workflow. A completed verification is a short check, not an open protected session. Direct aliases are supported; jump/proxy/known-host helper configurations are explicitly unavailable. Files, terminal, transfers and scoped workload actions require a separately authenticated session.
 
 Controlled SSH proof: `mise run ssh:fixture` prepares a private pinned test runtime; `mise run test:ssh` tests real OpenSSH against loopback servers; `mise run test:ssh-native` exercises the actual Settings UI (build first). Test-only keys/data stay ignored; no real hosts or trust files are changed.
 
@@ -70,4 +70,4 @@ Tests cover persistence across coordinator recreation, ingestion ordering and at
 
 ## Next increments
 
-See [ROADMAP.md](ROADMAP.md). Remote authentication, SSH sessions, files, terminal, transfers, agents and service control are deliberately not connected yet. Workspace tabs state that limitation; none simulate successful authentication or operations.
+See [ROADMAP.md](ROADMAP.md). The Python reference is a separate local prototype; its data does not sync automatically with the native application. Release acceptance and owner cutover are tracked in [T026](agent/features/F12-release-acceptance.md); mobile, pairing, agents and rsync remain deferred.
