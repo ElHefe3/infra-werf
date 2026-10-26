@@ -12,7 +12,9 @@ use atlas_core::{
     health::{HealthProbeConfig, HealthSnapshot, SharedSnapshot, backoff_seconds, probe_once},
     operations::{Authority, OperationBroker, OperationTicket, ServerTarget},
     ssh::{SshOptions, SshVerification},
-    workloads::WorkloadInspection,
+    workloads::{
+        WorkloadAction, WorkloadControlPreview, WorkloadControlReceipt, WorkloadInspection,
+    },
 };
 use std::{
     collections::HashMap,
@@ -556,6 +558,42 @@ impl Workspace {
         if !self.ssh_target(id).is_ok_and(|current| current == target) {
             self.files.close(session)?;
             return Err(AtlasError::new(ErrorCode::Denied));
+        }
+        Ok(result)
+    }
+    pub fn preview_workload_control(
+        self: &Arc<Self>,
+        id: &ServerId,
+        session: &SessionId,
+        workload_id: &str,
+        action: WorkloadAction,
+    ) -> Result<WorkloadControlPreview, AtlasError> {
+        let _admission = self.begin()?;
+        let target = self.ssh_target(id)?;
+        let result = self
+            .files
+            .preview_workload_control(&target, session, workload_id, action)?;
+        if !self.ssh_target(id).is_ok_and(|current| current == target) {
+            self.files.close(session)?;
+            return Err(AtlasError::new(ErrorCode::Denied));
+        }
+        Ok(result)
+    }
+    pub fn confirm_workload_control(
+        self: &Arc<Self>,
+        id: &ServerId,
+        session: &SessionId,
+        operation: &OperationId,
+        password: Option<ActionPassword>,
+    ) -> Result<WorkloadControlReceipt, AtlasError> {
+        let _admission = self.begin()?;
+        let target = self.ssh_target(id)?;
+        let result = self
+            .files
+            .confirm_workload_control(&target, session, operation, password)?;
+        if !self.ssh_target(id).is_ok_and(|current| current == target) {
+            self.files.close(session)?;
+            return Err(AtlasError::new(ErrorCode::OutcomeUnknown));
         }
         Ok(result)
     }

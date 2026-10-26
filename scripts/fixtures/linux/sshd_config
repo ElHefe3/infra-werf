@@ -6,9 +6,10 @@ PermitEmptyPasswords yes
 KbdInteractiveAuthentication no
 PermitRootLogin no
 UsePAM no
+SetEnv DOCKER_HOST=tcp://127.0.0.1:2375 DOCKER_CONTEXT=fixture-untrusted DOCKER_TLS_VERIFY=1 DOCKER_CERT_PATH=/etc/atlas-fixture-untrusted
 PubkeyAuthentication yes
 StrictModes yes
-AllowUsers fixture fixture-nopass fixture-none
+AllowUsers fixture fixture-nopass fixture-none fixture-nosudo
 AuthorizedKeysFile .ssh/authorized_keys
 Subsystem sftp internal-sftp
 Banner /etc/ssh/atlas-banner

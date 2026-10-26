@@ -54,7 +54,7 @@ Record unsupported runtime/account permissions as explicit limits requiring scop
 
 ## T023 — Implement scoped workload control
 
-<!-- atlas-ticket: {"id":"T023","feature":"F11","status":"in_progress","depends_on":["T022","T013","T014"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T023","feature":"F11","status":"done","depends_on":["T022","T013","T014"],"evidence":"../evidence/T023-acceptance.md"} -->
 
 ### Outcome and included work
 
@@ -72,9 +72,9 @@ Show host/workload/runtime/action, use allowlisted typed operations, fresh sudo 
 
 ### Acceptance criteria
 
-- [ ] Start/stop/restart work for the declared core systemd and container adapters on controlled workloads.
-- [ ] Wrong scope/identity, expired session, denied sudo and duplicate requests cannot control another or unauthorised workload.
-- [ ] UI reports actual observed completion/failure/unknown result, not request-sent success; no credentials/protected logs persist.
+- [x] Start/stop/restart work for the declared core systemd and container adapters on controlled workloads.
+- [x] Wrong scope/identity, expired session, denied sudo and duplicate requests cannot control another or unauthorised workload.
+- [x] UI reports actual observed completion/failure/unknown result, not request-sent success; no credentials/protected logs persist.
 
 ### Verification
 
@@ -82,7 +82,7 @@ Controlled workload state-transition tests and one reviewed native action journe
 
 ### Evidence and closure
 
-Use a concise [feature acceptance record](../evidence/README.md), map results to T023, attach its relative path in ticket metadata, then check only proven criteria. Record tested revision/platform/fixtures, failures, limits and rollback as applicable. Current proof: **not run**. Use [the checkpoint](../evidence/CHECKPOINT.md) at handoff.
+See [T023 acceptance](../evidence/T023-acceptance.md) and [the checkpoint](../evidence/CHECKPOINT.md). The focused native journey and independent bounded review passed; only fixture workloads were controlled.
 
 ### Stop conditions
 

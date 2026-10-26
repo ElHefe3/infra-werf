@@ -3,12 +3,13 @@
 FROM docker.io/library/node:24-bookworm
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends openssh-server sudo && rm -rf /var/lib/apt/lists/* \
     && useradd -m -s /bin/sh fixture && useradd -m -s /bin/sh fixture-nopass \
-    && useradd -m -s /bin/sh fixture-none \
-    && mkdir -p /run/sshd /home/fixture/.ssh /home/fixture-nopass/.ssh /home/fixture-none/.ssh \
-    && chmod 700 /home/fixture/.ssh /home/fixture-nopass/.ssh /home/fixture-none/.ssh \
+    && useradd -m -s /bin/sh fixture-none && useradd -m -s /bin/sh fixture-nosudo \
+    && mkdir -p /run/sshd /home/fixture/.ssh /home/fixture-nopass/.ssh /home/fixture-none/.ssh /home/fixture-nosudo/.ssh \
+    && chmod 700 /home/fixture/.ssh /home/fixture-nopass/.ssh /home/fixture-none/.ssh /home/fixture-nosudo/.ssh \
     && chown -R fixture:fixture /home/fixture/.ssh \
     && chown -R fixture-nopass:fixture-nopass /home/fixture-nopass/.ssh \
     && chown -R fixture-none:fixture-none /home/fixture-none/.ssh \
+    && chown -R fixture-nosudo:fixture-nosudo /home/fixture-nosudo/.ssh \
     && rm -f /etc/ssh/ssh_host_* \
     && printf '%s\n' 'Defaults:fixture timestamp_type=global,timestamp_timeout=15' 'fixture ALL=(root) ALL' 'fixture-nopass ALL=(root) NOPASSWD: ALL' > /etc/sudoers.d/atlas-fixture \
     && chmod 440 /etc/sudoers.d/atlas-fixture && visudo -cf /etc/sudoers.d/atlas-fixture \

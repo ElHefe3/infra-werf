@@ -81,8 +81,8 @@ def serve(directory):
         prebanner_thread=threading.Thread(target=prebanner.serve_forever,daemon=True)
         prebanner_thread.start()
         password='AtlasFixture-'+secrets.token_hex(16)
-        command(['exec','-i',container,'chpasswd'],f'fixture:{password}\nfixture-nopass:{password}\nfixture-none:{password}\n'.encode())
-        command(['exec','-i',container,'sh','-c','umask 077; cat > /home/fixture/.ssh/authorized_keys; cp /home/fixture/.ssh/authorized_keys /home/fixture-nopass/.ssh/authorized_keys; cp /home/fixture/.ssh/authorized_keys /home/fixture-none/.ssh/authorized_keys; chown fixture:fixture /home/fixture/.ssh/authorized_keys; chown fixture-nopass:fixture-nopass /home/fixture-nopass/.ssh/authorized_keys; chown fixture-none:fixture-none /home/fixture-none/.ssh/authorized_keys'],key.export_public_key('openssh'))
+        command(['exec','-i',container,'chpasswd'],f'fixture:{password}\nfixture-nopass:{password}\nfixture-none:{password}\nfixture-nosudo:{password}\n'.encode())
+        command(['exec','-i',container,'sh','-c','umask 077; cat > /home/fixture/.ssh/authorized_keys; cp /home/fixture/.ssh/authorized_keys /home/fixture-nopass/.ssh/authorized_keys; cp /home/fixture/.ssh/authorized_keys /home/fixture-none/.ssh/authorized_keys; cp /home/fixture/.ssh/authorized_keys /home/fixture-nosudo/.ssh/authorized_keys; chown fixture:fixture /home/fixture/.ssh/authorized_keys; chown fixture-nopass:fixture-nopass /home/fixture-nopass/.ssh/authorized_keys; chown fixture-none:fixture-none /home/fixture-none/.ssh/authorized_keys; chown fixture-nosudo:fixture-nosudo /home/fixture-nosudo/.ssh/authorized_keys'],key.export_public_key('openssh'))
         public=None
         for _ in range(40):
             try: public=command(['exec',container,'cat','/etc/ssh/ssh_host_ed25519_key.pub']).stdout; break
@@ -98,7 +98,7 @@ def serve(directory):
                            f'[127.0.0.1]:{prebanner.server_address[1]} '.encode()+public))
         config=directory/'config'
         lines=[]
-        for alias,user in [('atlas-linux','fixture'),('atlas-linux-nopass','fixture-nopass'),('atlas-linux-none','fixture-none')]:
+        for alias,user in [('atlas-linux','fixture'),('atlas-linux-nopass','fixture-nopass'),('atlas-linux-none','fixture-none'),('atlas-linux-nosudo','fixture-nosudo')]:
             alias_port=prebanner.server_address[1] if alias=='atlas-linux-none' else port
             lines += [f'Host {alias}','  Hostname 127.0.0.1',f'  Port {alias_port}',f'  User {user}']
         lines += ['Host *',f'  IdentityFile "{identity.as_posix()}"','  IdentityAgent none','  IdentitiesOnly yes',f'  UserKnownHostsFile "{known.as_posix()}"','  GlobalKnownHostsFile none','  StrictHostKeyChecking yes','']
@@ -115,6 +115,9 @@ def serve(directory):
             elif request == 'authfail\n':
                 command(['exec',container,'rm','-f','/home/fixture/.ssh/authorized_keys'])
                 print('AUTH_FAILURE_READY',flush=True)
+            elif request == 'stats\n':
+                snapshot=command(['exec',container,'sh','-c','count=$(cat /tmp/atlas-control-count 2>/dev/null || printf 0); disconnected=$(cat /tmp/atlas-disconnect-target-found 2>/dev/null || true); printf "%s\\n%s\\n" "$count" "$disconnected"']).stdout.decode().splitlines()
+                print(json.dumps({'control_count':int(snapshot[0] or '0'),'disconnect_target_found':len(snapshot)>1 and snapshot[1]=='found'}),flush=True)
             else:
                 break
         prebanner.shutdown(); prebanner.server_close(); prebanner_thread.join(timeout=5)

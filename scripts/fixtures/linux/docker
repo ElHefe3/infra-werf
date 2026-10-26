@@ -1,7 +1,18 @@
 #!/bin/sh
+record_action() { count=$(cat /tmp/atlas-control-count 2>/dev/null || printf 0); printf '%s\n' "$((count + 1))" > /tmp/atlas-control-count; }
+state_of() { if [ -f "/tmp/atlas-control-docker-$1" ]; then cat "/tmp/atlas-control-docker-$1"; else printf '%s\n' exited; fi; }
+[ "$#" -ge 3 ] && [ "$1" = --host ] && [ "$2" = unix:///var/run/docker.sock ] || exit 64
+[ -z "${DOCKER_HOST:-}" ] && [ -z "${DOCKER_CONTEXT:-}" ] && [ -z "${DOCKER_TLS_VERIFY:-}" ] && [ -z "${DOCKER_CERT_PATH:-}" ] || exit 65
+shift 2
 case "$*" in
   "ps -a --no-trunc --format {{.Names}}|{{.Image}}|{{.State}}") printf '%s\n' 'atlas-fixture-db|localhost/atlas-fixture-db:1|exited' 'atlas-fixture-denied|localhost/atlas-fixture-denied:1|running' ;;
-  "inspect --format {{.State.Status}}|{{.State.ExitCode}}|{{.State.StartedAt}}|{{.State.FinishedAt}} -- atlas-fixture-db") printf '%s\n' 'exited|0|2026-10-26T09:00:00Z|2026-10-26T09:30:00Z' ;;
+  "inspect --format {{.State.Status}}|{{.State.ExitCode}}|{{.State.StartedAt}}|{{.State.FinishedAt}} -- atlas-fixture-db")
+    state_of atlas-fixture-db | while IFS= read -r state; do if [ "$state" = running ]; then printf '%s\n' 'running|0|2026-10-26T10:00:00Z|0001-01-01T00:00:00Z'; else printf '%s\n' 'exited|0|2026-10-26T09:00:00Z|2026-10-26T09:30:00Z'; fi; done ;;
+  "inspect --format {{.State.Status}} -- atlas-fixture-db") state_of atlas-fixture-db ;;
+  "start atlas-fixture-db"|"stop atlas-fixture-db"|"restart atlas-fixture-db")
+    verb="$1"; if [ "$verb" = stop ]; then state=exited; else state=running; fi
+    printf '%s\n' "$state" > /tmp/atlas-control-docker-atlas-fixture-db
+    record_action; printf '%s\n' atlas-fixture-db ;;
   "logs --tail=50 --timestamps -- atlas-fixture-db") printf '%s\n' 'ATLAS_TEST_DOCKER_CONTAINER_LOG' ;;
   "inspect --format {{.State.Status}}|{{.State.ExitCode}}|{{.State.StartedAt}}|{{.State.FinishedAt}} -- atlas-fixture-denied") printf '%s\n' 'permission denied connecting to docker daemon' >&2; exit 1 ;;
   "logs --tail=50 --timestamps -- atlas-fixture-denied") printf '%s\n' 'permission denied connecting to docker daemon' >&2; exit 1 ;;

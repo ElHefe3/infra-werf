@@ -1,6 +1,6 @@
 # S05 — Observe and operate
 
-<!-- atlas-scope: {"id":"S05","features":["F07","F10","F11"],"depends_on":["S03"],"window":2,"deferred":false} -->
+<!-- atlas-scope: {"id":"S05","features":["F07","F10","F11"],"depends_on":["S03"],"window":2,"deferred":false,"evidence":"../evidence/S05-acceptance.md"} -->
 
 ## Outcome
 
@@ -26,10 +26,10 @@ Ticket status is canonical in the feature packets; scope progress is derived. Do
 
 ## Acceptance gate
 
-- [ ] HTTP/TCP checks expose independent host/service/freshness states with bounded scheduling and explicit failures.
-- [ ] SSH inventory updates retain identity/owner edits and do not persist unapproved protected output.
-- [ ] Desktop terminal input/resize/backpressure and lifecycle work; stale sessions cannot receive replayed input.
-- [ ] Systemd and declared core container operations have correct scope, deliberate action/elevation and actual observed outcomes; logs remain protected.
+- [x] HTTP/TCP checks expose independent host/service/freshness states with bounded scheduling and explicit failures.
+- [x] SSH inventory updates retain identity/owner edits and do not persist unapproved protected output.
+- [x] Desktop terminal input/resize/backpressure and lifecycle work; stale sessions cannot receive replayed input.
+- [x] Systemd and declared core container operations have correct scope, deliberate action/elevation and actual observed outcomes; logs remain protected.
 
 ## Verification and refinement
 

@@ -2,7 +2,7 @@
 
 Date: 2026-10-26<br>
 Revision: `7c2e941` plus the uncommitted T021 working tree used for the native build and proof.<br>
-Result: pass<br>
+Result: pass
 Feature/ticket: F10 / T021
 
 ## Environment and target

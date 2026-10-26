@@ -71,6 +71,10 @@ pub(super) enum Action {
         stage_id: String,
         request: ProtectedPlacementRequest,
     },
+    WorkloadControl {
+        workload_id: String,
+        action: crate::workloads::WorkloadAction,
+    },
 }
 pub(super) struct Pending {
     ticket: OperationTicket,
@@ -276,6 +280,63 @@ impl FileSessions {
             action: Action::Placement {
                 stage_id: stage.0,
                 request,
+            },
+            consumed: false,
+        });
+        Ok(preview)
+    }
+    pub fn preview_workload_control(
+        &self,
+        target: &ServerTarget,
+        id: &SessionId,
+        workload_id: &str,
+        action: crate::workloads::WorkloadAction,
+    ) -> Result<crate::workloads::WorkloadControlPreview, AtlasError> {
+        let session = self.session(target, id)?;
+        let identity = session
+            .workloads
+            .get(workload_id)
+            .cloned()
+            .filter(|identity| identity.supported)
+            .ok_or_else(|| error(ErrorCode::Denied))?;
+        let mut pending = lock(&session.elevation)?;
+        if pending.as_ref().is_some_and(|item| item.consumed) {
+            return Err(error(ErrorCode::Conflict));
+        }
+        if let Some(old) = pending.take() {
+            let _ = self
+                .broker
+                .cancel(Some(&self.authority), &old.ticket.operation_id);
+        }
+        let ticket = self.broker.prepare(
+            Some(&self.authority),
+            target,
+            InspectionRequest {
+                server_id: target.server_id().clone(),
+                session_id: id.clone(),
+                inspection: Inspection::WorkloadControl {
+                    workload_id: workload_id.to_owned(),
+                },
+            },
+        )?;
+        let preview = crate::workloads::WorkloadControlPreview {
+            contract_version: CONTRACT_VERSION,
+            operation_id: ticket.operation_id.clone(),
+            expires_at: ticket.expires_at.clone(),
+            server: target.host().into(),
+            endpoint: format!(
+                "{}@{}:{}",
+                session.profile.user, session.profile.hostname, session.profile.port
+            ),
+            requires_sudo: crate::workloads::workload_control_requires_sudo(&identity),
+            workload: identity.clone(),
+            action,
+        };
+        *pending = Some(Pending {
+            ticket,
+            action: Action::WorkloadControl {
+                workload_id: identity.id,
+                action,
             },
             consumed: false,
         });
@@ -618,6 +679,193 @@ impl FileSessions {
             cleanup_needed: cleanup.cleanup_needed,
             staging_location: cleanup.staging_location,
         })
+    }
+
+    pub fn confirm_workload_control(
+        &self,
+        target: &ServerTarget,
+        id: &SessionId,
+        operation: &OperationId,
+        password: Option<ActionPassword>,
+    ) -> Result<crate::workloads::WorkloadControlReceipt, AtlasError> {
+        let password = password.map(|value| value.0);
+        let session = self.session(target, id)?;
+        let (workload_id, action) = {
+            let mut pending = lock(&session.elevation)?;
+            let intent = pending
+                .as_mut()
+                .filter(|item| item.ticket.operation_id == *operation && !item.consumed)
+                .ok_or_else(|| error(ErrorCode::Denied))?;
+            let Action::WorkloadControl {
+                workload_id,
+                action,
+            } = &intent.action
+            else {
+                return Err(error(ErrorCode::Denied));
+            };
+            (workload_id.clone(), *action)
+        };
+        let identity = session
+            .workloads
+            .get(&workload_id)
+            .cloned()
+            .filter(|identity| identity.supported)
+            .ok_or_else(|| error(ErrorCode::Denied))?;
+        let requires_sudo = crate::workloads::workload_control_requires_sudo(&identity);
+        match (requires_sudo, password.as_ref()) {
+            (true, Some(value))
+                if !value.is_empty()
+                    && value.len() <= 1024
+                    && !value.contains(['\r', '\n', '\0']) => {}
+            (false, None) => {}
+            (true, _) => return Err(error(ErrorCode::Unauthenticated)),
+            (false, Some(_)) => return Err(error(ErrorCode::InvalidInput)),
+        }
+        {
+            let mut pending = lock(&session.elevation)?;
+            let intent = pending
+                .as_mut()
+                .filter(|item| item.ticket.operation_id == *operation && !item.consumed)
+                .ok_or_else(|| error(ErrorCode::Denied))?;
+            if !matches!(&intent.action, Action::WorkloadControl { workload_id: current, action: current_action } if current == &workload_id && current_action == &action)
+            {
+                return Err(error(ErrorCode::Denied));
+            }
+            intent.consumed = true;
+        }
+
+        let worker = session.clone();
+        let worker_identity = identity.clone();
+        let options = self.options.clone();
+        let policy = self.policy;
+        let operation_id = operation.clone();
+        let (send, receive) = std::sync::mpsc::channel();
+        struct Done(std::sync::mpsc::Sender<()>);
+        impl Drop for Done {
+            fn drop(&mut self) {
+                let _ = self.0.send(());
+            }
+        }
+        let done = Done(send);
+        let result = self.broker.execute_workload_control(
+            Some(&self.authority),
+            operation,
+            target,
+            move |plan, context| {
+                let _done = done;
+                if !matches!(plan, InspectionPlan::WorkloadControl { workload_id: planned } if planned == &worker_identity.id) {
+                    return Err(error(ErrorCode::Denied));
+                }
+                let valid = || {
+                    if worker.view_valid(policy) {
+                        Ok(())
+                    } else {
+                        Err(error(ErrorCode::ExpiredSession))
+                    }
+                };
+                valid()?;
+                let peer = options.pin_peer(
+                    &worker.profile,
+                    &worker.fingerprint,
+                    worker
+                        .host_key
+                        .as_ref()
+                        .ok_or_else(|| error(ErrorCode::Denied))?,
+                    context,
+                )?;
+
+                if requires_sudo {
+                    let password = password
+                        .as_ref()
+                        .ok_or_else(|| error(ErrorCode::Unauthenticated))?;
+                    fresh_sudo(&peer, password, context, &valid)?;
+                }
+
+                let kind = match worker_identity.kind {
+                    crate::workloads::WorkloadKind::Service => "service",
+                    crate::workloads::WorkloadKind::Container => "container",
+                };
+                let verb = action.as_str();
+                let script_args = [
+                    "/bin/bash",
+                    "-c",
+                    crate::workloads::REMOTE_WORKLOAD_CONTROL,
+                    "atlas-control",
+                    kind,
+                    worker_identity.scope.as_str(),
+                    worker_identity.runtime.as_str(),
+                    verb,
+                    worker_identity.name.as_str(),
+                ];
+                let reply = if requires_sudo {
+                    let password = password
+                        .as_ref()
+                        .ok_or_else(|| error(ErrorCode::Unauthenticated))?;
+                    let prompt = format!("[ATLAS_SUDO_{}]", token());
+                    let mut args = vec![
+                        "/usr/bin/sudo",
+                        "-k",
+                        "-S",
+                        "-p",
+                        prompt.as_str(),
+                        "--",
+                    ];
+                    args.extend(script_args);
+                    let reply = peer.run(
+                        &args,
+                        Some((&prompt, password)),
+                        context,
+                        &valid,
+                    )?;
+                    if !reply.prompted {
+                        return Err(error(ErrorCode::Denied));
+                    }
+                    reply
+                } else {
+                    peer.run(&script_args, None, context, &valid)?
+                };
+                if !reply.success {
+                    return Err(error(ErrorCode::OutcomeUnknown));
+                }
+                let receipt = crate::workloads::parse_workload_control(
+                    &reply.stdout,
+                    &operation_id,
+                    &worker_identity,
+                    action,
+                )?;
+                *lock(&worker.last_used)? = Instant::now();
+                let encoded =
+                    serde_json::to_string(&receipt).map_err(|_| error(ErrorCode::IoFailure))?;
+                context.write(&encoded)
+            },
+        );
+        let _ = receive.recv();
+        {
+            let mut pending = lock(&session.elevation)?;
+            if pending
+                .as_ref()
+                .is_some_and(|item| item.ticket.operation_id == *operation)
+            {
+                *pending = None;
+            }
+        }
+        if result.as_ref().err().is_some_and(|failure| {
+            matches!(
+                failure.code,
+                ErrorCode::IoFailure
+                    | ErrorCode::HostTrustFailure
+                    | ErrorCode::TimedOut
+                    | ErrorCode::OutputLimit
+                    | ErrorCode::ExpiredSession
+            )
+        }) {
+            let _ = self.close(id);
+        }
+        let result = result?;
+        let receipt: crate::workloads::WorkloadControlReceipt =
+            serde_json::from_str(&result).map_err(|_| error(ErrorCode::OutcomeUnknown))?;
+        self.session(target, id)?;
+        Ok(receipt)
     }
 }
 pub(super) fn typescript_contracts() -> String {

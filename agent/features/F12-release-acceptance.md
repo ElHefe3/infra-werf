@@ -20,7 +20,7 @@ Read [SCOPE.md](../SCOPE.md) for access boundaries; use [AGENT.md](../AGENT.md) 
 
 ## T024 — Verify integrated core and recovery
 
-<!-- atlas-ticket: {"id":"T024","feature":"F12","status":"todo","depends_on":["T018","T020","T021","T023"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T024","feature":"F12","status":"in_progress","depends_on":["T018","T020","T021","T023"],"evidence":null} -->
 
 ### Outcome and included work
 

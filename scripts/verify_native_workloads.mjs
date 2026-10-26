@@ -76,7 +76,7 @@ try {
   const panel = workspace.locator('.workload-inspection');
   await expect(panel.getByRole('button', { name: 'Open protected view', exact: true })).toBeEnabled();
   await panel.getByRole('button', { name: 'Open protected view', exact: true }).click();
-  await expect(panel.locator('tbody tr')).toHaveCount(10);
+  await expect(panel.locator('tbody tr')).toHaveCount(13);
   const inspect = async (name, expectedState, expectedLog) => {
     const row = panel.locator('tbody tr').filter({ hasText: name });
     await row.getByRole('button', { name: 'Inspect', exact: true }).click();
@@ -90,6 +90,7 @@ try {
   await inspect('atlas-fixture.service', 'Running', 'ATLAS_TEST_SYSTEM_SERVICE_LOG');
   await inspect('fixture-stopped.service', 'Stopped', 'ATLAS_TEST_STOPPED_SERVICE_LOG');
   await inspect('fixture-worker.service', 'Stopped', 'ATLAS_TEST_USER_SERVICE_LOG');
+  await inspect('fixture-slow.service', 'Stopped');
   await inspect('atlas-fixture-api', 'Running', 'ATLAS_TEST_PODMAN_CONTAINER_LOG');
   await inspect('atlas-fixture-db', 'Stopped', 'ATLAS_TEST_DOCKER_CONTAINER_LOG');
   await inspect('fixture-denied.service', 'Permission denied', 'Log access denied');

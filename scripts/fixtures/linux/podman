@@ -1,7 +1,14 @@
 #!/bin/sh
+record_action() { count=$(cat /tmp/atlas-control-count 2>/dev/null || printf 0); printf '%s\n' "$((count + 1))" > /tmp/atlas-control-count; }
+state_of() { if [ -f "/tmp/atlas-control-podman-$1" ]; then cat "/tmp/atlas-control-podman-$1"; else printf '%s' running; fi; }
 case "$*" in
   "ps -a --no-trunc --format {{.Names}}|{{.Image}}|{{.State}}") printf '%s\n' 'atlas-fixture-api|localhost/atlas-fixture-api:1|running' ;;
   "inspect --format {{.State.Status}}|{{.State.ExitCode}}|{{.State.StartedAt}}|{{.State.FinishedAt}} -- atlas-fixture-api") printf '%s\n' 'running|0|2026-10-26T10:00:00Z|0001-01-01T00:00:00Z' ;;
+  "inspect --format {{.State.Status}} -- atlas-fixture-api") state_of atlas-fixture-api ;;
+  "start atlas-fixture-api"|"stop atlas-fixture-api"|"restart atlas-fixture-api")
+    verb="$1"; if [ "$verb" = stop ]; then state=exited; else state=running; fi
+    printf '%s\n' "$state" > /tmp/atlas-control-podman-atlas-fixture-api
+    record_action; printf '%s\n' atlas-fixture-api ;;
   "logs --tail=50 --timestamps -- atlas-fixture-api") printf '%s\n' 'ATLAS_TEST_PODMAN_CONTAINER_LOG' ;;
   "inspect --format {{.State.Status}}|{{.State.ExitCode}}|{{.State.StartedAt}}|{{.State.FinishedAt}} -- atlas-fixture-missing") printf '%s\n' 'no such container' >&2; exit 125 ;;
   *) exit 2 ;;

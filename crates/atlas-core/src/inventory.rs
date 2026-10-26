@@ -1,13 +1,13 @@
 use crate::ssh::SshProfile;
 use crate::{
-    AtlasError, BaselineInventory, ContainerSummary, ErrorCode, ServiceSummary, validation,
+    store::{event, sql_error},
+    ServerId, Store,
 };
 use crate::{
-    ServerId, Store,
-    store::{event, sql_error},
+    validation, AtlasError, BaselineInventory, ContainerSummary, ErrorCode, ServiceSummary,
 };
 use chrono::{DateTime, Utc};
-use rusqlite::{OptionalExtension, params};
+use rusqlite::{params, OptionalExtension};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::{collections::HashSet, fs::File, io::Read, path::Path};
@@ -23,6 +23,10 @@ set -o pipefail
 LC_ALL=C
 LANG=C
 export LC_ALL LANG
+system_docker() {
+  unset DOCKER_HOST DOCKER_CONTEXT DOCKER_TLS_VERIFY DOCKER_CERT_PATH
+  command docker --host unix:///var/run/docker.sock "$@"
+}
 printf 'ATLAS_BASELINE_V1\n'
 printf 'TIME\t'; date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || true
 printf 'HOST\t'; hostname 2>/dev/null || true
@@ -49,10 +53,18 @@ for engine in podman docker; do
     engines=$((engines + 1))
     scope=user
     [ "$engine" = docker ] && scope=system
-    if "$engine" ps -a --no-trunc --format '{{.Names}}|{{.Image}}|{{.State}}' 2>/dev/null | awk -F '|' -v scope="$scope" -v engine="$engine" 'NF == 3 && $1 != "" && $3 != "" {printf "CONTAINER\t%s\t%s\t%s\t%s\t%s\n", scope, engine, $1, $2, $3; next} {bad=1} END {if (bad) exit 1}'; then
-      :
+    if [ "$engine" = docker ]; then
+      if system_docker ps -a --no-trunc --format '{{.Names}}|{{.Image}}|{{.State}}' 2>/dev/null | awk -F '|' -v scope="$scope" -v engine="$engine" 'NF == 3 && $1 != "" && $3 != "" {printf "CONTAINER\t%s\t%s\t%s\t%s\t%s\n", scope, engine, $1, $2, $3; next} {bad=1} END {if (bad) exit 1}'; then
+        :
+      else
+        containers_ok=0
+      fi
     else
-      containers_ok=0
+      if "$engine" ps -a --no-trunc --format '{{.Names}}|{{.Image}}|{{.State}}' 2>/dev/null | awk -F '|' -v scope="$scope" -v engine="$engine" 'NF == 3 && $1 != "" && $3 != "" {printf "CONTAINER\t%s\t%s\t%s\t%s\t%s\n", scope, engine, $1, $2, $3; next} {bad=1} END {if (bad) exit 1}'; then
+        :
+      else
+        containers_ok=0
+      fi
     fi
   fi
 done

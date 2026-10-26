@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { CONTRACT_VERSION, type AddRelationship, type AddServer, type MapState, type UpdateServer, type WorkspaceStatus, type OperationTicket, type SshVerification, type FileSession, type FileAction, type FileResult, type FileChange, type FileMutationPreview, type FileMutationReceipt, type LocalSelection, type TransferView, type ElevationPreview, type ElevationReceipt, type ProtectedPlacementRequest, type ProtectedPlacementStage, type ProtectedPlacementReceipt, type HealthProbeConfig, type HealthSnapshot, type InventoryRefreshResult, type TerminalPoll, type WorkloadInspection } from "./contracts.gen.ts";
+import { CONTRACT_VERSION, type AddRelationship, type AddServer, type MapState, type UpdateServer, type WorkspaceStatus, type OperationTicket, type SshVerification, type FileSession, type FileAction, type FileResult, type FileChange, type FileMutationPreview, type FileMutationReceipt, type LocalSelection, type TransferView, type ElevationPreview, type ElevationReceipt, type ProtectedPlacementRequest, type ProtectedPlacementStage, type ProtectedPlacementReceipt, type HealthProbeConfig, type HealthSnapshot, type InventoryRefreshResult, type TerminalPoll, type WorkloadInspection, type WorkloadAction, type WorkloadControlPreview, type WorkloadControlReceipt } from "./contracts.gen.ts";
 
 export type NativeTransport = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
 export function createWorkspaceClient(transport: NativeTransport = invoke) {
@@ -30,6 +30,8 @@ export function createWorkspaceClient(transport: NativeTransport = invoke) {
     openFiles: (serverId: string, operationId: string) => transport<FileSession>("files_open", { serverId, operationId }),
     readFiles: (serverId: string, sessionId: string, action: FileAction) => transport<FileResult>("files_read", { serverId, sessionId, action }),
     inspectWorkload: (serverId: string, sessionId: string, workloadId: string) => request<WorkloadInspection>("workload_inspect", { serverId, sessionId, workloadId }),
+    previewWorkloadControl: (serverId: string, sessionId: string, workloadId: string, action: WorkloadAction) => request<WorkloadControlPreview>("workload_control_preview", { serverId, sessionId, workloadId, action }),
+    confirmWorkloadControl: (serverId: string, sessionId: string, operationId: string, password?: string) => request<WorkloadControlReceipt>("workload_control_confirm", { serverId, sessionId, operationId, password }),
     lockFiles: (sessionId: string) => transport<void>("files_lock", { sessionId }),
     startTerminal: (serverId: string, sessionId: string, cols: number, rows: number) => transport<void>("files_terminal_start", { serverId, sessionId, cols, rows }),
     readTerminal: (serverId: string, sessionId: string) => transport<TerminalPoll>("files_terminal_poll", { serverId, sessionId }),

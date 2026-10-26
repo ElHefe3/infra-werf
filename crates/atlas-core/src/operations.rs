@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     sync::{
-        Arc, Mutex,
         atomic::{AtomicBool, AtomicUsize, Ordering},
+        Arc, Mutex,
     },
     time::{Duration, Instant},
 };
@@ -33,6 +33,7 @@ pub enum Inspection {
     SystemSummary {},
     FileMetadata { path: String },
     ServiceStatus { workload_id: String },
+    WorkloadControl { workload_id: String },
     SftpRead { resource_id: String },
     SftpMutation { resource_id: String },
     SftpTransfer { resource_id: String },
@@ -155,6 +156,7 @@ pub enum InspectionPlan {
     SystemSummary,
     FileMetadata(ScopedPath),
     ServiceStatus { workload_id: String },
+    WorkloadControl { workload_id: String },
 }
 
 /// Scopes originate in authenticated discovery, not in an operation request.
@@ -229,6 +231,12 @@ impl SessionScope {
                     return Err(error(ErrorCode::Denied));
                 }
                 InspectionPlan::ServiceStatus { workload_id }
+            }
+            Inspection::WorkloadControl { workload_id } => {
+                if !self.workloads.contains(&workload_id) {
+                    return Err(error(ErrorCode::Denied));
+                }
+                InspectionPlan::WorkloadControl { workload_id }
             }
         })
     }
@@ -667,6 +675,7 @@ impl OperationBroker {
                 | InspectionPlan::SftpTransfer { .. }
                 | InspectionPlan::ElevationCheck
                 | InspectionPlan::ProtectedPlacement
+                | InspectionPlan::WorkloadControl { .. }
         ) {
             return Err(error(ErrorCode::Denied));
         }
@@ -775,6 +784,26 @@ impl OperationBroker {
                 InspectionPlan::ElevationCheck | InspectionPlan::ProtectedPlacement
             )
         {
+            return Err(error(ErrorCode::Denied));
+        }
+        self.execute_job(authority, id, target, job, executor)
+    }
+    /// Dedicated one-shot dispatch for an explicitly reviewed, authenticated
+    /// workload mutation. Read-only executors cannot accept this plan.
+    pub fn execute_workload_control<F>(
+        &self,
+        authority: Option<&Authority>,
+        id: &OperationId,
+        target: &ServerTarget,
+        executor: F,
+    ) -> Result<String, AtlasError>
+    where
+        F: FnOnce(&InspectionPlan, &mut ExecutionContext) -> Result<(), AtlasError>
+            + Send
+            + 'static,
+    {
+        let job = self.job(authority, id)?;
+        if job.session_id.is_none() || !matches!(job.plan, InspectionPlan::WorkloadControl { .. }) {
             return Err(error(ErrorCode::Denied));
         }
         self.execute_job(authority, id, target, job, executor)
@@ -1040,5 +1069,240 @@ mod tests {
                 .code,
             ErrorCode::ExpiredSession
         );
+    }
+
+    #[test]
+    fn workload_control_requires_scoped_identity_and_dedicated_one_shot_dispatch() {
+        let broker = OperationBroker::default();
+        let caller = broker.issue_backend_authority().unwrap();
+        let target =
+            ServerTarget::new(ServerId::parse("control-host").unwrap(), "control.invalid").unwrap();
+        let session = broker
+            .register_authenticated_session(
+                &caller,
+                target.clone(),
+                SessionScope::new(vec![], vec!["wl1_allowed".into()]).unwrap(),
+                Duration::from_secs(60),
+            )
+            .unwrap();
+        let make_request = |workload_id: &str| InspectionRequest {
+            server_id: target.server_id.clone(),
+            session_id: session.clone(),
+            inspection: Inspection::WorkloadControl {
+                workload_id: workload_id.into(),
+            },
+        };
+
+        assert_eq!(
+            broker
+                .prepare(Some(&caller), &target, make_request("wl1_other"))
+                .err()
+                .unwrap()
+                .code,
+            ErrorCode::Denied
+        );
+
+        let ticket = broker
+            .prepare(Some(&caller), &target, make_request("wl1_allowed"))
+            .unwrap();
+        assert_eq!(
+            broker
+                .execute(Some(&caller), &ticket.operation_id, &target, |_, _| panic!(
+                    "read-only dispatcher must reject a workload mutation"
+                ),)
+                .err()
+                .unwrap()
+                .code,
+            ErrorCode::Denied
+        );
+        let receipt = broker
+            .execute_workload_control(
+                Some(&caller),
+                &ticket.operation_id,
+                &target,
+                |plan, context| {
+                    assert!(matches!(plan, InspectionPlan::WorkloadControl { workload_id } if workload_id == "wl1_allowed"));
+                    context.write("observed")
+                },
+            )
+            .unwrap();
+        assert_eq!(receipt, "observed");
+        assert!(broker
+            .execute_workload_control(Some(&caller), &ticket.operation_id, &target, |_, _| panic!(
+                "an action ticket must be one-shot"
+            ),)
+            .is_err());
+        assert!(broker
+            .audit()
+            .unwrap()
+            .iter()
+            .any(|item| { item.operation_id == ticket.operation_id && item.failure.is_none() }));
+    }
+
+    #[test]
+    fn expired_workload_session_cannot_dispatch_action() {
+        let broker = OperationBroker::default();
+        let caller = broker.issue_backend_authority().unwrap();
+        let target = ServerTarget::new(
+            ServerId::parse("expired-control-host").unwrap(),
+            "control.invalid",
+        )
+        .unwrap();
+        let session = broker
+            .register_authenticated_session(
+                &caller,
+                target.clone(),
+                SessionScope::new(vec![], vec!["wl1_allowed".into()]).unwrap(),
+                Duration::from_millis(500),
+            )
+            .unwrap();
+        let ticket = broker
+            .prepare(
+                Some(&caller),
+                &target,
+                InspectionRequest {
+                    server_id: target.server_id.clone(),
+                    session_id: session,
+                    inspection: Inspection::WorkloadControl {
+                        workload_id: "wl1_allowed".into(),
+                    },
+                },
+            )
+            .unwrap();
+
+        std::thread::sleep(Duration::from_millis(550));
+        let error = broker
+            .execute_workload_control(Some(&caller), &ticket.operation_id, &target, |_, _| {
+                panic!("an expired session must not dispatch a workload action")
+            })
+            .err()
+            .unwrap();
+        assert_eq!(error.code, ErrorCode::ExpiredSession);
+    }
+
+    #[test]
+    fn cancelling_an_in_flight_workload_ticket_cannot_replay_its_executor() {
+        let broker = OperationBroker::new(Duration::from_secs(3), MAX_OUTPUT).unwrap();
+        let caller = broker.issue_backend_authority().unwrap();
+        let target =
+            ServerTarget::new(ServerId::parse("cancel-host").unwrap(), "cancel.invalid").unwrap();
+        let session = broker
+            .register_authenticated_session(
+                &caller,
+                target.clone(),
+                SessionScope::new(vec![], vec!["wl1_allowed".into()]).unwrap(),
+                Duration::from_secs(30),
+            )
+            .unwrap();
+        let ticket = broker
+            .prepare(
+                Some(&caller),
+                &target,
+                InspectionRequest {
+                    server_id: target.server_id.clone(),
+                    session_id: session,
+                    inspection: Inspection::WorkloadControl {
+                        workload_id: "wl1_allowed".into(),
+                    },
+                },
+            )
+            .unwrap();
+        let starts = Arc::new(AtomicUsize::new(0));
+        let worker_broker = broker.clone();
+        let worker_caller = caller.clone();
+        let worker_target = target.clone();
+        let worker_ticket = ticket.operation_id.clone();
+        let worker_starts = Arc::clone(&starts);
+        let (started_tx, started_rx) = std::sync::mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            worker_broker.execute_workload_control(
+                Some(&worker_caller),
+                &worker_ticket,
+                &worker_target,
+                move |_, context| {
+                    worker_starts.fetch_add(1, Ordering::AcqRel);
+                    let _ = started_tx.send(());
+                    loop {
+                        context.checkpoint()?;
+                        std::thread::sleep(Duration::from_millis(2));
+                    }
+                },
+            )
+        });
+        started_rx.recv_timeout(Duration::from_secs(1)).unwrap();
+        broker.cancel(Some(&caller), &ticket.operation_id).unwrap();
+        assert_eq!(
+            worker.join().unwrap().unwrap_err().code,
+            ErrorCode::Cancelled
+        );
+        assert_eq!(starts.load(Ordering::Acquire), 1);
+        assert_eq!(
+            broker
+                .execute_workload_control(
+                    Some(&caller),
+                    &ticket.operation_id,
+                    &target,
+                    |_, _| panic!("cancelled action ticket must not be replayed"),
+                )
+                .err()
+                .unwrap()
+                .code,
+            ErrorCode::Cancelled
+        );
+        assert_eq!(starts.load(Ordering::Acquire), 1);
+    }
+
+    #[test]
+    fn timed_out_workload_ticket_cannot_replay_its_executor() {
+        let broker = OperationBroker::new(Duration::from_millis(100), MAX_OUTPUT).unwrap();
+        let caller = broker.issue_backend_authority().unwrap();
+        let target =
+            ServerTarget::new(ServerId::parse("timeout-host").unwrap(), "timeout.invalid").unwrap();
+        let session = broker
+            .register_authenticated_session(
+                &caller,
+                target.clone(),
+                SessionScope::new(vec![], vec!["wl1_allowed".into()]).unwrap(),
+                Duration::from_secs(30),
+            )
+            .unwrap();
+        let ticket = broker
+            .prepare(
+                Some(&caller),
+                &target,
+                InspectionRequest {
+                    server_id: target.server_id.clone(),
+                    session_id: session,
+                    inspection: Inspection::WorkloadControl {
+                        workload_id: "wl1_allowed".into(),
+                    },
+                },
+            )
+            .unwrap();
+        let starts = Arc::new(AtomicUsize::new(0));
+        let worker_starts = Arc::clone(&starts);
+        let error = broker
+            .execute_workload_control(
+                Some(&caller),
+                &ticket.operation_id,
+                &target,
+                move |_, context| {
+                    worker_starts.fetch_add(1, Ordering::AcqRel);
+                    loop {
+                        context.checkpoint()?;
+                        std::thread::sleep(Duration::from_millis(2));
+                    }
+                },
+            )
+            .err()
+            .unwrap();
+        assert_eq!(error.code, ErrorCode::TimedOut);
+        assert_eq!(starts.load(Ordering::Acquire), 1);
+        assert!(broker
+            .execute_workload_control(Some(&caller), &ticket.operation_id, &target, |_, _| panic!(
+                "timed out action ticket must not be replayed"
+            ),)
+            .is_err());
+        assert_eq!(starts.load(Ordering::Acquire), 1);
     }
 }

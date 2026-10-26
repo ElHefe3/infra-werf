@@ -166,6 +166,43 @@ async fn workload_inspect(
     .await
     .map_err(|_| AtlasError::new(ErrorCode::IoFailure))?
 }
+
+#[tauri::command]
+async fn workload_control_preview(
+    window: tauri::WebviewWindow,
+    workspace: State<'_, Arc<Workspace>>,
+    server_id: ServerId,
+    session_id: SessionId,
+    workload_id: String,
+    action: atlas_core::workloads::WorkloadAction,
+) -> Result<atlas_core::workloads::WorkloadControlPreview, AtlasError> {
+    local_desktop(&window)?;
+    let workspace = workspace.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        workspace.preview_workload_control(&server_id, &session_id, &workload_id, action)
+    })
+    .await
+    .map_err(|_| AtlasError::new(ErrorCode::IoFailure))?
+}
+
+#[tauri::command]
+async fn workload_control_confirm(
+    window: tauri::WebviewWindow,
+    workspace: State<'_, Arc<Workspace>>,
+    server_id: ServerId,
+    session_id: SessionId,
+    operation_id: OperationId,
+    password: Option<String>,
+) -> Result<atlas_core::workloads::WorkloadControlReceipt, AtlasError> {
+    let password = password.map(ActionPassword::from);
+    local_desktop(&window)?;
+    let workspace = workspace.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        workspace.confirm_workload_control(&server_id, &session_id, &operation_id, password)
+    })
+    .await
+    .map_err(|_| AtlasError::new(ErrorCode::IoFailure))?
+}
 #[tauri::command]
 async fn files_lock(
     window: tauri::WebviewWindow,
@@ -710,7 +747,7 @@ pub fn run() {
             }
         }
     })
-    .invoke_handler(tauri::generate_handler![foundation_status, workspace_status, map_state, retry_workspace, add_server, update_server, remove_server, add_relationship, remove_relationship, import_reports, ssh_prepare, ssh_verify, ssh_cancel, health_configure, health_status, health_cancel, inventory_refresh, files_prepare, files_open, files_read, workload_inspect, files_lock, files_terminal_start, files_terminal_poll, files_terminal_write, files_terminal_resize, files_preview, files_commit, files_discard, files_release, files_pick_upload, files_pick_download, files_selection_discard, files_transfer, files_stage_protected, transfer_list, transfer_cancel, elevation_preview, elevation_confirm, elevation_cancel, protected_placement_preview, protected_placement_confirm, protected_placement_cancel])
+    .invoke_handler(tauri::generate_handler![foundation_status, workspace_status, map_state, retry_workspace, add_server, update_server, remove_server, add_relationship, remove_relationship, import_reports, ssh_prepare, ssh_verify, ssh_cancel, health_configure, health_status, health_cancel, inventory_refresh, files_prepare, files_open, files_read, workload_inspect, workload_control_preview, workload_control_confirm, files_lock, files_terminal_start, files_terminal_poll, files_terminal_write, files_terminal_resize, files_preview, files_commit, files_discard, files_release, files_pick_upload, files_pick_download, files_selection_discard, files_transfer, files_stage_protected, transfer_list, transfer_cancel, elevation_preview, elevation_confirm, elevation_cancel, protected_placement_preview, protected_placement_confirm, protected_placement_cancel])
     .run(tauri::generate_context!())
     .expect("Atlas native runtime failed");
 }

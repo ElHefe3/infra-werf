@@ -1,8 +1,8 @@
 //! Typed identities and bounded transient inspection for discovered workloads.
 //! The fixed remote program accepts only identities issued from saved inventory.
 use crate::{
-    AtlasError, BaselineInventory, CONTRACT_VERSION, ContainerSummary, ErrorCode, ServerId,
-    ServiceSummary,
+    AtlasError, BaselineInventory, ContainerSummary, ErrorCode, ServerId, ServiceSummary,
+    CONTRACT_VERSION,
 };
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -19,7 +19,7 @@ pub enum WorkloadKind {
 }
 
 impl WorkloadKind {
-    fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::Service => "service",
             Self::Container => "container",
@@ -197,6 +197,192 @@ pub enum WorkloadLogState {
     Unavailable,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkloadAction {
+    Start,
+    Stop,
+    Restart,
+}
+
+impl WorkloadAction {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Start => "start",
+            Self::Stop => "stop",
+            Self::Restart => "restart",
+        }
+    }
+
+    fn expected_state(self) -> WorkloadState {
+        match self {
+            Self::Start | Self::Restart => WorkloadState::Running,
+            Self::Stop => WorkloadState::Stopped,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkloadActionOutcome {
+    Completed,
+    Failed,
+    Unknown,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct WorkloadControlPreview {
+    pub contract_version: u32,
+    pub operation_id: crate::OperationId,
+    pub expires_at: String,
+    pub server: String,
+    pub endpoint: String,
+    pub workload: WorkloadIdentity,
+    pub action: WorkloadAction,
+    pub requires_sudo: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct WorkloadControlReceipt {
+    pub contract_version: u32,
+    pub operation_id: crate::OperationId,
+    pub workload_id: String,
+    pub action: WorkloadAction,
+    pub outcome: WorkloadActionOutcome,
+    pub observed_state: WorkloadState,
+    pub observed_at: String,
+    pub message: String,
+}
+
+pub fn workload_control_requires_sudo(identity: &WorkloadIdentity) -> bool {
+    matches!(
+        (
+            identity.kind,
+            identity.scope.as_str(),
+            identity.runtime.as_str()
+        ),
+        (WorkloadKind::Service, "system", "systemd")
+            | (WorkloadKind::Container, "system", "docker")
+    )
+}
+
+pub fn parse_workload_control(
+    output: &str,
+    operation_id: &crate::OperationId,
+    identity: &WorkloadIdentity,
+    action: WorkloadAction,
+) -> Result<WorkloadControlReceipt, AtlasError> {
+    let mut version = false;
+    let mut exit = None;
+    let mut state = None;
+    let mut oneshot_completed = false;
+    for line in output.lines() {
+        if line == "ATLAS_CONTROL_V1" {
+            if version {
+                return Err(AtlasError::new(ErrorCode::IoFailure));
+            }
+            version = true;
+        } else if let Some(value) = line.strip_prefix("ACTION_EXIT\t") {
+            if exit.is_some()
+                || value.is_empty()
+                || !value.bytes().all(|byte| byte.is_ascii_digit())
+            {
+                return Err(AtlasError::new(ErrorCode::IoFailure));
+            }
+            exit = value.parse::<u8>().ok();
+        } else if let Some(value) = line.strip_prefix("STATE\t") {
+            if state.is_some() {
+                return Err(AtlasError::new(ErrorCode::IoFailure));
+            }
+            state = Some(match value {
+                "running" => WorkloadState::Running,
+                "stopped" => WorkloadState::Stopped,
+                "oneshot_completed" => {
+                    oneshot_completed = true;
+                    WorkloadState::Stopped
+                }
+                "permission_denied" => WorkloadState::PermissionDenied,
+                "unavailable" => WorkloadState::Unavailable,
+                _ => return Err(AtlasError::new(ErrorCode::IoFailure)),
+            });
+        }
+    }
+    if !version {
+        return Err(AtlasError::new(ErrorCode::IoFailure));
+    }
+    let exit = exit.ok_or_else(|| AtlasError::new(ErrorCode::IoFailure))?;
+    let observed_state = state.ok_or_else(|| AtlasError::new(ErrorCode::IoFailure))?;
+    if oneshot_completed
+        && (identity.kind != WorkloadKind::Service
+            || identity.runtime != "systemd"
+            || action == WorkloadAction::Stop)
+    {
+        return Err(AtlasError::new(ErrorCode::IoFailure));
+    }
+    let outcome = if exit == 0 && (observed_state == action.expected_state() || oneshot_completed) {
+        WorkloadActionOutcome::Completed
+    } else if exit != 0 && (observed_state == action.expected_state() || oneshot_completed) {
+        // The desired state is visible, but the remote action's own result was
+        // unsuccessful, so we cannot attribute that state to this request.
+        WorkloadActionOutcome::Unknown
+    } else if matches!(
+        observed_state,
+        WorkloadState::Running | WorkloadState::Stopped
+    ) {
+        WorkloadActionOutcome::Failed
+    } else {
+        WorkloadActionOutcome::Unknown
+    };
+    let message = match outcome {
+        WorkloadActionOutcome::Completed if oneshot_completed => format!(
+            "The {} command completed successfully; the one-shot service is inactive after its task finished.",
+            action.as_str()
+        ),
+        WorkloadActionOutcome::Completed => format!(
+            "{} was observed after the {} request.",
+            if observed_state == WorkloadState::Running {
+                "Running"
+            } else {
+                "Stopped"
+            },
+            action.as_str()
+        ),
+        WorkloadActionOutcome::Failed => format!(
+            "The {} request did not reach the expected state; the workload is {}.",
+            action.as_str(),
+            if observed_state == WorkloadState::Running {
+                "running"
+            } else {
+                "stopped"
+            }
+        ),
+        WorkloadActionOutcome::Unknown => {
+            format!(
+                "The {} command returned exit code {exit}; the observed state is {}. Inspect before retrying.",
+                action.as_str(),
+                match observed_state {
+                    WorkloadState::Running => "running",
+                    WorkloadState::Stopped => "stopped",
+                    WorkloadState::PermissionDenied => "permission denied",
+                    WorkloadState::Unavailable => "unavailable",
+                }
+            )
+        }
+    };
+    Ok(WorkloadControlReceipt {
+        contract_version: CONTRACT_VERSION,
+        operation_id: operation_id.clone(),
+        workload_id: identity.id.clone(),
+        action,
+        outcome,
+        observed_state,
+        observed_at: Utc::now().to_rfc3339(),
+        message,
+    })
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct WorkloadDetail {
@@ -345,6 +531,10 @@ pub fn parse_workload_inspection(
 pub const REMOTE_WORKLOAD_INSPECTION: &str = r##"
 set -o pipefail
 export LC_ALL=C LANG=C
+system_docker() {
+  unset DOCKER_HOST DOCKER_CONTEXT DOCKER_TLS_VERIFY DOCKER_CERT_PATH
+  command docker --host unix:///var/run/docker.sock "$@"
+}
 kind="$1"; scope="$2"; runtime="$3"; name="$4"
 state=unavailable; logs_state=unavailable; logs=; truncated=false
 detail_labels=(); detail_values=()
@@ -367,7 +557,7 @@ read_logs() {
     capture_logs podman logs --tail=50 --timestamps -- "$name"
   else
     if ! command -v docker >/dev/null 2>&1; then logs_state=unavailable; return; fi
-    capture_logs docker logs --tail=50 --timestamps -- "$name"
+    capture_logs system_docker logs --tail=50 --timestamps -- "$name"
   fi
   if (( ${#result} > 8192 )); then result="${result:1}"; truncated=true; fi
   if (( status == 0 )); then logs_state=available; logs="$result"
@@ -391,7 +581,11 @@ if [[ "$kind" == service && "$runtime" == systemd && ( "$scope" == system || "$s
   fi
 elif [[ "$kind" == container && ( ( "$runtime" == podman && "$scope" == user ) || ( "$runtime" == docker && "$scope" == system ) ) ]] && command -v "$runtime" >/dev/null 2>&1; then
   template='{{.State.Status}}|{{.State.ExitCode}}|{{.State.StartedAt}}|{{.State.FinishedAt}}'
-  properties="$("$runtime" inspect --format "$template" -- "$name" 2>&1)"; status=$?
+  if [[ "$runtime" == docker ]]; then
+    properties="$(system_docker inspect --format "$template" -- "$name" 2>&1)"; status=$?
+  else
+    properties="$(podman inspect --format "$template" -- "$name" 2>&1)"; status=$?
+  fi
   if (( status == 0 )); then
     IFS='|' read -r container_state exit_code started finished <<< "$properties"
     container_state="$(safe "$container_state")"; exit_code="$(safe "$exit_code")"; started="$(safe "$started")"; finished="$(safe "$finished")"
@@ -409,6 +603,68 @@ printf 'LOG_STATE\t%s\nLOGS_TRUNCATED\t%s\nLOGS_BEGIN\n' "$logs_state" "$truncat
 printf '%s' "$logs"
 "##;
 
+/// Fixed mutation program. It accepts only typed identities and verbs, reports
+/// the command exit code plus a fresh post-action observation, and exposes no
+/// arbitrary command, path, or caller-selected executable.
+pub const REMOTE_WORKLOAD_CONTROL: &str = r##"
+set -u
+export LC_ALL=C LANG=C
+system_docker() {
+  unset DOCKER_HOST DOCKER_CONTEXT DOCKER_TLS_VERIFY DOCKER_CERT_PATH
+  command docker --host unix:///var/run/docker.sock "$@"
+}
+kind="$1"; scope="$2"; runtime="$3"; action="$4"; name="$5"
+case "$action" in start|stop|restart) ;; *) exit 64;; esac
+before=unavailable
+systemd_observe() {
+  local manager="$1" value rc key item active="" unit_type="" result=""
+  if [[ "$manager" == system ]]; then
+    value="$(systemctl --system show --no-pager --property=ActiveState --property=Type --property=Result -- "$name" 2>&1)"; rc=$?
+  else
+    value="$(systemctl --user show --no-pager --property=ActiveState --property=Type --property=Result -- "$name" 2>&1)"; rc=$?
+  fi
+  if (( rc != 0 )); then [[ "${value,,}" =~ (permission[[:space:]]denied|not[[:space:]]authorized|operation[[:space:]]not[[:space:]]permitted) ]] && printf permission_denied || printf unavailable; return; fi
+  while IFS='=' read -r key item; do
+    case "$key" in ActiveState) active="$item";; Type) unit_type="$item";; Result) result="$item";; esac
+  done <<< "$value"
+  if [[ "$action" != stop && "$active" == inactive && "$unit_type" == oneshot && "$result" == success ]]; then printf oneshot_completed; return; fi
+  case "$active" in active) printf running;; inactive|failed) printf stopped;; activating|deactivating|reloading) printf transitioning;; *) printf unavailable;; esac
+}
+if [[ "$kind" == service && "$runtime" == systemd && "$scope" == system ]]; then
+  systemctl --system "$action" "$name" >/dev/null 2>&1; action_rc=$?
+  observe() { systemd_observe system; }
+elif [[ "$kind" == service && "$runtime" == systemd && "$scope" == user ]]; then
+  systemctl --user "$action" "$name" >/dev/null 2>&1; action_rc=$?
+  observe() { systemd_observe user; }
+elif [[ "$kind" == container && "$scope" == user && "$runtime" == podman ]]; then
+  podman "$action" "$name" >/dev/null 2>&1; action_rc=$?
+  observe() {
+    value="$(podman inspect --format '{{.State.Status}}' -- "$name" 2>&1)"; rc=$?
+    if (( rc != 0 )); then [[ "${value,,}" =~ (permission[[:space:]]denied|not[[:space:]]authorized|operation[[:space:]]not[[:space:]]permitted) ]] && printf permission_denied || printf unavailable; return; fi
+    case "$value" in running) printf running;; exited|created|stopped|dead) printf stopped;; restarting|stopping|paused|removing) printf transitioning;; *) printf unavailable;; esac
+  }
+elif [[ "$kind" == container && "$scope" == system && "$runtime" == docker ]]; then
+  system_docker "$action" "$name" >/dev/null 2>&1; action_rc=$?
+  observe() {
+    value="$(system_docker inspect --format '{{.State.Status}}' -- "$name" 2>&1)"; rc=$?
+    if (( rc != 0 )); then [[ "${value,,}" =~ (permission[[:space:]]denied|not[[:space:]]authorized|operation[[:space:]]not[[:space:]]permitted) ]] && printf permission_denied || printf unavailable; return; fi
+    case "$value" in running) printf running;; exited|created|stopped|dead) printf stopped;; restarting|stopping|paused|removing) printf transitioning;; *) printf unavailable;; esac
+  }
+else
+  exit 64
+fi
+state=unavailable
+for ((attempt=0; attempt<20; attempt++)); do
+  state="$(observe)"
+  if [[ "$action" == stop && "$state" == stopped ]] || [[ "$action" != stop && "$state" == running ]]; then break; fi
+  if [[ "$action" != stop && "$state" == oneshot_completed ]]; then break; fi
+  [[ "$state" == permission_denied || "$state" == unavailable ]] && break
+  sleep 0.25
+done
+[[ "$state" != transitioning ]] || state=unavailable
+printf 'ATLAS_CONTROL_V1\nACTION_EXIT\t%s\nSTATE\t%s\n' "$action_rc" "$state"
+"##;
+
 pub fn typescript_contracts() -> String {
     let config = Config::default();
     [
@@ -416,6 +672,10 @@ pub fn typescript_contracts() -> String {
         WorkloadIdentity::decl(&config),
         WorkloadState::decl(&config),
         WorkloadLogState::decl(&config),
+        WorkloadAction::decl(&config),
+        WorkloadActionOutcome::decl(&config),
+        WorkloadControlPreview::decl(&config),
+        WorkloadControlReceipt::decl(&config),
         WorkloadDetail::decl(&config),
         WorkloadInspection::decl(&config),
     ]
@@ -491,11 +751,113 @@ mod tests {
         assert!(values[2].supported); // user Podman
         assert!(values[3].supported); // system Docker
         assert!(!values[4].supported); // no runtime/scope fallback
-        assert!(
-            values
-                .iter()
-                .all(|workload| workload.id.starts_with("wl1_"))
+        assert!(values
+            .iter()
+            .all(|workload| workload.id.starts_with("wl1_")));
+    }
+
+    #[test]
+    fn workload_control_requires_sudo_only_for_system_scoped_adapters() {
+        let identities = WorkloadIdentity::from_inventory(
+            &ServerId::parse("fixture-server").unwrap(),
+            Some(&inventory()),
         );
+        assert!(workload_control_requires_sudo(&identities[0])); // systemd system
+        assert!(!workload_control_requires_sudo(&identities[1])); // systemd user
+        assert!(!workload_control_requires_sudo(&identities[2])); // rootless Podman
+        assert!(workload_control_requires_sudo(&identities[3])); // system Docker
+        assert!(!workload_control_requires_sudo(&identities[4])); // unsupported identity
+    }
+
+    #[test]
+    fn workload_control_receipt_uses_the_post_action_observation() {
+        let identity = WorkloadIdentity::from_inventory(
+            &ServerId::parse("fixture-server").unwrap(),
+            Some(&inventory()),
+        )
+        .remove(0);
+        let operation = crate::OperationId::generate();
+        let completed = parse_workload_control(
+            "ATLAS_CONTROL_V1\nACTION_EXIT\t0\nSTATE\trunning\n",
+            &operation,
+            &identity,
+            WorkloadAction::Start,
+        )
+        .unwrap();
+        assert_eq!(completed.outcome, WorkloadActionOutcome::Completed);
+        assert_eq!(completed.observed_state, WorkloadState::Running);
+        assert_eq!(completed.action, WorkloadAction::Start);
+
+        let one_shot = WorkloadIdentity::new(
+            &ServerId::parse("fixture-server").unwrap(),
+            WorkloadKind::Service,
+            "system",
+            "systemd",
+            "fixture-task.service",
+            "inactive",
+            "dead",
+            true,
+        );
+        for action in [WorkloadAction::Start, WorkloadAction::Restart] {
+            let receipt = parse_workload_control(
+                "ATLAS_CONTROL_V1\nACTION_EXIT\t0\nSTATE\toneshot_completed\n",
+                &operation,
+                &one_shot,
+                action,
+            )
+            .unwrap();
+            assert_eq!(receipt.outcome, WorkloadActionOutcome::Completed);
+            assert_eq!(receipt.observed_state, WorkloadState::Stopped);
+            assert!(receipt.message.contains("one-shot service is inactive"));
+        }
+        assert!(parse_workload_control(
+            "ATLAS_CONTROL_V1\nACTION_EXIT\t0\nSTATE\toneshot_completed\n",
+            &operation,
+            &one_shot,
+            WorkloadAction::Stop,
+        )
+        .is_err());
+
+        let failed = parse_workload_control(
+            "ATLAS_CONTROL_V1\nACTION_EXIT\t1\nSTATE\tstopped\n",
+            &operation,
+            &identity,
+            WorkloadAction::Start,
+        )
+        .unwrap();
+        assert_eq!(failed.outcome, WorkloadActionOutcome::Failed);
+        assert_eq!(failed.observed_state, WorkloadState::Stopped);
+
+        let unknown = parse_workload_control(
+            "ATLAS_CONTROL_V1\nACTION_EXIT\t1\nSTATE\trunning\n",
+            &operation,
+            &identity,
+            WorkloadAction::Start,
+        )
+        .unwrap();
+        assert_eq!(unknown.outcome, WorkloadActionOutcome::Unknown);
+        assert!(parse_workload_control(
+            "ATLAS_CONTROL_V1\nACTION_EXIT\t0\nSTATE\tother\n",
+            &operation,
+            &identity,
+            WorkloadAction::Start,
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn every_system_docker_adapter_pins_the_same_local_socket() {
+        for program in [
+            crate::inventory::REMOTE_BASELINE_COMMAND,
+            REMOTE_WORKLOAD_INSPECTION,
+            REMOTE_WORKLOAD_CONTROL,
+        ] {
+            assert!(program
+                .contains("unset DOCKER_HOST DOCKER_CONTEXT DOCKER_TLS_VERIFY DOCKER_CERT_PATH"));
+            assert!(program.contains("docker --host unix:///var/run/docker.sock"));
+        }
+        assert!(REMOTE_WORKLOAD_INSPECTION.contains("capture_logs system_docker logs"));
+        assert!(REMOTE_WORKLOAD_CONTROL.contains("system_docker inspect"));
     }
 
     #[test]
@@ -579,27 +941,23 @@ mod tests {
         for changed in changed_profiles {
             let changed_binding =
                 crate::inventory::authenticated_source_binding(&changed, fingerprint);
-            assert!(
-                WorkloadIdentity::for_authenticated_session(
-                    &server,
-                    &changed.alias,
-                    &changed_binding,
-                    Some(&saved),
-                )
-                .is_empty()
-            );
+            assert!(WorkloadIdentity::for_authenticated_session(
+                &server,
+                &changed.alias,
+                &changed_binding,
+                Some(&saved),
+            )
+            .is_empty());
         }
         let changed_key =
             crate::inventory::authenticated_source_binding(&profile, "SHA256:other-key");
-        assert!(
-            WorkloadIdentity::for_authenticated_session(
-                &server,
-                &profile.alias,
-                &changed_key,
-                Some(&saved),
-            )
-            .is_empty()
-        );
+        assert!(WorkloadIdentity::for_authenticated_session(
+            &server,
+            &profile.alias,
+            &changed_key,
+            Some(&saved),
+        )
+        .is_empty());
     }
 
     #[test]

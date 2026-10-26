@@ -2,7 +2,7 @@
 
 Date: 2026-10-26<br>
 Revision: `7c2e941` plus the uncommitted final T022 working tree.<br>
-Result: pass<br>
+Result: pass
 Feature/ticket: F11 / T022
 
 ## Environment and target

@@ -1,9 +1,24 @@
 #!/bin/sh
 if [ -e /tmp/atlas-inventory-partial ]; then exit 1; fi
+record_action() {
+  count=$(cat /tmp/atlas-control-count 2>/dev/null || printf 0)
+  printf '%s\n' "$((count + 1))" > /tmp/atlas-control-count
+}
+state_of() {
+  file="/tmp/atlas-control-${1}-${2}"
+  if [ -f "$file" ]; then cat "$file"; else printf '%s' "$3"; fi
+}
+show_properties() {
+  scope="$1"; name="$2"; default="$3"; state=$(state_of "$scope" "$name" "$default")
+  if [ "$state" = active ]; then sub=running; else sub=dead; fi
+  printf 'LoadState=loaded\nActiveState=%s\nSubState=%s\nUnitFileState=enabled\n' "$state" "$sub"
+}
 case "$*" in
   "--system list-units --all --type=service --no-legend --no-pager --plain --full")
     printf '%s\n' 'atlas-fixture.service loaded active running Synthetic Atlas fixture service'
     printf '%s\n' 'fixture-stopped.service loaded inactive dead Synthetic stopped fixture service'
+    printf '%s\n' 'fixture-oneshot.service loaded inactive dead Synthetic successful one-shot service'
+    printf '%s\n' 'fixture-disconnect.service loaded inactive dead Synthetic transport-loss service'
     printf '%s\n' 'fixture-denied.service loaded active running Synthetic permission fixture service'
     printf '%s\n' 'fixture-log-denied.service loaded active running Synthetic log denial fixture service'
     printf '%s\n' 'fixture-large.service loaded active running Synthetic bounded log fixture service'
@@ -11,23 +26,76 @@ case "$*" in
     ;;
   "--user list-units --all --type=service --no-legend --no-pager --plain --full")
     printf '%s\n' 'fixture-worker.service loaded inactive dead Synthetic fixture user service'
+    printf '%s\n' 'fixture-slow.service loaded inactive dead Synthetic cancellable user service'
     ;;
   "--system show --no-pager --property=LoadState --property=ActiveState --property=SubState --property=UnitFileState -- fixture-denied.service")
-    printf '%s\n' 'Permission denied' >&2
-    exit 1
-    ;;
+    printf '%s\n' 'Permission denied' >&2; exit 1 ;;
   "--system show --no-pager --property=LoadState --property=ActiveState --property=SubState --property=UnitFileState -- fixture-missing.service")
-    printf '%s\n' 'Unit could not be found.' >&2
-    exit 4
-    ;;
+    printf '%s\n' 'Unit could not be found.' >&2; exit 4 ;;
+  "--system show --no-pager --property=LoadState --property=ActiveState --property=SubState --property=UnitFileState -- atlas-fixture.service")
+    show_properties system atlas-fixture.service active ;;
   "--system show --no-pager --property=LoadState --property=ActiveState --property=SubState --property=UnitFileState -- fixture-stopped.service")
-    printf '%s\n' 'LoadState=loaded' 'ActiveState=inactive' 'SubState=dead' 'UnitFileState=disabled'
-    ;;
-  --system\ show\ --no-pager\ --property=LoadState\ --property=ActiveState\ --property=SubState\ --property=UnitFileState\ --\ atlas-*.service|--system\ show\ --no-pager\ --property=LoadState\ --property=ActiveState\ --property=SubState\ --property=UnitFileState\ --\ fixture-*.service)
-    printf '%s\n' 'LoadState=loaded' 'ActiveState=active' 'SubState=running' 'UnitFileState=enabled'
-    ;;
+    show_properties system fixture-stopped.service inactive ;;
+  "--system show --no-pager --property=LoadState --property=ActiveState --property=SubState --property=UnitFileState -- fixture-disconnect.service")
+    show_properties system fixture-disconnect.service inactive ;;
+  "--system show --no-pager --property=LoadState --property=ActiveState --property=SubState --property=UnitFileState -- fixture-log-denied.service")
+    show_properties system fixture-log-denied.service active ;;
+  "--system show --no-pager --property=LoadState --property=ActiveState --property=SubState --property=UnitFileState -- fixture-large.service")
+    show_properties system fixture-large.service active ;;
+  "--system show --no-pager --property=ActiveState --property=Type --property=Result -- fixture-oneshot.service")
+    printf 'ActiveState=inactive\nType=oneshot\nResult=success\n' ;;
+  "--system show --no-pager --property=ActiveState --property=Type --property=Result -- "*)
+    name="${*##* -- }"; state=$(state_of system "$name" inactive)
+    printf 'ActiveState=%s\nType=simple\nResult=success\n' "$state" ;;
+  "--user show --no-pager --property=ActiveState --property=Type --property=Result -- "*)
+    name="${*##* -- }"; state=$(state_of user "$name" inactive)
+    printf 'ActiveState=%s\nType=simple\nResult=success\n' "$state" ;;
   "--user show --no-pager --property=LoadState --property=ActiveState --property=SubState --property=UnitFileState -- fixture-worker.service")
-    printf '%s\n' 'LoadState=loaded' 'ActiveState=inactive' 'SubState=dead' 'UnitFileState=static'
-    ;;
+    show_properties user fixture-worker.service inactive ;;
+  "--user show --no-pager --property=LoadState --property=ActiveState --property=SubState --property=UnitFileState -- fixture-slow.service")
+    show_properties user fixture-slow.service inactive ;;
+  "--user show --no-pager --property=ActiveState -- fixture-worker.service")
+    printf 'ActiveState=%s\n' "$(state_of user fixture-worker.service inactive)" ;;
+  "--user show --no-pager --property=ActiveState -- fixture-slow.service")
+    printf 'ActiveState=%s\n' "$(state_of user fixture-slow.service inactive)" ;;
+  "--system start atlas-fixture.service"|"--system stop atlas-fixture.service"|"--system restart atlas-fixture.service"|"--system start fixture-stopped.service"|"--system stop fixture-stopped.service"|"--system restart fixture-stopped.service")
+    set -- $*
+    verb="$2"; name="$3"
+    if [ "$verb" = stop ]; then state=inactive; else state=active; fi
+    printf '%s\n' "$state" > "/tmp/atlas-control-system-${name}"
+    record_action ;;
+  "--system start fixture-oneshot.service"|"--system stop fixture-oneshot.service"|"--system restart fixture-oneshot.service")
+    record_action ;;
+  "--system start fixture-disconnect.service")
+    printf '%s\n' active > /tmp/atlas-control-system-fixture-disconnect.service
+    record_action
+    pid="$PPID"
+    while [ "$pid" -gt 1 ]; do
+      comm=$(cat "/proc/$pid/comm" 2>/dev/null || true)
+      uid=$(awk '/^Uid:/ {print $2}' "/proc/$pid/status" 2>/dev/null || true)
+      if [ "$comm" = sshd ] && [ -n "$uid" ] && [ "$uid" != 0 ]; then
+        printf '%s\n' found > /tmp/atlas-disconnect-target-found
+        kill -KILL "$pid" 2>/dev/null || true
+        exit 0
+      fi
+      parent=$(awk '/^PPid:/ {print $2}' "/proc/$pid/status" 2>/dev/null || printf 0)
+      case "$parent" in ''|*[!0-9]*) exit 3;; esac
+      pid="$parent"
+    done
+    exit 4 ;;
+  "--user start fixture-worker.service"|"--user stop fixture-worker.service"|"--user restart fixture-worker.service")
+    set -- $*
+    verb="$2"
+    if [ "$verb" = stop ]; then state=inactive; else state=active; fi
+    printf '%s\n' "$state" > /tmp/atlas-control-user-fixture-worker.service
+    record_action ;;
+  "--user start fixture-slow.service")
+    record_action; sleep 7
+    printf '%s\n' active > /tmp/atlas-control-user-fixture-slow.service ;;
+  "--user stop fixture-slow.service"|"--user restart fixture-slow.service")
+    set -- $*; verb="$2"
+    if [ "$verb" = stop ]; then state=inactive; else state=active; fi
+    printf '%s\n' "$state" > /tmp/atlas-control-user-fixture-slow.service
+    record_action ;;
   *) exit 2 ;;
 esac
