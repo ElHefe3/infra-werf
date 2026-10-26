@@ -1,5 +1,6 @@
 mod workspace;
 
+use atlas_core::files::{LocalSelection, TransferDirection, TransferView};
 use atlas_core::*;
 use atlas_core::{
     files::{
@@ -10,6 +11,8 @@ use atlas_core::{
 };
 use std::sync::Arc;
 use tauri::{Emitter, Manager, State};
+#[cfg(desktop)]
+use tauri_plugin_dialog::DialogExt;
 use workspace::{Paths, Workspace};
 
 fn local_desktop(window: &tauri::WebviewWindow) -> Result<(), AtlasError> {
@@ -122,6 +125,147 @@ fn foundation_status() -> FoundationStatus {
         platform: std::env::consts::OS.into(),
         phase: "desktop workspace; remote coordinator not yet available".into(),
     }
+}
+
+#[tauri::command]
+async fn files_pick_upload(
+    window: tauri::WebviewWindow,
+    workspace: State<'_, Arc<Workspace>>,
+    server_id: ServerId,
+    session_id: SessionId,
+) -> Result<Option<LocalSelection>, AtlasError> {
+    local_desktop(&window)?;
+    let workspace = workspace.inner().clone();
+    let admission = workspace.begin()?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let _admission = admission;
+        workspace.picker_access(&server_id, &session_id)?;
+        #[cfg(desktop)]
+        {
+            let selected = window
+                .dialog()
+                .file()
+                .set_parent(&window)
+                .set_title("Choose file to upload")
+                .blocking_pick_file();
+            selected
+                .map(|path| {
+                    workspace.select_local(
+                        &server_id,
+                        &session_id,
+                        path.into_path()
+                            .map_err(|_| AtlasError::new(ErrorCode::InvalidInput))?,
+                        TransferDirection::Upload,
+                    )
+                })
+                .transpose()
+        }
+        #[cfg(not(desktop))]
+        {
+            Err(AtlasError::new(ErrorCode::Denied))
+        }
+    })
+    .await
+    .map_err(|_| AtlasError::new(ErrorCode::IoFailure))?
+}
+#[tauri::command]
+async fn files_pick_download(
+    window: tauri::WebviewWindow,
+    workspace: State<'_, Arc<Workspace>>,
+    server_id: ServerId,
+    session_id: SessionId,
+    resource_id: String,
+) -> Result<Option<LocalSelection>, AtlasError> {
+    local_desktop(&window)?;
+    let workspace = workspace.inner().clone();
+    let admission = workspace.begin()?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let _admission = admission;
+        let name = workspace.download_name(&server_id, &session_id, &resource_id)?;
+        #[cfg(desktop)]
+        {
+            let selected = window
+                .dialog()
+                .file()
+                .set_parent(&window)
+                .set_file_name(name)
+                .set_title("Save downloaded file")
+                .blocking_save_file();
+            selected
+                .map(|path| {
+                    workspace.select_local(
+                        &server_id,
+                        &session_id,
+                        path.into_path()
+                            .map_err(|_| AtlasError::new(ErrorCode::InvalidInput))?,
+                        TransferDirection::Download,
+                    )
+                })
+                .transpose()
+        }
+        #[cfg(not(desktop))]
+        {
+            let _ = name;
+            Err(AtlasError::new(ErrorCode::Denied))
+        }
+    })
+    .await
+    .map_err(|_| AtlasError::new(ErrorCode::IoFailure))?
+}
+#[tauri::command]
+fn files_selection_discard(
+    window: tauri::WebviewWindow,
+    workspace: State<'_, Arc<Workspace>>,
+    grant_id: String,
+) -> Result<(), AtlasError> {
+    local_desktop(&window)?;
+    workspace.discard_selection(&grant_id)
+}
+#[tauri::command]
+async fn files_transfer(
+    window: tauri::WebviewWindow,
+    workspace: State<'_, Arc<Workspace>>,
+    server_id: ServerId,
+    session_id: SessionId,
+    resource_id: String,
+    grant_id: String,
+) -> Result<TransferView, AtlasError> {
+    local_desktop(&window)?;
+    let workspace = workspace.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        workspace.enqueue_transfer(&server_id, &session_id, &resource_id, &grant_id)
+    })
+    .await
+    .map_err(|_| AtlasError::new(ErrorCode::IoFailure))?
+}
+#[tauri::command]
+fn transfer_list(
+    window: tauri::WebviewWindow,
+    workspace: State<'_, Arc<Workspace>>,
+) -> Result<Vec<TransferView>, AtlasError> {
+    local_desktop(&window)?;
+    workspace.transfers()
+}
+#[tauri::command]
+fn transfer_cancel(
+    window: tauri::WebviewWindow,
+    workspace: State<'_, Arc<Workspace>>,
+    operation_id: OperationId,
+) -> Result<(), AtlasError> {
+    local_desktop(&window)?;
+    workspace.cancel_transfer(&operation_id)
+}
+#[tauri::command]
+async fn files_release(
+    window: tauri::WebviewWindow,
+    workspace: State<'_, Arc<Workspace>>,
+    session_id: SessionId,
+) -> Result<(), AtlasError> {
+    local_desktop(&window)?;
+    let workspace = workspace.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || workspace.release_files(&session_id))
+        .await
+        .map_err(|_| AtlasError::new(ErrorCode::IoFailure))?
 }
 
 #[tauri::command]
@@ -279,13 +423,16 @@ async fn import_reports(workspace: State<'_, Arc<Workspace>>) -> Result<MapState
 pub fn run() {
     let builder = tauri::Builder::default();
     #[cfg(desktop)]
-    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _, _| {
-        if let Some(window) = app.get_webview_window("main") {
-            let _ = window.unminimize();
-            let _ = window.show();
-            let _ = window.set_focus();
-        }
-    }));
+    let builder =
+        builder
+            .plugin(tauri_plugin_dialog::init())
+            .plugin(tauri_plugin_single_instance::init(|app, _, _| {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.unminimize();
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }));
     builder.setup(|app| {
         let workspace = Workspace::new(Paths::from_directory(app.path().app_data_dir()?));
         let weak = Arc::downgrade(&workspace);
@@ -309,7 +456,7 @@ pub fn run() {
             }
         }
     })
-    .invoke_handler(tauri::generate_handler![foundation_status, workspace_status, map_state, retry_workspace, add_server, update_server, remove_server, add_relationship, remove_relationship, import_reports, ssh_prepare, ssh_verify, ssh_cancel, files_prepare, files_open, files_read, files_lock, files_preview, files_commit, files_discard])
+    .invoke_handler(tauri::generate_handler![foundation_status, workspace_status, map_state, retry_workspace, add_server, update_server, remove_server, add_relationship, remove_relationship, import_reports, ssh_prepare, ssh_verify, ssh_cancel, files_prepare, files_open, files_read, files_lock, files_preview, files_commit, files_discard, files_release, files_pick_upload, files_pick_download, files_selection_discard, files_transfer, transfer_list, transfer_cancel])
     .run(tauri::generate_context!())
     .expect("Atlas native runtime failed");
 }

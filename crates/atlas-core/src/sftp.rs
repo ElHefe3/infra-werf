@@ -8,7 +8,13 @@ use crate::{
     ssh::{SshOptions, SshProfile},
     *,
 };
-use std::{collections::VecDeque, process::Child, sync::mpsc, thread::JoinHandle, time::Duration};
+use std::{
+    collections::VecDeque,
+    process::Child,
+    sync::mpsc,
+    thread::JoinHandle,
+    time::{Duration, Instant},
+};
 #[cfg(windows)]
 use std::{
     io::{Read, Write},
@@ -261,6 +267,7 @@ pub(crate) struct Client {
     #[cfg(windows)]
     diagnostics: Vec<u8>,
     next_id: u32,
+    request_deadline: Instant,
     pub profile: SshProfile,
     pub fingerprint: String,
 }
@@ -292,6 +299,7 @@ impl Client {
             buffered: VecDeque::new(),
             diagnostics: Vec::new(),
             next_id: 0,
+            request_deadline: Instant::now() + Duration::from_secs(30),
             profile,
             fingerprint: String::new(),
         };
@@ -389,6 +397,9 @@ impl Client {
             .map_err(|_| fail())?;
         loop {
             context.checkpoint()?;
+            if Instant::now() >= self.request_deadline {
+                return Err(AtlasError::new(ErrorCode::TimedOut));
+            }
             self.drain_stderr()?;
             match ack.recv_timeout(Duration::from_millis(10)) {
                 Ok(Ok(())) => return Ok(()),
@@ -404,6 +415,9 @@ impl Client {
     ) -> Result<Vec<u8>, AtlasError> {
         while self.buffered.len() < count {
             context.checkpoint()?;
+            if Instant::now() >= self.request_deadline {
+                return Err(AtlasError::new(ErrorCode::TimedOut));
+            }
             self.drain_stderr()?;
             match self
                 .process
@@ -435,6 +449,7 @@ impl Client {
         context: &mut ExecutionContext,
     ) -> Result<Vec<u8>, AtlasError> {
         self.next_id = self.next_id.checked_add(1).ok_or_else(fail)?;
+        self.request_deadline = Instant::now() + Duration::from_secs(30);
         let mut payload = vec![kind];
         payload.extend(self.next_id.to_be_bytes());
         payload.extend(arguments);
@@ -634,6 +649,133 @@ pub(crate) enum WireChange {
     Rename(Vec<u8>, Vec<u8>),
     Remove(Vec<u8>),
     Rmdir(Vec<u8>),
+}
+
+impl Client {
+    fn ack(
+        &mut self,
+        kind: u8,
+        args: &[u8],
+        context: &mut ExecutionContext,
+    ) -> Result<(), AtlasError> {
+        let response = self.request(kind, args, context)?;
+        let mut packet = Packet::new(&response);
+        if packet.byte()? != 101 {
+            return Err(fail());
+        }
+        packet.u32()?;
+        match Self::status_code(&mut packet)? {
+            0 => Ok(()),
+            2 => Err(AtlasError::new(ErrorCode::NotFound)),
+            3 | 8 => Err(AtlasError::new(ErrorCode::Denied)),
+            _ => Err(AtlasError::new(ErrorCode::RemoteRejected)),
+        }
+    }
+    pub fn private_dir(
+        &mut self,
+        path: &[u8],
+        context: &mut ExecutionContext,
+    ) -> Result<(), AtlasError> {
+        path_valid(path)?;
+        let mut args = string(path);
+        args.extend(4u32.to_be_bytes());
+        args.extend(0o700u32.to_be_bytes());
+        self.ack(14, &args, context)
+    }
+    pub fn open_file(
+        &mut self,
+        path: &[u8],
+        write: bool,
+        context: &mut ExecutionContext,
+    ) -> Result<Vec<u8>, AtlasError> {
+        path_valid(path)?;
+        let mut args = string(path);
+        args.extend((if write { 2u32 | 8 | 32 } else { 1 }).to_be_bytes());
+        if write {
+            args.extend(4u32.to_be_bytes());
+            args.extend(0o600u32.to_be_bytes());
+        } else {
+            args.extend(0u32.to_be_bytes());
+        }
+        let response = self.request(3, &args, context)?;
+        let mut packet = Packet::new(&response);
+        let kind = packet.byte()?;
+        packet.u32()?;
+        if kind == 101 {
+            Self::status(&mut packet)?;
+            return Err(fail());
+        }
+        if kind != 102 {
+            return Err(fail());
+        }
+        let handle = packet.string(4096)?;
+        packet.finish()?;
+        Ok(handle)
+    }
+    pub fn read_file(
+        &mut self,
+        handle: &[u8],
+        offset: u64,
+        context: &mut ExecutionContext,
+    ) -> Result<Option<Vec<u8>>, AtlasError> {
+        let mut args = string(handle);
+        args.extend(offset.to_be_bytes());
+        args.extend(32768u32.to_be_bytes());
+        let response = self.request(5, &args, context)?;
+        let mut packet = Packet::new(&response);
+        let kind = packet.byte()?;
+        packet.u32()?;
+        if kind == 101 {
+            if Self::status(&mut packet)? == 1 {
+                return Ok(None);
+            }
+            return Err(fail());
+        }
+        if kind != 103 {
+            return Err(fail());
+        }
+        let bytes = packet.string(32768)?;
+        packet.finish()?;
+        if bytes.is_empty() {
+            return Err(fail());
+        }
+        Ok(Some(bytes))
+    }
+    pub fn write_file(
+        &mut self,
+        handle: &[u8],
+        offset: u64,
+        bytes: &[u8],
+        context: &mut ExecutionContext,
+    ) -> Result<(), AtlasError> {
+        if bytes.len() > 32768 {
+            return Err(limit());
+        }
+        let mut args = string(handle);
+        args.extend(offset.to_be_bytes());
+        args.extend(string(bytes));
+        self.ack(6, &args, context)
+    }
+    pub fn fstat(
+        &mut self,
+        handle: &[u8],
+        context: &mut ExecutionContext,
+    ) -> Result<Attrs, AtlasError> {
+        let response = self.request(8, &string(handle), context)?;
+        let mut packet = Packet::new(&response);
+        let kind = packet.byte()?;
+        packet.u32()?;
+        if kind == 101 {
+            Self::status(&mut packet)?;
+            return Err(fail());
+        }
+        if kind != 105 {
+            return Err(fail());
+        }
+        let attrs = packet.attrs()?;
+        packet.finish()?;
+        Ok(attrs)
+    }
 }
 
 #[cfg(test)]

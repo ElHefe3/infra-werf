@@ -12,6 +12,7 @@ uuid = { version = "=1.29.0", features = ["v4"] }
 ts-rs = "=12.0.1"
 rusqlite = { version = "=0.41.0", features = ["bundled", "backup"] }
 tempfile = "=3.27.0"
+sha2 = "=0.10.9"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "=0.61.2", features = ["Win32_Foundation", "Win32_System_Pipes", "Win32_System_Threading"] }

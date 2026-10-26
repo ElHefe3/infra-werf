@@ -68,7 +68,7 @@ Permanent root shortcuts, modifying sudoers, silently reusing remote cached elev
 
 Default SSH session idle timeout is five minutes and absolute duration 30 minutes; lock/revoke closes it sooner. Sudo prompts name server/action/path, passwords stay only in the active flow and are not reused/saved/logged. Respect remote timestamp behavior without changing global policy or unrelated sessions.
 
-Reuse T014's proven desktop protected-session/clearing core. This ticket still needs paired integration and fresh per-action sudo; do not duplicate session/transport foundations or infer elevation from the read-only proof.
+Reuse T014's proven desktop protected-session/clearing core. This ticket needs fresh per-action sudo; pairing is future S09. Do not duplicate session foundations or infer elevation from read-only proof.
 
 **Ticket dependencies:** [T012](F06-ssh-elevation.md), [T014](F06-ssh-elevation.md).
 

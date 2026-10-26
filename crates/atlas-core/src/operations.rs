@@ -35,6 +35,7 @@ pub enum Inspection {
     ServiceStatus { workload_id: String },
     SftpRead { resource_id: String },
     SftpMutation { resource_id: String },
+    SftpTransfer { resource_id: String },
 }
 
 #[derive(Clone, Serialize, Deserialize, TS)]
@@ -144,6 +145,7 @@ pub enum InspectionPlan {
     SftpOpen,
     SftpRead { resource_id: String },
     SftpMutation { resource_id: String },
+    SftpTransfer { resource_id: String },
     SystemSummary,
     FileMetadata(ScopedPath),
     ServiceStatus { workload_id: String },
@@ -181,6 +183,12 @@ impl SessionScope {
     }
     fn plan(&self, inspection: Inspection) -> Result<InspectionPlan, AtlasError> {
         Ok(match inspection {
+            Inspection::SftpTransfer { resource_id } => {
+                if !self.resources.contains(&resource_id) {
+                    return Err(error(ErrorCode::Denied));
+                }
+                InspectionPlan::SftpTransfer { resource_id }
+            }
             Inspection::SftpMutation { resource_id } => {
                 if !self.resources.contains(&resource_id) {
                     return Err(error(ErrorCode::Denied));
@@ -491,7 +499,12 @@ impl OperationBroker {
             return Err(error(ErrorCode::ExpiredSession));
         }
         let plan = session.scope.plan(request.inspection)?;
-        let expires = (Instant::now() + self.duration).min(session.expires);
+        let duration = if matches!(plan, InspectionPlan::SftpTransfer { .. }) {
+            Duration::from_secs(30 * 60)
+        } else {
+            self.duration
+        };
+        let expires = (Instant::now() + duration).min(session.expires);
         let job = Arc::new(Job {
             actor: actor.id.clone(),
             session_id: Some(request.session_id),
@@ -642,6 +655,7 @@ impl OperationBroker {
             InspectionPlan::ConnectionCheck
                 | InspectionPlan::SftpOpen
                 | InspectionPlan::SftpMutation { .. }
+                | InspectionPlan::SftpTransfer { .. }
         ) {
             return Err(error(ErrorCode::Denied));
         }
@@ -707,6 +721,26 @@ impl OperationBroker {
     {
         let job = self.job(authority, id)?;
         if job.session_id.is_some() || !matches!(job.plan, InspectionPlan::SftpOpen) {
+            return Err(error(ErrorCode::Denied));
+        }
+        self.execute_job(authority, id, target, job, executor)
+    }
+    /// Streaming content stays inside the trusted adapter, with bounded
+    /// metadata output and separate per-request I/O deadlines.
+    pub fn execute_transfer<F>(
+        &self,
+        authority: Option<&Authority>,
+        id: &OperationId,
+        target: &ServerTarget,
+        executor: F,
+    ) -> Result<String, AtlasError>
+    where
+        F: FnOnce(&InspectionPlan, &mut ExecutionContext) -> Result<(), AtlasError>
+            + Send
+            + 'static,
+    {
+        let job = self.job(authority, id)?;
+        if job.session_id.is_none() || !matches!(job.plan, InspectionPlan::SftpTransfer { .. }) {
             return Err(error(ErrorCode::Denied));
         }
         self.execute_job(authority, id, target, job, executor)

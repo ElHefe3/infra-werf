@@ -354,7 +354,10 @@ pub(super) fn unknown_outcome(
     leases: &Arc<AtomicUsize>,
     fixture: &Path,
 ) {
-    let broker = OperationBroker::new(Duration::from_secs(1), 65536).unwrap();
+    // Real Windows OpenSSH process/agent startup can exceed one second under
+    // concurrent native test load. The stalled ACK is 60s; 3s still proves a
+    // bounded ambiguous write without making bootstrap timing the assertion.
+    let broker = OperationBroker::new(Duration::from_secs(3), 65536).unwrap();
     let actor = broker.issue_backend_authority().unwrap();
     let service = FileSessions::new(broker.clone(), actor, options, SessionPolicy::default());
     let session = service

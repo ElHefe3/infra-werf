@@ -1,0 +1,23 @@
+# T017 desktop streaming work packet
+
+Owner authorises all remaining desktop batches; mobile is future S09 (D020). T017 is active over T015/T016/T008. Deliver it, prove/review/commit, then continue desktop T012/T013/T019/T020/T021/T022/T023/T018/T024–T026. Do not stop for approval between authorised batches.
+
+## In-progress design
+
+- Native picker in Rust only (official tauri-plugin-dialog =2.8.3); no JS dialog/FS permissions. Local paths never arrive from frontend. Picker returns opaque short-lived grants backed by open File or NamedTempFile/save destination. Upload file is opened with Windows FILE_SHARE_READ only; download refuses overwrite and publishes with persist_noclobber. Only chosen files are authorised.
+- Reuse actual system OpenSSH SFTP connection/strict trust. Add SFTP OPEN/READ/WRITE/FSTAT/CLOSE, chunk <=32KiB; packet max1MiB. sha2 =0.10.9 already locked, promoted direct for streaming SHA256. No whole-file Vec or renderer byte transport.
+- Dedicated SftpTransfer plan uses up to session absolute deadline (30min), still64KiB metadata output and4 actual workers. Other operations retain30s limits. SFTP request independently times out30s so a hung subsystem cannot consume the whole session. Idle policy refreshed by actual chunk work; absolute expiry never extends.
+- Queue <=16, one runner per native service, metadata-only progress. Cancellation is cooperative between bounded requests, represented as cancelling until actually stopped. Lock/expiry/disconnect stops jobs; no automatic retry or input replay. Retry is a new, reviewed attempt after reauthentication/selection.
+- Upload creates a UUID private 0700 staging directory and0600 exclusive payload under the chosen remote parent, streams/hash then reads back/hash-verifies, checks destination absent and standard-renames without overwrite. Never publish partial contents as the final target. Remove only owned staging entries when current session/stream is healthy; otherwise keep restricted partial and expose safe cleanup-required status (no automatic fresh SSH auth).
+- Download snapshots LSTAT regular file, opens/fstats, streams to private local temp while hashing, verifies final size/fstat, syncs and publishes no-clobber to the chosen location. Never follows an unapproved final symlink. Cancellation/error drops only the owned temp. Lost final acknowledgement/publish delivery reports uncertain outcome and requires inspection.
+- Session needs frontend-visible flag plus separate resource snapshot and active-transfer count. File view release clears front resources/results but lets explicitly queued jobs continue; explicit Lock cancels them. Existing front read/preview/commit requires visible session; already-prepared immutable job retains its grant. Hidden session closes when final job exits. Metadata history holds Weak session references so it cannot retain client/native lease in a cycle.
+- Existing FileSessions session/closure maps become Arc<Mutex> to let worker clean up hidden sessions without owning Workspace. Job Task owns strong Session only for actual queued/running lifetime; history is bounded/redacted when session invalid. No protected path/hash is persisted or shown after lock/expiry.
+- File controls provide Pick upload / download selected regular file, exact destination review and queue. Global Transfers view shows actual byte/stage state, cancel and re-open Files for a new retry; upload progress100% while verifying/publishing is not completion. Poll/event results clear names/checksums on session closed.
+
+## Proof
+
+Extend existing loopback AsyncSSH fixture, allowing content only inside its synthetic filesystem/write-area, counting max chunk and actual reads/writes. Test empty/small/representative8–16MiB round trips, hashes, collision, cancel/expired session, source change, missing final ACK, staging/temp cleanup and no-clobber publication. Native test uses actual picker (CUA if available) or controlled debug-only backend fixture grants without a generic path endpoint, and explicitly distinguishes any unavailable picker proof. Reuse current native browse/mutation checks and test close guard across full job lifetime. Obtain bounded independent review, then record evidence honestly.
+
+## Current state
+
+T017 passes actual SFTP and Windows native proof; see [acceptance](evidence/F09-transfers-acceptance.md) and [D021](discovery/D021-transfer-publication-and-build-cache.md). Independent review is resolved. All authorized desktop batches continue; T012/T013 are next. The final long-verification idle timer refinement needs the normal final UI build/check, without repeating valid core tests. Tracker now has done14 / ready1(T012) / todo10 / deferred8. Future mobile remains S09.

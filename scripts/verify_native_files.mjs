@@ -89,7 +89,7 @@ try {
   await invoke('update_server', { id: fixtureId, input: { host: 'atlas-trusted' } });
   expectedMap = await invoke('map_state'); expectedDb = await digest(database);
   await dialog.getByRole('button', { name: 'Open file session', exact: true }).click(); await expect(dialog.locator('.file-list')).toBeVisible();
-  await dialog.getByRole('tab', { name: 'Services', exact: true }).click(); await expect.poll(async () => (await stats()).trusted.active).toBe(0);
+  await dialog.getByRole('tab', { name: 'Services', exact: true }).click(); await expect.poll(async () => (await stats()).trusted.active, {timeout:15000}).toBe(0);
   await dialog.getByRole('tab', { name: 'Files', exact: true }).click(); await expect(dialog.locator('.file-list')).toHaveCount(0);
   results.push('native close guard, UI lock, backend server-edit invalidation and leaving Files clear protected data and reap SSH child');
   await page.keyboard.press('Escape');

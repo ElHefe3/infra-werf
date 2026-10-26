@@ -57,7 +57,7 @@ async def serve(directory):
         temporary.write_text(json.dumps(stats), encoding='utf-8')
         temporary.replace(directory / 'stats.json')
     for name in ['trusted', 'unknown', 'changed', 'rejected', 'agent-missing', 'slow', 'overflow', 'no-auth', 'certified', 'fallback', 'explicit-alias']:
-        stats[name] = {'auth_attempts': 0, 'authenticated': 0, 'commands': 0, 'active': 0, 'subsystems': 0, 'listings': 0, 'mutations': 0}
+        stats[name] = {'auth_attempts': 0, 'authenticated': 0, 'commands': 0, 'active': 0, 'subsystems': 0, 'listings': 0, 'mutations': 0, 'file_reads': 0, 'file_writes': 0, 'max_chunk': 0}
         class Server(asyncssh.SSHServer):
             def __init__(self, name=name): self.name = name
             def connection_made(self, connection):
@@ -95,7 +95,10 @@ async def serve(directory):
                 if path == b'/home/fixture/broken-link': raise asyncssh.SFTPNoSuchFile('fixture missing')
                 if path in link_targets: return link_targets[path]
                 return super().realpath(path)
-            def lstat(self, path):
+            async def lstat(self, path):
+                if self.transfer_mode() == 'hold-final-stat' and path.endswith(b'/cancel-final.bin') and any(writable.glob('.atlas-upload-*')):
+                    (directory / 'hold-stat-ready').write_text('ready', encoding='utf-8')
+                    while not (directory / 'release-stat').exists(): await asyncio.sleep(0.01)
                 if path in virtual: return virtual[path]
                 if path in [b'/home/fixture/folder-link', b'/home/fixture/broken-link']:
                     return asyncssh.SFTPAttrs(permissions=0o120777, size=12, uid=1000, gid=1000)
@@ -119,10 +122,28 @@ async def serve(directory):
                     if posixpath.dirname(filename) == path: yield asyncssh.SFTPName(posixpath.basename(filename), attrs=attrs)
                 if path == b'/home/fixture':
                     for name in [b'folder-link', b'broken-link', b'odd-\xff-name', b';$(echo injected).txt']:
-                        yield asyncssh.SFTPName(name, attrs=self.lstat(path + b'/' + name))
-            def open(self, *args):
-                stats[self.fixture_name]['mutations'] += 1; save_stats()
-                raise asyncssh.SFTPPermissionDenied('fixture is read-only')
+                        yield asyncssh.SFTPName(name, attrs=await self.lstat(path + b'/' + name))
+            def transfer_mode(self):
+                try: return (directory / 'transfer-mode').read_text(encoding='utf-8').strip()
+                except FileNotFoundError: return ''
+            def open(self, path, pflags, attrs):
+                if pflags & (asyncssh.FXF_WRITE | asyncssh.FXF_CREAT | asyncssh.FXF_TRUNC): self.check_change(path)
+                if path in virtual: raise asyncssh.SFTPPermissionDenied('fixture virtual content unavailable')
+                return super().open(path, pflags, attrs)
+            async def read(self, file_obj, offset, size):
+                stats[self.fixture_name]['file_reads'] += 1
+                stats[self.fixture_name]['max_chunk'] = max(stats[self.fixture_name]['max_chunk'], size); save_stats()
+                if self.transfer_mode() == 'slow': await asyncio.sleep(0.02)
+                data = super().read(file_obj, offset, size)
+                if data and self.transfer_mode() == 'corrupt-read': return bytes([data[0] ^ 1]) + data[1:]
+                return data
+            async def write(self, file_obj, offset, data):
+                stats[self.fixture_name]['file_writes'] += 1
+                stats[self.fixture_name]['max_chunk'] = max(stats[self.fixture_name]['max_chunk'], len(data)); save_stats()
+                if self.transfer_mode() == 'slow': await asyncio.sleep(0.02)
+                if self.transfer_mode() == 'disconnect-write':
+                    self.fixture_channel.get_connection().close(); raise asyncssh.SFTPFailure('fixture transfer interruption')
+                return super().write(file_obj, offset, data)
             def check_change(self, *paths):
                 for path in paths:
                     normalized = posixpath.normpath(path)
@@ -135,7 +156,7 @@ async def serve(directory):
                 if path.endswith(b'/apply-then-stall'): await asyncio.sleep(60)
                 if path.endswith(b'/slow-confirmed'): await asyncio.sleep(0.8)
                 if path.endswith(b'/apply-then-disconnect'): self.fixture_channel.get_connection().close()
-            def rename(self, oldpath, newpath):
+            async def rename(self, oldpath, newpath):
                 self.check_change(oldpath, newpath)
                 if newpath.endswith(b'/race-target.txt'):
                     Path(os.fsdecode(self.map_path(newpath))).write_text('concurrent target preserved', encoding='utf-8')
@@ -147,8 +168,11 @@ async def serve(directory):
                     if oldpath in link_targets: link_targets[newpath] = link_targets.pop(oldpath)
                     return
                 super().rename(oldpath, newpath)
+                if self.transfer_mode() == 'publish-lost-ack': self.fixture_channel.get_connection().close()
             def remove(self, path):
                 self.check_change(path)
+                if self.transfer_mode() == 'disconnect-cleanup':
+                    self.fixture_channel.get_connection().close(); raise asyncssh.SFTPFailure('fixture cleanup response lost')
                 if path in virtual:
                     del virtual[path]; link_targets.pop(path, None); return
                 super().remove(path)

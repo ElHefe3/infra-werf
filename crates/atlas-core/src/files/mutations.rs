@@ -66,7 +66,7 @@ pub(super) struct Pending {
     destination: Option<Vec<u8>>,
     expires: Instant,
 }
-fn parent(path: &[u8]) -> Result<Vec<u8>, AtlasError> {
+pub(super) fn parent(path: &[u8]) -> Result<Vec<u8>, AtlasError> {
     let position = path
         .iter()
         .rposition(|byte| *byte == b'/')
@@ -77,7 +77,7 @@ fn parent(path: &[u8]) -> Result<Vec<u8>, AtlasError> {
         Ok(path[..position].to_vec())
     }
 }
-fn name(value: &str) -> Result<&[u8], AtlasError> {
+pub(super) fn name(value: &str) -> Result<&[u8], AtlasError> {
     if value.is_empty()
         || value.len() > 255
         || value == "."
@@ -89,7 +89,7 @@ fn name(value: &str) -> Result<&[u8], AtlasError> {
     }
     Ok(value.as_bytes())
 }
-fn joined(directory: &[u8], name: &[u8]) -> Result<Vec<u8>, AtlasError> {
+pub(super) fn joined(directory: &[u8], name: &[u8]) -> Result<Vec<u8>, AtlasError> {
     let mut path = directory.to_vec();
     if path.last() != Some(&b'/') {
         path.push(b'/');
@@ -100,7 +100,7 @@ fn joined(directory: &[u8], name: &[u8]) -> Result<Vec<u8>, AtlasError> {
     }
     Ok(path)
 }
-fn directory(
+pub(super) fn directory(
     client: &mut Client,
     path: &[u8],
     context: &mut ExecutionContext,
@@ -112,7 +112,7 @@ fn directory(
     }
     Ok(())
 }
-fn absent(
+pub(super) fn absent(
     client: &mut Client,
     path: &[u8],
     context: &mut ExecutionContext,
@@ -275,7 +275,7 @@ impl FileSessions {
             &ticket.operation_id,
             target,
             move |_, context| {
-                if !worker.valid(policy) {
+                if !worker.view_valid(policy) {
                     return Err(error(ErrorCode::ExpiredSession));
                 }
                 let mut data = worker
@@ -406,7 +406,7 @@ impl FileSessions {
             operation,
             target,
             move |_, context| {
-                if !worker.valid(policy) {
+                if !worker.view_valid(policy) {
                     return Err(error(ErrorCode::ExpiredSession));
                 }
                 let mut data = worker
@@ -424,7 +424,7 @@ impl FileSessions {
                 if let Some(path) = &pending.destination {
                     absent(&mut data.client, path, context)?;
                 }
-                if !worker.valid(policy) {
+                if !worker.view_valid(policy) {
                     return Err(error(ErrorCode::ExpiredSession));
                 }
                 context.checkpoint()?;
@@ -432,6 +432,7 @@ impl FileSessions {
                 let outcome = data.client.mutate(&pending.wire, context)?;
                 progress.store(if outcome.is_ok() { 3 } else { 2 }, Ordering::Release);
                 let refresh = retained(&mut data)?;
+                *lock(&worker.snapshot)? = data.resources.clone();
                 broker.set_resources(
                     &authority,
                     &worker.id,
@@ -453,7 +454,7 @@ impl FileSessions {
         );
         match result {
             Ok(text) => {
-                if !session.valid(self.policy) {
+                if !session.view_valid(self.policy) {
                     let _ = self.close(id);
                     return Err(error(ErrorCode::OutcomeUnknown));
                 }

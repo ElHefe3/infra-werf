@@ -18,7 +18,7 @@ Read [SCOPE.md](../SCOPE.md) for access boundaries; use [AGENT.md](../AGENT.md) 
 
 ## T017 — Implement streamed transfer jobs
 
-<!-- atlas-ticket: {"id":"T017","feature":"F09","status":"in_progress","depends_on":["T015","T016","T008"],"evidence":null,"scope_entry":{"S03":["T014"]}} -->
+<!-- atlas-ticket: {"id":"T017","feature":"F09","status":"done","depends_on":["T015","T016","T008"],"evidence":"../evidence/F09-transfers-acceptance.md","scope_entry":{"S03":["T014"]}} -->
 
 ### Outcome and included work
 
@@ -36,9 +36,9 @@ Stream bytes rather than buffering whole files, supporting native Windows select
 
 ### Acceptance criteria
 
-- [ ] Upload/download round trips match checksums for empty, small and representative large files on Windows.
-- [ ] Progress/queue/cancel/failure/retry reflect actual byte/job state; interrupted reconnect does not silently duplicate writes.
-- [ ] Windows native selection authorises only the chosen file/destination; locked/expired sessions stop protected work and require reauthentication before retry. Android URI proof remains S09.
+- [x] Upload/download round trips match checksums for empty, small and representative large files on Windows.
+- [x] Progress/queue/cancel/failure/retry reflect actual byte/job state; interrupted reconnect does not silently duplicate writes.
+- [x] Windows native selection authorises only the chosen file/destination; locked/expired sessions stop protected work and require reauthentication before retry. Android URI proof remains S09.
 
 ### Verification
 
@@ -46,7 +46,7 @@ Streaming/job-state tests and one native round-trip/interruption journey per cli
 
 ### Evidence and closure
 
-Use a concise [feature acceptance record](../evidence/README.md), map results to T017, attach its relative path in ticket metadata, then check only proven criteria. Record tested revision/platform/fixtures, failures, limits and rollback as applicable. Current proof: **not run**. Use [the checkpoint](../evidence/CHECKPOINT.md) at handoff.
+Passed in [T017 desktop acceptance](../evidence/F09-transfers-acceptance.md): actual bounded SFTP round trips, queue/recovery races, native Windows pickers/review/background/clearing/close guard, regression and resolved independent review. Elevated placement remains T018.
 
 ### Stop conditions
 

@@ -3,6 +3,8 @@
 use atlas_core::{files::*, operations::*, ssh::SshOptions, *};
 #[path = "files/mutations.rs"]
 mod mutation_proof;
+#[path = "files/transfers.rs"]
+mod transfer_proof;
 use std::{
     io::{BufRead, BufReader, Write},
     path::Path,
@@ -246,6 +248,7 @@ fn actual_sftp_lifetime_handles_revocation_and_cleanup() {
     );
     wait_for(|| leases.load(Ordering::SeqCst) == 0 && broker.active_workers() == 0);
     mutation_proof::unknown_outcome(options, &target, &leases, &directory.path().join("fixture"));
+    transfer_proof::journey(&root, &directory.path().join("fixture"), &target, &leases);
     println!(
         "PASS: confirmed mutations, raw names/symlink identity, cancellation, collision/stale target/denial/non-recursion and unknown write outcome without retry"
     );

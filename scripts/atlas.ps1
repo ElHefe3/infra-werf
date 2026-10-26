@@ -65,7 +65,7 @@ switch ($Action) {
             Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-core', '--test', 'operations', '--locked')
             Run-AtlasCommand 'cargo' @('run', '-p', 'atlas-core', '--bin', 'export-contracts', '--locked', '--', '--check')
             Run-AtlasCommand 'pnpm' @('check')
-        } elseif ($Feature -in @('T033', 'T014', 'T015', 'T016')) {
+        } elseif ($Feature -in @('T033', 'T014', 'T015', 'T016', 'T017')) {
             Run-AtlasCommand 'cargo' @('test', '--workspace', '--locked')
             Run-AtlasCommand 'cargo' @('run', '-p', 'atlas-core', '--bin', 'export-contracts', '--locked', '--', '--check')
             Run-AtlasCommand 'pnpm' @('check')

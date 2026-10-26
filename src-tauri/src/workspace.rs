@@ -1,3 +1,4 @@
+use atlas_core::files::{LocalSelection, LocalTransfer, TransferDirection, TransferView};
 use atlas_core::*;
 use atlas_core::{
     files::{
@@ -8,9 +9,16 @@ use atlas_core::{
     ssh::{SshOptions, SshVerification},
 };
 use std::{
+    collections::HashMap,
     path::PathBuf,
     sync::{Arc, Mutex},
 };
+struct LocalGrant {
+    value: LocalTransfer,
+    target: ServerTarget,
+    session: SessionId,
+    expires: std::time::Instant,
+}
 
 fn failure() -> AtlasError {
     AtlasError::new(ErrorCode::IoFailure)
@@ -67,6 +75,7 @@ pub struct Workspace {
     authority: Authority,
     ssh: SshOptions,
     files: FileSessions,
+    local_grants: Mutex<HashMap<String, LocalGrant>>,
 }
 
 impl Workspace {
@@ -91,6 +100,7 @@ impl Workspace {
             authority,
             ssh,
             files,
+            local_grants: Mutex::new(HashMap::new()),
         })
     }
 
@@ -238,6 +248,102 @@ impl Workspace {
     pub fn lock_files(&self, session: &SessionId) -> Result<(), AtlasError> {
         self.files.close(session)
     }
+    pub fn release_files(&self, session: &SessionId) -> Result<(), AtlasError> {
+        self.files.release_view(session)
+    }
+    pub fn picker_access(&self, id: &ServerId, session: &SessionId) -> Result<(), AtlasError> {
+        self.files.validate_view(&self.ssh_target(id)?, session)
+    }
+    pub fn download_name(
+        &self,
+        id: &ServerId,
+        session: &SessionId,
+        resource: &str,
+    ) -> Result<String, AtlasError> {
+        self.files
+            .transfer_name(&self.ssh_target(id)?, session, resource)
+    }
+    pub fn select_local(
+        &self,
+        id: &ServerId,
+        session: &SessionId,
+        path: PathBuf,
+        direction: TransferDirection,
+    ) -> Result<LocalSelection, AtlasError> {
+        let target = self.ssh_target(id)?;
+        self.files.validate_view(&target, session)?;
+        let path_label = path
+            .to_str()
+            .ok_or_else(|| AtlasError::new(ErrorCode::InvalidInput))?
+            .to_owned();
+        let value = match direction {
+            TransferDirection::Upload => LocalTransfer::upload(&path)?,
+            TransferDirection::Download => LocalTransfer::download(&path)?,
+        };
+        let grant_id = OperationId::generate().as_str().to_owned();
+        let selection = LocalSelection {
+            grant_id: grant_id.clone(),
+            name: value.label().into(),
+            path_label,
+            bytes: value.size().map(|size| size.to_string()),
+            direction,
+        };
+        let mut grants = self.local_grants.lock().map_err(|_| failure())?;
+        grants.retain(|_, grant| grant.expires > std::time::Instant::now());
+        if grants.len() >= 16 {
+            return Err(AtlasError::new(ErrorCode::Conflict));
+        }
+        grants.insert(
+            grant_id,
+            LocalGrant {
+                value,
+                target,
+                session: session.clone(),
+                expires: std::time::Instant::now() + std::time::Duration::from_secs(10 * 60),
+            },
+        );
+        Ok(selection)
+    }
+    pub fn discard_selection(&self, grant: &str) -> Result<(), AtlasError> {
+        self.local_grants
+            .lock()
+            .map_err(|_| failure())?
+            .remove(grant);
+        Ok(())
+    }
+    pub fn enqueue_transfer(
+        self: &Arc<Self>,
+        id: &ServerId,
+        session: &SessionId,
+        resource: &str,
+        grant: &str,
+    ) -> Result<TransferView, AtlasError> {
+        let _admission = self.begin()?;
+        let target = self.ssh_target(id)?;
+        self.files.validate_view(&target, session)?;
+        let mut grants = self.local_grants.lock().map_err(|_| failure())?;
+        let owned = grants
+            .get(grant)
+            .ok_or_else(|| AtlasError::new(ErrorCode::Denied))?;
+        if owned.target != target
+            || owned.session != *session
+            || owned.expires <= std::time::Instant::now()
+        {
+            return Err(AtlasError::new(ErrorCode::Denied));
+        }
+        let owned = grants
+            .remove(grant)
+            .ok_or_else(|| AtlasError::new(ErrorCode::Denied))?;
+        drop(grants);
+        self.files
+            .enqueue_transfer(&target, session, resource, owned.value)
+    }
+    pub fn transfers(&self) -> Result<Vec<TransferView>, AtlasError> {
+        self.files.transfer_views()
+    }
+    pub fn cancel_transfer(&self, id: &OperationId) -> Result<(), AtlasError> {
+        self.files.cancel_transfer(id)
+    }
     pub fn preview_change(
         self: &Arc<Self>,
         id: &ServerId,
@@ -282,6 +388,15 @@ impl Workspace {
     }
     pub fn reap_files(&self) -> Vec<Option<SessionId>> {
         self.files.reap();
+        if let Ok(mut grants) = self.local_grants.lock() {
+            grants.retain(|_, grant| {
+                grant.expires > std::time::Instant::now()
+                    && self
+                        .files
+                        .validate_view(&grant.target, &grant.session)
+                        .is_ok()
+            });
+        }
         self.files.take_closed()
     }
     pub fn is_closing(&self) -> bool {

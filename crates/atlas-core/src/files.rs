@@ -16,13 +16,17 @@ use std::{
     collections::{HashMap, VecDeque},
     sync::{
         Arc, Mutex,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
     },
     time::{Duration, Instant},
 };
 use ts_rs::{Config, TS};
 mod mutations;
+mod transfers;
 pub use mutations::{FileChange, FileMutationPreview, FileMutationReceipt, MutationKind};
+pub use transfers::{
+    LocalSelection, LocalTransfer, TransferDirection, TransferState, TransferView,
+};
 
 fn error(code: ErrorCode) -> AtlasError {
     AtlasError::new(code)
@@ -164,9 +168,15 @@ struct Session {
     deadline: Instant,
     last_used: Mutex<Instant>,
     closed: AtomicBool,
+    visible: AtomicBool,
+    snapshot: Mutex<HashMap<String, Resource>>,
+    transfers: AtomicUsize,
     data: Mutex<Data>,
 }
 impl Session {
+    fn view_valid(&self, policy: SessionPolicy) -> bool {
+        self.visible.load(Ordering::Acquire) && self.valid(policy)
+    }
     fn valid(&self, policy: SessionPolicy) -> bool {
         !self.closed.load(Ordering::Acquire)
             && self.deadline > Instant::now()
@@ -176,13 +186,15 @@ impl Session {
                 .is_ok_and(|last| last.elapsed() < policy.idle)
     }
 }
+#[derive(Clone)]
 pub struct FileSessions {
     broker: OperationBroker,
     authority: Authority,
     options: SshOptions,
     policy: SessionPolicy,
-    sessions: Mutex<HashMap<String, Arc<Session>>>,
-    closed: Mutex<VecDeque<Option<SessionId>>>,
+    sessions: Arc<Mutex<HashMap<String, Arc<Session>>>>,
+    closed: Arc<Mutex<VecDeque<Option<SessionId>>>>,
+    queue: Arc<transfers::Queue>,
 }
 impl FileSessions {
     pub fn new(
@@ -196,8 +208,9 @@ impl FileSessions {
             authority,
             options,
             policy,
-            sessions: Mutex::new(HashMap::new()),
-            closed: Mutex::new(VecDeque::new()),
+            sessions: Arc::new(Mutex::new(HashMap::new())),
+            closed: Arc::new(Mutex::new(VecDeque::new())),
+            queue: Arc::new(transfers::Queue::default()),
         }
     }
     pub fn prepare(&self, target: &ServerTarget) -> Result<OperationTicket, AtlasError> {
@@ -280,6 +293,9 @@ impl FileSessions {
                 deadline: Instant::now() + self.policy.absolute,
                 last_used: Mutex::new(Instant::now()),
                 closed: AtomicBool::new(false),
+                visible: AtomicBool::new(true),
+                snapshot: Mutex::new(resources.clone()),
+                transfers: AtomicUsize::new(0),
                 data: Mutex::new(Data {
                     client,
                     resources,
@@ -299,8 +315,10 @@ impl FileSessions {
         if session.target != *target {
             return Err(error(ErrorCode::Denied));
         }
-        if !session.valid(self.policy) {
-            self.close(id)?;
+        if !session.view_valid(self.policy) {
+            if !session.valid(self.policy) {
+                self.close(id)?;
+            }
             return Err(error(ErrorCode::ExpiredSession));
         }
         Ok(session)
@@ -333,7 +351,7 @@ impl FileSessions {
             &ticket.operation_id,
             target,
             move |_, context| {
-                if !worker.valid(policy) {
+                if !worker.view_valid(policy) {
                     return Err(error(ErrorCode::ExpiredSession));
                 }
                 let mut data = worker
@@ -343,9 +361,10 @@ impl FileSessions {
                 let result = Self::perform(&mut data, action, context);
                 match result {
                     Ok(result) => {
-                        if !worker.valid(policy) {
+                        if !worker.view_valid(policy) {
                             return Err(error(ErrorCode::ExpiredSession));
                         }
+                        *lock(&worker.snapshot)? = data.resources.clone();
                         broker.set_resources(
                             &authority,
                             &worker.id,
@@ -364,8 +383,10 @@ impl FileSessions {
         );
         match result {
             Ok(result) => {
-                if !session.valid(self.policy) {
-                    self.close(id)?;
+                if !session.view_valid(self.policy) {
+                    if !session.valid(self.policy) {
+                        self.close(id)?;
+                    }
                     return Err(error(ErrorCode::ExpiredSession));
                 }
                 serde_json::from_str(&result.text).map_err(|_| error(ErrorCode::IoFailure))
@@ -655,6 +676,19 @@ impl FileSessions {
             .map(|mut queue| queue.drain(..).collect())
             .unwrap_or_else(|_| vec![None])
     }
+    pub fn release_view(&self, id: &SessionId) -> Result<(), AtlasError> {
+        let session = lock(&self.sessions)?.get(id.as_str()).cloned();
+        if let Some(session) = session {
+            session.visible.store(false, Ordering::Release);
+            lock(&session.snapshot)?.clear();
+            self.broker
+                .set_resources(&self.authority, id, &session.target, vec![])?;
+            if session.transfers.load(Ordering::Acquire) == 0 {
+                return self.close(id);
+            }
+        }
+        Ok(())
+    }
     pub fn close_server(&self, id: &ServerId) {
         let ids = self
             .sessions
@@ -673,6 +707,7 @@ impl FileSessions {
     }
     /// Reap idle/absolute/disconnected sessions without refreshing activity.
     pub fn reap(&self) -> Vec<SessionId> {
+        self.queue.scrub(self.policy);
         let ids = self
             .sessions
             .lock()
@@ -736,4 +771,5 @@ pub fn typescript_contracts() -> String {
     .map(|declaration| format!("export {declaration}\n"))
     .join("")
         + &mutations::typescript_contracts()
+        + &transfers::typescript_contracts()
 }

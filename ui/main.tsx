@@ -7,6 +7,7 @@ import { Background, BackgroundVariant, Handle, MarkerType, Position, ReactFlow,
 import { createWorkspaceClient } from "./workspace-client";
 import { SshConnection } from "./ssh-connection";
 import { FileBrowser } from "./file-browser";
+import { TransferQueue, useTransfers } from "./transfer-queue";
 import type { MapServer, MapState, Relationship, WorkspaceStatus } from "./contracts.gen";
 import { errorMessage, inventoryRows, matches, observedLabel, workloads } from "./map-model";
 import "@xyflow/react/dist/style.css";
@@ -99,8 +100,9 @@ function SavedInventory({ state, query, open, single = false }: { state: MapStat
   </div>;
 }
 
-function ServerWorkspace({ server, state, close, edit }: { server: MapServer; state: MapState; close: () => void; edit: () => void }) {
-  const [tab, setTab] = useState<WorkspaceTab>("Services");
+function ServerWorkspace({ server, state, close, edit, initialTab = "Services" }: { server: MapServer; state: MapState; close: () => void; edit: () => void; initialTab?: WorkspaceTab }) {
+  const [tab, setTab] = useState<WorkspaceTab>(initialTab);
+  const transfers = useTransfers();
   const [filter, setFilter] = useState("");
   const [checkingSsh, setCheckingSsh] = useState(false);
   return <Dialog title={server.name} close={close} wide busy={checkingSsh}><div className="workspace-server-line"><span>{server.host}</span><span>{observedLabel(server)} · {date(server.inventory?.collected_at)}</span></div>
@@ -110,12 +112,15 @@ function ServerWorkspace({ server, state, close, edit }: { server: MapServer; st
       {tab === "System" && <><h3>Saved system inventory</h3>{server.inventory ? <><dl className="system-grid"><div><dt>Hostname</dt><dd>{server.inventory.hostname}</dd></div><div><dt>Logical CPUs</dt><dd>{server.inventory.cpus}</dd></div><div><dt>Total memory</dt><dd>{memory(server.inventory.memory_total_kib)}</dd></div><div><dt>Collected</dt><dd>{date(server.inventory.collected_at)}</dd></div></dl><Notice>These are saved hardware details. Live utilisation and reachability checks are not available yet.</Notice></> : <Notice>No saved system inventory is available for this server.</Notice>}</>}
       {tab === "Settings" && <><h3>Map details</h3><dl className="system-grid"><div><dt>Name</dt><dd>{server.name}</dd></div><div><dt>Host</dt><dd>{server.host}</dd></div></dl><button className="primary" disabled={checkingSsh} onClick={edit}>Edit server details</button><SshConnection key={`${server.id}:${server.host}`} server={server} onBusy={setCheckingSsh} /></>}
       {tab === "Files" && <FileBrowser key={`${server.id}:${server.host}`} server={server} onBusy={setCheckingSsh} />}
-      {["Terminal", "Transfers"].includes(tab) && <div className="unavailable"><span className="unavailable-icon">⌁</span><h3>{tab === "Terminal" ? "A deliberate connection." : "Transfers need a connection."}</h3><p>{tab} access requires its protected operation controls.</p><span className="state-pill">Operation unavailable</span></div>}
-    </section><footer className="workspace-footer">{tab === "Files" ? "File results stay in memory · Leaving Files locks the session" : "Saved inventory view · Live controls require an authenticated session"}</footer>
+      {tab === "Transfers" && <TransferQueue rows={transfers.rows.filter(row => row.server_id === server.id)} failure={transfers.failure} retry={() => setTab("Files")} />}
+      {tab === "Terminal" && <div className="unavailable"><span className="unavailable-icon">⌁</span><h3>A deliberate connection.</h3><p>Terminal access requires its protected operation controls.</p><span className="state-pill">Operation unavailable</span></div>}
+    </section><footer className="workspace-footer">{tab === "Files" ? "File results stay in memory · Queued transfers continue until finished or locked" : "Saved inventory view · Live controls require an authenticated session"}</footer>
   </Dialog>;
 }
 
 function App() {
+  const transfers = useTransfers();
+  const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>("Services");
   const [state, setState] = useState<MapState | null>(null);
   const [status, setStatus] = useState<WorkspaceStatus | null>(null);
   const [error, setError] = useState("");
@@ -155,7 +160,7 @@ function App() {
     catch (e) { setError(errorMessage(e)); return false; }
     finally { busyRef.current = false; setBusy(false); }
   }
-  const open = useCallback((id: string) => { setSelected(id); setWorkspace(id); }, []);
+  const open = useCallback((id: string) => { setWorkspaceTab("Services"); setSelected(id); setWorkspace(id); }, []);
   const server = state?.servers.find(s => s.id === selected);
   const workspaceServer = state?.servers.find(s => s.id === workspace);
   const related = state?.edges.filter(e => e.source === selected || e.target === selected) ?? [];
@@ -181,7 +186,7 @@ function App() {
               {view === "topology" && <ReactFlowProvider><MapCanvas state={state} selected={selected} query={query} busy={busy} select={setSelected} open={open} move={(id, x, y) => mutate(() => client.update(id, { x, y }), "Map position saved.")} connect={c => relationship(c.source, c.target)} /></ReactFlowProvider>}
               {view === "inventory" && <SavedInventory state={state} query={query} open={open} />}
               {view === "activity" && <div className="activity-view"><h2>Workspace activity</h2><p>Local map and inventory changes.</p><ActivityList state={state} /></div>}
-              {view === "transfers" && <div className="unavailable"><span className="unavailable-icon">⇅</span><h2>A place for every transfer.</h2><p>The transfer queue will be available after authenticated connections and file streaming are implemented.</p><span className="state-pill">Unavailable · no active transfers</span></div>}
+              {view === "transfers" && <TransferQueue rows={transfers.rows} failure={transfers.failure} retry={id => { setWorkspaceTab("Files"); setSelected(id); setWorkspace(id); }} />}
             </>}
             <footer className="map-footer"><div><span><i className="legend-dot saved" /> Recent observation</span><span><i className="legend-dot stale" /> Stale / unknown</span></div><button className="text-button" disabled={!available || !status?.report_import_available} title={status?.report_import_available ? "Import newer approved saved reports" : "No report directory configured for this native workspace"} onClick={() => void mutate(client.importReports, "Approved report import finished.")}>↻ Import newer reports</button></footer>
           </div>
@@ -196,7 +201,7 @@ function App() {
         <footer className="app-footer"><b>Atlas<span>·</span></b><span>Built for the things you run.</span></footer>
       </main>
     </div>
-    {workspaceServer && state && <ServerWorkspace server={workspaceServer} state={state} close={() => setWorkspace(null)} edit={() => { setWorkspace(null); setModal({ kind: "edit", id: workspaceServer.id }); }} />}
+    {workspaceServer && state && <ServerWorkspace key={workspaceServer.id} server={workspaceServer} state={state} initialTab={workspaceTab} close={() => setWorkspace(null)} edit={() => { setWorkspace(null); setModal({ kind: "edit", id: workspaceServer.id }); }} />}
     {modal && state && <Dialog title={modal.kind === "add" ? "Add a server" : modal.kind === "edit" ? "Edit server" : modal.kind === "relationship" ? "Document a relationship" : modal.kind === "remove-server" ? "Remove server from map?" : "Remove relationship?"} close={() => setModal(null)} busy={busy}>
       {error && <p role="alert" className="form-error">{error}</p>}
       {modal.kind === "add" || modal.kind === "edit" ? <form onSubmit={formSubmit}><p className="muted">A map entry stores a name and address. It does not connect to the server.</p><label>Server name<input name="name" required maxLength={80} autoFocus defaultValue={editServer?.name} placeholder="e.g. Forgejo" /></label><label>Host or IP address<input name="host" required maxLength={253} defaultValue={editServer?.host} placeholder="server.example or 192.168.1.10" spellCheck={false} /></label><div className="form-actions">{modal.kind === "edit" && <button type="button" className="danger text-button" disabled={busy} onClick={() => setModal({ kind: "remove-server", id: modal.id })}>Remove from map</button>}<button type="button" disabled={busy} onClick={() => setModal(null)}>Cancel</button><button className="primary" disabled={busy}>{busy ? "Saving…" : "Save server"}</button></div></form>

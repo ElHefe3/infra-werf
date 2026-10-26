@@ -241,4 +241,10 @@ form label { display: grid; gap: 7px; margin-top: 18px; color: #86987a; font-siz
 .file-change-review button.danger { background: #a9352a; border-color: #a9352a; color: #fff; }
 .file-change-review button.danger:hover:not(:disabled) { background: #85271f; border-color: #85271f; color: #fff; }
 .file-move-choice code { display: block; margin: 10px 0; overflow-wrap: anywhere; }
+.transfer-queue { padding: 12px 0; }
+.transfer-row { padding: 18px; margin: 12px 0; border: 1px solid #dce5d9; border-radius: 8px; display: grid; gap: 10px; }
+.transfer-row > div:first-child { display: flex; justify-content: space-between; gap: 14px; }
+.transfer-row code { display: block; overflow-wrap: anywhere; font-size: 11px; }
+.transfer-row progress { width: 100%; accent-color: #337e58; }
+.transfer-row small { color: #6f826d; }
 @media (max-width: 720px) { .file-layout { grid-template-columns: minmax(0, 1fr); } .file-details { border-left: 0; border-top: 1px solid #dce5d9; } }

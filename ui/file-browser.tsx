@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import type { FileAction, FileEntry, FilePage, FileSession, FileResource, FileChange, FileMutationPreview, MapServer } from "./contracts.gen";
+import type { FileAction, FileEntry, FilePage, FileSession, FileResource, FileChange, FileMutationPreview, MapServer, LocalSelection } from "./contracts.gen";
 import { createWorkspaceClient } from "./workspace-client";
 import { errorMessage } from "./map-model";
+import { TransferQueue, transferActive, useTransfers } from "./transfer-queue";
 
 const client = createWorkspaceClient();
 const fileErrors: Record<string, string> = {
@@ -30,6 +31,13 @@ export function FileBrowser({ server, onBusy }: { server: MapServer; onBusy: (va
   const [pinned, setPinned] = useState<FileResource | null>(null);
   const [form, setForm] = useState<ChangeForm | null>(null);
   const [reloadTarget, setReloadTarget] = useState<FileResource | null>(null);
+  const [selection, setSelection] = useState<{ local: LocalSelection; resource: FileResource } | null>(null);
+  const selectedGrant = useRef<string | null>(null);
+  const transfers = useTransfers();
+  const jobs = transfers.rows.filter(row => row.server_id === server.id);
+  const transferring = jobs.some(row => row.session_id === session?.session_id && transferActive(row));
+  const transferBusy = useRef(false);
+  transferBusy.current = transferring;
   const active = useRef<FileSession | null>(null);
   const operation = useRef<string | null>(null);
   const generation = useRef(0);
@@ -46,13 +54,21 @@ export function FileBrowser({ server, onBusy }: { server: MapServer; onBusy: (va
     active.current = null; operation.current = null;
     setSession(null); setPage(null); setSelected(null); setBusy(false); onBusy(false); setFailure(""); setNotice(message);
     setPinned(null); setForm(null); setReloadTarget(null);
+    if (selectedGrant.current) void client.discardSelection(selectedGrant.current).catch(() => {});
+    selectedGrant.current = null; setSelection(null);
     if (pending) void client.cancelSsh(pending).catch(() => {});
     if (id) void client.lockFiles(id).catch(() => setFailure("Session cleanup could not be confirmed. Wait for its idle expiry before closing Atlas."));
   }
   function arm(value: FileSession) {
     clearTimeout(timer.current);
     const remaining = Math.min(value.idle_seconds * 1000, Date.parse(value.absolute_expires_at) - Date.now());
-    timer.current = setTimeout(() => clear("Session expired. Open a new session to continue."), Math.max(0, remaining));
+    timer.current = setTimeout(() => {
+      // The backend refreshes idle activity for real stream work, including
+      // verification whose byte counter no longer changes. Absolute expiry
+      // still wins; the backend reaper remains authoritative for every job.
+      if (transferBusy.current && active.current?.session_id === value.session_id && Date.now() < Date.parse(value.absolute_expires_at)) arm(value);
+      else clear("Session expired. Open a new session to continue.");
+    }, Math.max(0, remaining));
   }
   useEffect(() => {
     let disposed = false; const listeners: (() => void)[] = [];
@@ -68,12 +84,21 @@ export function FileBrowser({ server, onBusy }: { server: MapServer; onBusy: (va
       generation.current++; clearTimeout(timer.current);
       active.current = null; operation.current = null;
       // Protected cleanup must precede optional event/state teardown.
-      if (id) void client.lockFiles(id).catch(() => {});
+      if (id) void client.releaseFiles(id).catch(() => {});
+      if (selectedGrant.current) void client.discardSelection(selectedGrant.current).catch(() => {});
       if (pending) void client.cancelSsh(pending).catch(() => {});
       disposed = true; document.removeEventListener("visibilitychange", hide);
       listeners.forEach(fn => { try { fn(); } catch {} }); onBusy(false);
     };
   }, []);
+  const progressKey = jobs.filter(row => row.session_id === session?.session_id).map(row => `${row.id}:${row.bytes}:${row.state}`).join(";");
+  const wasTransferring = useRef(false);
+  useEffect(() => {
+    const value = active.current;
+    if (value && transferring) arm(value);
+    if (value && wasTransferring.current && !transferring && page && !working.current) void read({ kind: "list", resource_id: page.directory.id, cursor: null });
+    wasTransferring.current = transferring;
+  }, [progressKey]);
   useEffect(() => {
     const preview = form?.preview;
     if (!preview) return;
@@ -174,16 +199,45 @@ export function FileBrowser({ server, onBusy }: { server: MapServer; onBusy: (va
       }
     } finally { if (epoch === generation.current) { working.current = false; mutating.current = false; operation.current = null; setBusy(false); onBusy(false); } }
   }
-  const browsingDisabled = busy || form !== null;
+  function cancelSelection() {
+    if (selectedGrant.current) void client.discardSelection(selectedGrant.current).catch(() => {});
+    selectedGrant.current = null; setSelection(null);
+  }
+  async function pick(resource: FileResource, download: boolean) {
+    const value = active.current;
+    if (!value || working.current) return;
+    const epoch = generation.current;
+    working.current = true; setBusy(true); onBusy(true); setFailure("");
+    try {
+      const local = await (download ? client.pickDownload(server.id, value.session_id, resource.id) : client.pickUpload(server.id, value.session_id));
+      if (!local) return;
+      if (epoch !== generation.current) { await client.discardSelection(local.grant_id); return; }
+      selectedGrant.current = local.grant_id; setSelection({ local, resource }); arm(value);
+    } catch (error) { handleFailure(error, epoch); }
+    finally { if (epoch === generation.current) { working.current = false; setBusy(false); onBusy(false); } }
+  }
+  async function startTransfer() {
+    const value = active.current;
+    if (!value || !selection || working.current) return;
+    const epoch = generation.current;
+    working.current = true; setBusy(true); setFailure("");
+    try {
+      await client.transfer(server.id, value.session_id, selection.resource.id, selection.local.grant_id);
+      if (epoch === generation.current) { selectedGrant.current = null; setSelection(null); setNotice("Transfer queued. See its verified result below or in Transfers."); arm(value); }
+    } catch (error) { if (epoch === generation.current) cancelSelection(); handleFailure(error, epoch); }
+    finally { if (epoch === generation.current) { working.current = false; setBusy(false); } }
+  }
+  const browsingDisabled = busy || form !== null || selection !== null || transferring;
   return <section className="file-browser" aria-label="Remote files">
     <div className="section-heading"><div><h3>Server files</h3><p>SFTP · Existing SSH identity · Strict host verification</p></div>
       {session ? <button onClick={() => clear("Session locked. Protected file data has been cleared.")}>Lock session</button> : busy ? <button onClick={() => clear("Connection cancelled.")}>Cancel connection</button> : <button className="primary" onClick={() => void connect()}>Open file session</button>}
     </div>
     {notice && <p role="status">{notice}</p>}
     {failure && <p role="alert" className="form-error">{failure}</p>}
-    {!session && !busy && <div className="unavailable"><h3>Your files stay on your server.</h3><p>Open a session to browse as your SSH user. The session locks after 5 minutes of inactivity, after 30 minutes, or when you leave Files.</p></div>}
+    {!session && !busy && <div className="unavailable"><h3>Your files stay on your server.</h3><p>Open a session to browse as your SSH user. The session locks after 5 minutes of inactivity or after 30 minutes. Leaving Files clears browsing data; queued transfers retain their session until finished.</p></div>}
     {session && <>
       <div className="file-session"><span className="state-pill">SSH authenticated · {session.profile.user}@{session.profile.hostname}</span><small>Absolute expiry {new Date(session.absolute_expires_at).toLocaleTimeString()}</small><code>{session.fingerprint}</code></div>
+      {selection && <section className="file-change-review" aria-label="Review transfer"><h4>{selection.local.direction === "upload" ? "Upload selected file" : "Download selected file"}</h4><dl><dt>Server</dt><dd>{server.name} · {session.profile.user}@{session.profile.hostname}</dd><dt>Local file</dt><dd><code>{selection.local.path_label}</code></dd><dt>Remote destination / source</dt><dd><code>{selection.local.direction === "upload" ? `${selection.resource.label.replace(/\/$/, "")}/${selection.local.name}` : selection.resource.label}</code></dd></dl><p>Overwrite disabled. Content is streamed and verified before publication. Selection expires after 10 minutes.</p><button className="primary" disabled={busy} onClick={() => void startTransfer()}>Start transfer</button><button disabled={busy} onClick={cancelSelection}>Cancel selection</button></section>}
       {pinned && <div className="file-move-choice"><strong>Choose a destination folder</strong><code>{pinned.label}</code><div><button disabled={browsingDisabled || !page} onClick={() => setForm({ kind: "move", resourceId: pinned.id, name: "", preview: null })}>Move here</button><button disabled={browsingDisabled} onClick={() => void read({ kind: "clear_source", resource_id: pinned.id })}>Cancel move</button></div></div>}
       {form && <form className="file-change-review" aria-label="Review file change" onSubmit={event => { event.preventDefault(); void previewChange(); }}>
         <h4>{form.kind === "mkdir" ? "Create folder" : form.kind === "rename" ? "Rename entry" : form.kind === "move" ? "Move entry" : "Delete entry"}</h4>
@@ -196,12 +250,13 @@ export function FileBrowser({ server, onBusy }: { server: MapServer; onBusy: (va
       </form>}
       {!page && reloadTarget && !busy && <button onClick={() => openDirectory(reloadTarget.id)}>Reload folder</button>}
       {page && <><nav className="file-breadcrumbs" aria-label="Remote directory">{page.breadcrumbs.map(resource => <button disabled={browsingDisabled} key={resource.id} onClick={() => openDirectory(resource.id)}>{resource.label}</button>)}</nav>
-        <div className="file-location"><code>{page.directory.label}</code><div><button disabled={browsingDisabled || !!pinned} onClick={() => { setFailure(""); setForm({ kind: "mkdir", resourceId: page.directory.id, name: "", preview: null }); }}>New folder</button><button disabled={browsingDisabled} onClick={() => openDirectory(page.directory.id)}>Refresh folder</button></div></div>
+        <div className="file-location"><code>{page.directory.label}</code><div><button disabled={busy || form !== null || selection !== null} onClick={() => void pick(page.directory, false)}>Pick upload</button><button disabled={browsingDisabled || !!pinned} onClick={() => { setFailure(""); setForm({ kind: "mkdir", resourceId: page.directory.id, name: "", preview: null }); }}>New folder</button><button disabled={browsingDisabled} onClick={() => openDirectory(page.directory.id)}>Refresh folder</button></div></div>
         <div className="file-layout"><div className="file-list"><table><thead><tr><th>Name</th><th>Type</th><th>Bytes</th></tr></thead><tbody>{page.entries.map(entry => <tr key={entry.resource.id} aria-selected={selected?.resource.id === entry.resource.id}><td><button className="text-button" disabled={browsingDisabled} onClick={() => void read({ kind: "stat", resource_id: entry.resource.id })}>{entry.resource.label}</button>{entry.kind === "directory" && <button className="file-open" disabled={browsingDisabled} aria-label={`Open folder ${entry.resource.label}`} onClick={() => openDirectory(entry.resource.id)}>Open →</button>}</td><td>{entry.kind}</td><td>{entry.size_bytes ?? "Unknown"}</td></tr>)}</tbody></table>{!page.entries.length && <p className="empty-copy">This page contains no entries.</p>}</div>
-          <aside className="file-details" aria-label="Selected file">{selected ? <><h4>{selected.resource.label}</h4><dl><dt>Type</dt><dd>{selected.kind}</dd><dt>Size (bytes)</dt><dd>{selected.size_bytes ?? "Unknown"}</dd><dt>Permissions</dt><dd>{selected.permissions ?? "Unknown"}</dd><dt>Owner / group ID</dt><dd>{selected.owner ?? "?"} / {selected.group ?? "?"}</dd><dt>Modified</dt><dd>{selected.modified_at ? new Date(selected.modified_at).toLocaleString() : "Unknown"}</dd></dl>{selected.kind === "symlink" && <button disabled={browsingDisabled} onClick={() => void read({ kind: "follow_link", resource_id: selected.resource.id })}>Follow link to folder</button>}{["file", "directory", "symlink"].includes(selected.kind) && <div className="file-entry-actions"><button disabled={browsingDisabled || !!pinned} aria-label="Rename selected entry" onClick={() => setForm({ kind: "rename", resourceId: selected.resource.id, name: "", preview: null })}>Rename</button><button disabled={browsingDisabled || !!pinned} aria-label="Move selected entry" onClick={() => void read({ kind: "pin_source", resource_id: selected.resource.id })}>Move</button><button disabled={browsingDisabled || !!pinned} aria-label="Delete selected entry" onClick={() => setForm({ kind: "delete", resourceId: selected.resource.id, name: "", preview: null })}>Delete</button></div>}</> : <p>Select a name to inspect its metadata.</p>}</aside></div>
+          <aside className="file-details" aria-label="Selected file">{selected ? <><h4>{selected.resource.label}</h4><dl><dt>Type</dt><dd>{selected.kind}</dd><dt>Size (bytes)</dt><dd>{selected.size_bytes ?? "Unknown"}</dd><dt>Permissions</dt><dd>{selected.permissions ?? "Unknown"}</dd><dt>Owner / group ID</dt><dd>{selected.owner ?? "?"} / {selected.group ?? "?"}</dd><dt>Modified</dt><dd>{selected.modified_at ? new Date(selected.modified_at).toLocaleString() : "Unknown"}</dd></dl>{selected.kind === "file" && <button disabled={busy || form !== null || selection !== null} onClick={() => void pick(selected.resource, true)}>Download selected file</button>}{selected.kind === "symlink" && <button disabled={browsingDisabled} onClick={() => void read({ kind: "follow_link", resource_id: selected.resource.id })}>Follow link to folder</button>}{["file", "directory", "symlink"].includes(selected.kind) && <div className="file-entry-actions"><button disabled={browsingDisabled || !!pinned} aria-label="Rename selected entry" onClick={() => setForm({ kind: "rename", resourceId: selected.resource.id, name: "", preview: null })}>Rename</button><button disabled={browsingDisabled || !!pinned} aria-label="Move selected entry" onClick={() => void read({ kind: "pin_source", resource_id: selected.resource.id })}>Move</button><button disabled={browsingDisabled || !!pinned} aria-label="Delete selected entry" onClick={() => setForm({ kind: "delete", resourceId: selected.resource.id, name: "", preview: null })}>Delete</button></div>}</> : <p>Select a name to inspect its metadata.</p>}</aside></div>
         <div className="file-page"><span>{busy ? "Reading server…" : `${page.entries.length} entries on this page`}</span><button disabled={browsingDisabled || !page.next_cursor} onClick={() => void read({ kind: "list", resource_id: page.directory.id, cursor: page.next_cursor })}>Next page</button></div>
       </>}
-      <p className="muted">Uses your SSH account’s permissions. Changes require confirmation. Uploads, downloads, recursive deletion and sudo are unavailable.</p>
+      <p className="muted">Uses your SSH account’s permissions. Changes require confirmation. Transfers publish only verified files and never overwrite. Recursive deletion and sudo are unavailable.</p>
     </>}
+    {jobs.length > 0 && <TransferQueue rows={jobs} failure={transfers.failure} />}
   </section>;
 }
