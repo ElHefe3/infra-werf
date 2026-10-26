@@ -8,7 +8,7 @@ A trusted, paired and revocable Android-to-PC connection with host-verified SSH 
 
 ## Entry and sequence
 
-S02 is complete and controlled trust/SSH/sudo fixtures are available. Actual installation/trust/credential actions require their applicable authorisations.
+Full-scope entry requires S02 complete and controlled trust/SSH/sudo fixtures available. T014 explicitly permits desktop-first entry over T008/T032/T033; this does not pass the paired/phone/sudo scope gates. Actual installation/trust/credential actions require their applicable authorisations.
 
 Complete F05 pair/session behavior. Within F06, T014 operation boundaries precede T012 SSH resolution, then T013 protected sessions/sudo. Follow dependencies, not ticket numbering.
 

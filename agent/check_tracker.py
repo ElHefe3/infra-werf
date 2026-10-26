@@ -141,13 +141,31 @@ def validate(root, overrides=None):
             dep_feature = tickets.get(dep, ({},))[0].get('feature')
             if dep_feature and dep_feature != fid and dep_feature not in ancestry['feature'][fid]:
                 errors.append(f'{tid}: undeclared prerequisite feature for {dep}')
+        scope_deps = scopes.get(feature.get('scope'), ({},))[0].get('depends_on', [])
+        entry = data.get('scope_entry', {})
+        if not isinstance(entry, dict):
+            errors.append(f'{tid}: invalid scoped entry')
+            entry = {}
+        valid_entry = {}
+        for sid, required in entry.items():
+            if sid not in scope_deps:
+                errors.append(f'{tid}: undeclared scoped entry {sid}')
+            elif not isinstance(required, list) or not required or any(not isinstance(t, str) for t in required) or len(required) != len(set(required)):
+                errors.append(f'{tid}: invalid scoped entry {sid}')
+            elif any(t not in ancestry['ticket'][tid] or features.get(tickets.get(t, ({},))[0].get('feature'), ({},))[0].get('scope') != sid for t in required):
+                errors.append(f'{tid}: scoped entry must name prerequisite tickets from {sid}')
+            else:
+                valid_entry[sid] = required
         if state in {'ready', 'in_progress', 'done'}:
             for dep in data['depends_on']:
                 if tickets.get(dep, ({},))[0].get('status') != 'done':
                     errors.append(f'{tid}: incomplete dependency {dep}')
-            for sid in scopes.get(feature.get('scope'), ({},))[0].get('depends_on', []):
+            for sid in scope_deps:
                 if sid in scopes and not scope_done(sid):
-                    errors.append(f'{tid}: prerequisite scope {sid} has not passed')
+                    if sid not in valid_entry:
+                        errors.append(f'{tid}: prerequisite scope {sid} has not passed')
+                    elif any(tickets[t][0].get('status') != 'done' for t in valid_entry[sid]):
+                        errors.append(f'{tid}: scoped prerequisite {sid} has not passed')
         if state == 'done':
             if any(c.lower() != 'x' for c in criteria):
                 errors.append(f'{tid}: unchecked acceptance on done ticket')
@@ -186,6 +204,8 @@ def self_test(root):
     root = Path(root).resolve()
     f01 = next((root/'agent'/'features').glob('F01-*.md'))
     f13 = next((root/'agent'/'features').glob('F13-*.md'))
+    f02 = next((root/'agent'/'features').glob('F02-*.md'))
+    f03 = next((root/'agent'/'features').glob('F03-*.md'))
     scope = next((root/'agent'/'scopes').glob('S01-*.md'))
 
     # Rejection fixtures need controlled preconditions. They must not stop
@@ -225,6 +245,10 @@ def self_test(root):
         ('broken link', {**baseline, f01: baseline[f01]+'\n[bad](missing.md)\n'}),
         ('missing section', {**baseline, f01: baseline[f01].replace('### Verification', '### Missing proof', 1)}),
         ('duplicate ticket', {**baseline, f01: baseline[f01]+'\n<!-- atlas-ticket: {"id":"T001","feature":"F01","status":"todo","depends_on":[]} -->\n'}),
+        ('invalid scoped entry', change(f03, 'ticket', 'T006', {'scope_entry': {'S01': []}})),
+        ('undeclared scoped entry', change(f03, 'ticket', 'T006', {'scope_entry': {'S08': ['T030']}})),
+        ('scoped entry must name prerequisite', change(f03, 'ticket', 'T006', {'scope_entry': {'S01': ['T009']}})),
+        ('scoped prerequisite', change(f03, 'ticket', 'T006', {'status': 'ready', 'scope_entry': {'S01': ['T003']}})),
     ]
     for expected, overrides in cases:
         errors, _, _ = validate(root, overrides)
@@ -239,6 +263,25 @@ def self_test(root):
     errors, _, _ = validate(root, valid)
     if errors:
         raise AssertionError(f'Valid completion fixture was rejected: {errors}')
+    # An explicit phase can enter on its proven ticket prerequisites without
+    # pretending the whole prerequisite scope (including phone work) is done.
+    phase = {**baseline, proof: '# Synthetic T003 T004 T005 proof\nRevision: fixture-only\nResult: pass\n'}
+    def phase_metadata(match):
+        data = json.loads(match[2])
+        if match[1] == 'ticket' and data['id'] in {'T003', 'T004', 'T005'}:
+            data.update(status='done', depends_on=[], evidence='../evidence/DOCS-001.md')
+        if match[1] == 'ticket' and data['id'] == 'T006':
+            data.update(status='ready', scope_entry={'S01': ['T003', 'T004', 'T005']})
+        return '<!-- atlas-'+match[1]+': '+json.dumps(data)+' -->'
+    phase[f02] = META.sub(phase_metadata, baseline[f02]).replace('- [ ]', '- [x]')
+    phase[f03] = META.sub(phase_metadata, baseline[f03])
+    errors, _, _ = validate(root, phase)
+    if errors:
+        raise AssertionError(f'Valid phased entry fixture was rejected: {errors}')
+    default = {**phase, f03: phase[f03].replace(', "scope_entry": {"S01": ["T003", "T004", "T005"]}', '')}
+    errors, _, _ = validate(root, default)
+    if not any('prerequisite scope S01 has not passed' in e for e in errors):
+        raise AssertionError('Default scope gate was silently weakened')
     return len(cases)
 
 
@@ -255,7 +298,7 @@ def main():
     print('States:', ', '.join(f'{k}={v}' for k, v in sorted(states.items())))
     if args.self_test:
         print('In-memory rejection fixtures passed:', self_test(args.root))
-        print('In-memory positive completion fixture passed: 1')
+        print('In-memory positive completion/phased-entry fixtures passed: 2; default gate preserved')
     return 0
 
 

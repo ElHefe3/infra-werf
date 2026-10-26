@@ -1,7 +1,11 @@
 mod workspace;
 
 use atlas_core::*;
-use atlas_core::{operations::OperationTicket, ssh::SshVerification};
+use atlas_core::{
+    files::{FileAction, FileResult, FileSession},
+    operations::OperationTicket,
+    ssh::SshVerification,
+};
 use std::sync::Arc;
 use tauri::{Emitter, Manager, State};
 use workspace::{Paths, Workspace};
@@ -55,6 +59,57 @@ fn ssh_cancel(
 ) -> Result<(), AtlasError> {
     local_desktop(&window)?;
     workspace.cancel_ssh(&operation_id)
+}
+
+#[tauri::command]
+fn files_prepare(
+    window: tauri::WebviewWindow,
+    workspace: State<'_, Arc<Workspace>>,
+    server_id: ServerId,
+) -> Result<OperationTicket, AtlasError> {
+    local_desktop(&window)?;
+    workspace.inner().prepare_files(&server_id)
+}
+#[tauri::command]
+async fn files_open(
+    window: tauri::WebviewWindow,
+    workspace: State<'_, Arc<Workspace>>,
+    server_id: ServerId,
+    operation_id: OperationId,
+) -> Result<FileSession, AtlasError> {
+    local_desktop(&window)?;
+    let workspace = workspace.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || workspace.open_files(&server_id, &operation_id))
+        .await
+        .map_err(|_| AtlasError::new(ErrorCode::IoFailure))?
+}
+#[tauri::command]
+async fn files_read(
+    window: tauri::WebviewWindow,
+    workspace: State<'_, Arc<Workspace>>,
+    server_id: ServerId,
+    session_id: SessionId,
+    action: FileAction,
+) -> Result<FileResult, AtlasError> {
+    local_desktop(&window)?;
+    let workspace = workspace.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        workspace.read_files(&server_id, &session_id, action)
+    })
+    .await
+    .map_err(|_| AtlasError::new(ErrorCode::IoFailure))?
+}
+#[tauri::command]
+async fn files_lock(
+    window: tauri::WebviewWindow,
+    workspace: State<'_, Arc<Workspace>>,
+    session_id: SessionId,
+) -> Result<(), AtlasError> {
+    local_desktop(&window)?;
+    let workspace = workspace.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || workspace.lock_files(&session_id))
+        .await
+        .map_err(|_| AtlasError::new(ErrorCode::IoFailure))?
 }
 
 #[tauri::command]
@@ -116,6 +171,7 @@ async fn update_server(
     input: UpdateServer,
 ) -> Result<MapState, AtlasError> {
     run_store(workspace.inner().clone(), move |w| {
+        w.invalidate_server(&id);
         w.with_store(|s| {
             s.update_server(&id, input)?;
             s.snapshot()
@@ -129,6 +185,7 @@ async fn remove_server(
     id: ServerId,
 ) -> Result<MapState, AtlasError> {
     run_store(workspace.inner().clone(), move |w| {
+        w.invalidate_server(&id);
         w.with_store(|s| {
             s.remove_server(&id)?;
             s.snapshot()
@@ -179,18 +236,29 @@ pub fn run() {
         }
     }));
     builder.setup(|app| {
-        app.manage(Workspace::new(Paths::from_directory(app.path().app_data_dir()?)));
+        let workspace = Workspace::new(Paths::from_directory(app.path().app_data_dir()?));
+        let weak = Arc::downgrade(&workspace);
+        let handle = app.handle().clone();
+        std::thread::spawn(move || {
+            loop {
+                std::thread::sleep(std::time::Duration::from_millis(250));
+                let Some(workspace) = weak.upgrade() else { break; };
+                if workspace.is_closing() { break; }
+                for session in workspace.reap_files() { let _ = handle.emit("atlas-session-closed", session); }
+            }
+        });
+        app.manage(workspace);
         Ok(())
     })
     .on_window_event(|window, event| {
         if let tauri::WindowEvent::CloseRequested { api, .. } = event {
             if !window.state::<Arc<Workspace>>().request_close() {
                 api.prevent_close();
-                let _ = window.emit("atlas-close-blocked", "Atlas is finishing a local operation. Wait for it to finish, then close again.");
+                let _ = window.emit("atlas-close-blocked", "Atlas is finishing a local operation or has an open SSH session. Lock open sessions and wait for work to finish, then close again.");
             }
         }
     })
-    .invoke_handler(tauri::generate_handler![foundation_status, workspace_status, map_state, retry_workspace, add_server, update_server, remove_server, add_relationship, remove_relationship, import_reports, ssh_prepare, ssh_verify, ssh_cancel])
+    .invoke_handler(tauri::generate_handler![foundation_status, workspace_status, map_state, retry_workspace, add_server, update_server, remove_server, add_relationship, remove_relationship, import_reports, ssh_prepare, ssh_verify, ssh_cancel, files_prepare, files_open, files_read, files_lock])
     .run(tauri::generate_context!())
     .expect("Atlas native runtime failed");
 }

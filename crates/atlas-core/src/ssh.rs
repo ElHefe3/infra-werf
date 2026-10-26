@@ -112,7 +112,6 @@ impl SshOptions {
             "ForwardX11=no",
             "RequestTTY=no",
             "RemoteCommand=none",
-            "SessionType=default",
             "ConnectTimeout=5",
             "ConnectionAttempts=1",
             "ServerAliveInterval=2",
@@ -144,6 +143,7 @@ impl SshOptions {
             }
         };
         let mut resolve = self.command();
+        resolve.arg("-o").arg("SessionType=default");
         resolve.arg("-G").arg("--").arg(alias);
         let resolved = match capture(resolve, context) {
             Ok(value) => value,
@@ -160,6 +160,7 @@ impl SshOptions {
         };
         let marker = format!("ATLAS_VERIFY_{}", OperationId::generate().as_str());
         let mut check = self.command();
+        check.arg("-o").arg("SessionType=default");
         check
             .arg("-v")
             .arg("-o")
@@ -200,6 +201,48 @@ impl SshOptions {
             classify(&checked.stderr)
         };
         Ok(outcome(state, Some(profile), fingerprint))
+    }
+    #[cfg(windows)]
+    pub(crate) fn sftp_command(
+        &self,
+        alias: &str,
+        context: &mut ExecutionContext,
+    ) -> Result<(SshProfile, Command), AtlasError> {
+        if hostname(alias)? != alias {
+            return Err(AtlasError::new(ErrorCode::InvalidInput));
+        }
+        let mut resolve = self.command();
+        resolve.arg("-G").arg("--").arg(alias);
+        let resolved = capture(resolve, context).map_err(|failure| match failure {
+            ProcessFailure::Missing => AtlasError::new(ErrorCode::IoFailure),
+            ProcessFailure::Guard(error) => error,
+        })?;
+        let (profile, key_alias) = profile(alias, &resolved.stdout)
+            .filter(|_| resolved.success)
+            .ok_or_else(|| AtlasError::new(ErrorCode::Denied))?;
+        let mut command = self.command();
+        command
+            .stdin(Stdio::piped())
+            .arg("-s")
+            .arg("-o")
+            .arg("SessionType=subsystem")
+            .arg("-o")
+            .arg("KnownHostsCommand=none")
+            .arg("-o")
+            .arg("ProxyCommand=none")
+            .arg("-o")
+            .arg("ProxyJump=none")
+            .arg("-o")
+            .arg(format!("Hostname={}", profile.hostname))
+            .arg("-l")
+            .arg(&profile.user)
+            .arg("-p")
+            .arg(profile.port.to_string());
+        if let Some(alias) = key_alias {
+            command.arg("-o").arg(format!("HostKeyAlias={alias}"));
+        }
+        command.arg("--").arg(alias).arg("sftp");
+        Ok((profile, command))
     }
 }
 
@@ -260,7 +303,7 @@ fn profile(alias: &str, data: &str) -> Option<(SshProfile, Option<String>)> {
         key_alias.map(str::to_owned),
     ))
 }
-fn fingerprint(data: &str) -> Option<(String, String)> {
+pub(crate) fn fingerprint(data: &str) -> Option<(String, String)> {
     data.lines().find_map(|line| {
         let key = line
             .strip_prefix("debug1: Server host key: ")
@@ -283,7 +326,7 @@ fn fingerprint(data: &str) -> Option<(String, String)> {
         Some((kind.into(), fingerprint.into()))
     })
 }
-fn publickey_authenticated(stderr: &str) -> bool {
+pub(crate) fn publickey_authenticated(stderr: &str) -> bool {
     // OpenSSH initially attempts none even with PreferredAuthentications set.
     // Reject genuine none success anywhere, including beside spoofed remote
     // stderr/banner text that claims publickey success.
@@ -291,7 +334,7 @@ fn publickey_authenticated(stderr: &str) -> bool {
         && stderr.contains(" using \"publickey\".")
         && !stderr.contains("using \"none\"")
 }
-fn classify(stderr: &str) -> SshCheckState {
+pub(crate) fn classify(stderr: &str) -> SshCheckState {
     if stderr.contains("REMOTE HOST IDENTIFICATION HAS CHANGED") {
         SshCheckState::ChangedHost
     } else if stderr.contains("Host key verification failed")

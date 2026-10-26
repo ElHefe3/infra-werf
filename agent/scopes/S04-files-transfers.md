@@ -8,7 +8,7 @@ An authenticated file-manager/transfer journey on Windows and native Android, in
 
 ## Entry and sequence
 
-S03 is complete. Use controlled local/remote files, scoped Android providers and explicitly approved protected test destinations.
+Full-scope entry requires S03 complete. T015 explicitly permits desktop read-only entry over completed T014; phone/paired/elevation gates remain open. Use controlled local/remote files, scoped Android providers and explicitly approved protected test destinations.
 
 F08 browsing/stat precede file mutations; F09 reuses that session/path boundary for streaming jobs and protected staging.
 

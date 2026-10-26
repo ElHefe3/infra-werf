@@ -168,7 +168,10 @@ try {
   await workspace.getByLabel('Filter saved workloads').fill('unit-539');
   await expect(workspace.getByText('unit-539.service', { exact: true })).toBeVisible();
   await workspace.getByRole('tab', { name: 'Files', exact: true }).click();
-  await expect(workspace.getByText('Not connected · operation unavailable', { exact: true })).toBeVisible();
+  await expect(workspace.getByRole('button', { name: 'Open file session', exact: true })).toBeVisible();
+  await expect(workspace.locator('.file-list')).toHaveCount(0);
+  await workspace.getByRole('tab', { name: 'Terminal', exact: true }).click();
+  await expect(workspace.getByText('Operation unavailable', { exact: true })).toBeVisible();
   await workspace.getByRole('tab', { name: 'System', exact: true }).click();
   await expect(workspace.getByText('16 GiB', { exact: true })).toBeVisible();
   await page.keyboard.press('Escape');
@@ -181,7 +184,7 @@ try {
   await page.reload();
   await expect(page.locator('.server-card')).toHaveCount(5);
   expect((await invoke('map_state')).edges).toHaveLength(0);
-  results.push('workspace tabs/full inventory, honest unavailable operations, explicit edge removal persists');
+  results.push('workspace tabs/full inventory, Files requires explicit authentication, other unavailable controls stay honest, explicit edge removal persists');
   await page.screenshot({ path: path.join(directory, 'desktop-final.png') });
   await stop();
 

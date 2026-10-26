@@ -422,5 +422,6 @@ pub fn typescript_contracts() -> String {
     );
     output.push_str(&crate::operations::typescript_contracts(&cfg));
     output.push_str(&crate::ssh::typescript_contracts(&cfg));
+    output.push_str(&crate::files::typescript_contracts());
     output
 }

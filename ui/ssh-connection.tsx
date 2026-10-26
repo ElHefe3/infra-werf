@@ -63,6 +63,6 @@ export function SshConnection({ server, onBusy }: { server: MapServer; onBusy: (
         <small>Checked {new Date(result.checked_at).toLocaleString()}</small>
       </div>}
     </div>
-    <p className="muted">Files, terminal, service controls and sudo remain unavailable until protected sessions are implemented.</p>
+    <p className="muted">Open a protected session in Files to browse. Terminal, service controls and sudo remain unavailable.</p>
   </section>;
 }

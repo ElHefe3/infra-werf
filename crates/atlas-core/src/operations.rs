@@ -33,6 +33,7 @@ pub enum Inspection {
     SystemSummary {},
     FileMetadata { path: String },
     ServiceStatus { workload_id: String },
+    SftpRead { resource_id: String },
 }
 
 #[derive(Clone, Serialize, Deserialize, TS)]
@@ -139,6 +140,8 @@ impl ScopedPath {
 #[derive(Clone)]
 pub enum InspectionPlan {
     ConnectionCheck,
+    SftpOpen,
+    SftpRead { resource_id: String },
     SystemSummary,
     FileMetadata(ScopedPath),
     ServiceStatus { workload_id: String },
@@ -148,6 +151,7 @@ pub enum InspectionPlan {
 pub struct SessionScope {
     roots: Vec<String>,
     workloads: HashSet<String>,
+    resources: HashSet<String>,
 }
 impl SessionScope {
     pub fn new(roots: Vec<String>, workloads: Vec<String>) -> Result<Self, AtlasError> {
@@ -167,10 +171,20 @@ impl SessionScope {
                 Ok(id)
             })
             .collect::<Result<_, _>>()?;
-        Ok(Self { roots, workloads })
+        Ok(Self {
+            roots,
+            workloads,
+            resources: HashSet::new(),
+        })
     }
     fn plan(&self, inspection: Inspection) -> Result<InspectionPlan, AtlasError> {
         Ok(match inspection {
+            Inspection::SftpRead { resource_id } => {
+                if !self.resources.contains(&resource_id) {
+                    return Err(error(ErrorCode::Denied));
+                }
+                InspectionPlan::SftpRead { resource_id }
+            }
             Inspection::SystemSummary {} => InspectionPlan::SystemSummary,
             Inspection::FileMetadata { path } => {
                 let path = absolute_path(&path)?;
@@ -341,6 +355,73 @@ impl OperationBroker {
         }
         Ok(())
     }
+    /// Backend-owned opaque resources, never paths supplied by an IPC caller.
+    pub fn set_resources(
+        &self,
+        authority: &Authority,
+        id: &SessionId,
+        target: &ServerTarget,
+        resources: Vec<String>,
+    ) -> Result<(), AtlasError> {
+        if resources.len() > 512 || resources.iter().any(|id| SessionId::parse(id).is_err()) {
+            return Err(error(ErrorCode::InvalidInput));
+        }
+        let mut registry = lock(&self.shared.registry)?;
+        let actor = self.actor(&registry, Some(authority))?;
+        let actor_id = actor.id.clone();
+        let session = registry
+            .sessions
+            .get_mut(id.as_str())
+            .ok_or_else(|| error(ErrorCode::ExpiredSession))?;
+        if session.actor != actor_id || session.target != *target {
+            return Err(error(ErrorCode::Denied));
+        }
+        if session.expires <= Instant::now() {
+            return Err(error(ErrorCode::ExpiredSession));
+        }
+        session.scope.resources = resources.into_iter().collect();
+        Ok(())
+    }
+    pub fn validate_session(
+        &self,
+        authority: &Authority,
+        id: &SessionId,
+        target: &ServerTarget,
+    ) -> Result<(), AtlasError> {
+        let registry = lock(&self.shared.registry)?;
+        let actor = self.actor(&registry, Some(authority))?;
+        let session = registry
+            .sessions
+            .get(id.as_str())
+            .ok_or_else(|| error(ErrorCode::ExpiredSession))?;
+        if session.actor != actor.id || session.target != *target {
+            return Err(error(ErrorCode::Denied));
+        }
+        if session.expires <= Instant::now() {
+            return Err(error(ErrorCode::ExpiredSession));
+        }
+        Ok(())
+    }
+    pub fn close_session(&self, authority: &Authority, id: &SessionId) -> Result<(), AtlasError> {
+        let mut registry = lock(&self.shared.registry)?;
+        let actor = self.actor(&registry, Some(authority))?;
+        if registry
+            .sessions
+            .get(id.as_str())
+            .is_some_and(|s| s.actor != actor.id)
+        {
+            return Err(error(ErrorCode::Denied));
+        }
+        registry.sessions.remove(id.as_str());
+        for job in registry
+            .jobs
+            .values()
+            .filter(|job| job.session_id.as_ref() == Some(id))
+        {
+            job.cancelled.store(true, Ordering::Release);
+        }
+        Ok(())
+    }
     fn validate_job(&self, authority: Option<&Authority>, job: &Job) -> Result<(), AtlasError> {
         let registry = lock(&self.shared.registry)?;
         self.validate_locked(&registry, authority, job)
@@ -366,7 +447,10 @@ impl OperationBroker {
             if Instant::now() >= session.expires {
                 return Err(error(ErrorCode::ExpiredSession));
             }
-        } else if !matches!(job.plan, InspectionPlan::ConnectionCheck) {
+        } else if !matches!(
+            job.plan,
+            InspectionPlan::ConnectionCheck | InspectionPlan::SftpOpen
+        ) {
             return Err(error(ErrorCode::Denied));
         }
         if job.cancelled.load(Ordering::Acquire) {
@@ -418,6 +502,21 @@ impl OperationBroker {
         authority: Option<&Authority>,
         target: &ServerTarget,
     ) -> Result<OperationTicket, AtlasError> {
+        self.prepare_bootstrap(authority, target, InspectionPlan::ConnectionCheck)
+    }
+    pub fn prepare_sftp(
+        &self,
+        authority: Option<&Authority>,
+        target: &ServerTarget,
+    ) -> Result<OperationTicket, AtlasError> {
+        self.prepare_bootstrap(authority, target, InspectionPlan::SftpOpen)
+    }
+    fn prepare_bootstrap(
+        &self,
+        authority: Option<&Authority>,
+        target: &ServerTarget,
+        plan: InspectionPlan,
+    ) -> Result<OperationTicket, AtlasError> {
         let mut registry = lock(&self.shared.registry)?;
         let actor = self.actor(&registry, authority)?;
         let expires = Instant::now() + self.duration;
@@ -425,7 +524,7 @@ impl OperationBroker {
             actor: actor.id.clone(),
             session_id: None,
             target: target.clone(),
-            plan: InspectionPlan::ConnectionCheck,
+            plan,
             expires,
             phase: Mutex::new(Phase::Prepared),
             cancelled: AtomicBool::new(false),
@@ -530,7 +629,10 @@ impl OperationBroker {
             .session_id
             .clone()
             .ok_or_else(|| error(ErrorCode::Denied))?;
-        if matches!(job.plan, InspectionPlan::ConnectionCheck) {
+        if matches!(
+            job.plan,
+            InspectionPlan::ConnectionCheck | InspectionPlan::SftpOpen
+        ) {
             return Err(error(ErrorCode::Denied));
         }
         let expires = job.expires;
@@ -560,6 +662,24 @@ impl OperationBroker {
             return Err(error(ErrorCode::Denied));
         }
         self.execute_job(authority, id, current_target, job, executor)
+    }
+    pub fn execute_sftp_open<F>(
+        &self,
+        authority: Option<&Authority>,
+        id: &OperationId,
+        target: &ServerTarget,
+        executor: F,
+    ) -> Result<String, AtlasError>
+    where
+        F: FnOnce(&InspectionPlan, &mut ExecutionContext) -> Result<(), AtlasError>
+            + Send
+            + 'static,
+    {
+        let job = self.job(authority, id)?;
+        if job.session_id.is_some() || !matches!(job.plan, InspectionPlan::SftpOpen) {
+            return Err(error(ErrorCode::Denied));
+        }
+        self.execute_job(authority, id, target, job, executor)
     }
     fn execute_job<F>(
         &self,

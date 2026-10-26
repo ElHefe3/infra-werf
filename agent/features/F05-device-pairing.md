@@ -39,6 +39,7 @@ Register active authenticated remote work with T008's shared lifecycle admission
 - [ ] Only explicit unexpired pairing and desktop approval grant access; replay/expiry/wrong-PC identity fail.
 - [ ] Wrong or changed server identity cannot be bypassed by a global TLS-validation disable.
 - [ ] Revoking a device denies subsequent requests and closes its active channels; no unauthenticated public/LAN mutation endpoint exists.
+- [ ] Paired Files uses T014/T015's shared guarded session path; compact-phone selection/breadcrumbs work, and lock/revoke/expiry clears listings and denies stale handles. Native-only proof does not satisfy this phone journey.
 
 ### Verification
 

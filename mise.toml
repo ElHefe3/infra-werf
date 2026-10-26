@@ -59,6 +59,14 @@ run = "powershell -NoProfile -File scripts/atlas.ps1 test-ssh-native"
 [tasks."dev:android"]
 run = "powershell -NoProfile -File scripts/atlas.ps1 dev-android"
 
+[tasks."test:files"]
+description = "Actual loopback SFTP session lifetime, handle revocation, timeout and cleanup proof"
+run = "powershell -NoProfile -File scripts/atlas.ps1 test-files"
+
+[tasks."test:files-native"]
+description = "Actual native Files browse/stat/lock/error journey on isolated fixture data (build first)"
+run = "powershell -NoProfile -File scripts/atlas.ps1 test-files-native"
+
 [tasks."smoke:desktop"]
 description = "Compile the thin Windows debug application without an installer"
 run = "powershell -NoProfile -File scripts/atlas.ps1 smoke-desktop"

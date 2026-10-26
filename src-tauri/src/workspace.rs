@@ -1,5 +1,6 @@
 use atlas_core::*;
 use atlas_core::{
+    files::{FileAction, FileResult, FileSession, FileSessions, SessionPolicy},
     operations::{Authority, OperationBroker, OperationTicket, ServerTarget},
     ssh::{SshOptions, SshVerification},
 };
@@ -62,6 +63,7 @@ pub struct Workspace {
     broker: OperationBroker,
     authority: Authority,
     ssh: SshOptions,
+    files: FileSessions,
 }
 
 impl Workspace {
@@ -71,13 +73,21 @@ impl Workspace {
         let authority = broker
             .issue_backend_authority()
             .expect("fresh local broker authority");
+        let ssh = SshOptions::system();
+        let files = FileSessions::new(
+            broker.clone(),
+            authority.clone(),
+            ssh.clone(),
+            SessionPolicy::default(),
+        );
         Arc::new(Self {
             paths,
             store: Mutex::new(store),
             lifecycle: Mutex::new(Lifecycle::default()),
             broker,
             authority,
-            ssh: SshOptions::system(),
+            ssh,
+            files,
         })
     }
 
@@ -188,6 +198,52 @@ impl Workspace {
     }
     pub fn cancel_ssh(&self, operation: &OperationId) -> Result<(), AtlasError> {
         self.broker.cancel(Some(&self.authority), operation)
+    }
+    pub fn prepare_files(self: &Arc<Self>, id: &ServerId) -> Result<OperationTicket, AtlasError> {
+        let _admission = self.begin()?;
+        self.files.prepare(&self.ssh_target(id)?)
+    }
+    pub fn open_files(
+        self: &Arc<Self>,
+        id: &ServerId,
+        operation: &OperationId,
+    ) -> Result<FileSession, AtlasError> {
+        let admission = self.begin()?;
+        let target = self.ssh_target(id)?;
+        let result = self.files.open(&target, operation, Box::new(admission))?;
+        if !self.ssh_target(id).is_ok_and(|current| current == target) {
+            self.files.close(&result.session_id)?;
+            return Err(AtlasError::new(ErrorCode::Denied));
+        }
+        Ok(result)
+    }
+    pub fn read_files(
+        self: &Arc<Self>,
+        id: &ServerId,
+        session: &SessionId,
+        action: FileAction,
+    ) -> Result<FileResult, AtlasError> {
+        let _admission = self.begin()?;
+        let target = self.ssh_target(id)?;
+        let result = self.files.read(&target, session, action)?;
+        if !self.ssh_target(id).is_ok_and(|current| current == target) {
+            self.files.close(session)?;
+            return Err(AtlasError::new(ErrorCode::Denied));
+        }
+        Ok(result)
+    }
+    pub fn lock_files(&self, session: &SessionId) -> Result<(), AtlasError> {
+        self.files.close(session)
+    }
+    pub fn invalidate_server(&self, id: &ServerId) {
+        self.files.close_server(id);
+    }
+    pub fn reap_files(&self) -> Vec<Option<SessionId>> {
+        self.files.reap();
+        self.files.take_closed()
+    }
+    pub fn is_closing(&self) -> bool {
+        self.lifecycle.lock().is_ok_and(|l| l.closing)
     }
 }
 

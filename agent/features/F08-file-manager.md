@@ -12,15 +12,15 @@
 
 Read [SCOPE.md](../SCOPE.md) for access boundaries; use [AGENT.md](../AGENT.md) for execution/proof rules. Ticket dependencies, not numeric ordering, control implementation. Feature completion is derived from its tickets and scope gate, not independently marked done.
 
-No seed discovery applies beyond the shared scope. Link new findings when material.
+Relevant discoveries: [D017 desktop feature entry](../discovery/D017-desktop-feature-entry.md), [D018 SFTP lifecycle/page recovery](../discovery/D018-sftp-process-and-page-lifecycle.md). Reuse the protected session and opaque-resource boundary for later mutations/transfers.
 
 ## T015 — Implement authenticated SFTP browsing
 
-<!-- atlas-ticket: {"id":"T015","feature":"F08","status":"todo","depends_on":["T013","T014","T007"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T015","feature":"F08","status":"done","depends_on":["T014","T033","T007"],"scope_entry":{"S03":["T014"]},"evidence":"../evidence/F06-F08-desktop-acceptance.md"} -->
 
 ### Outcome and included work
 
-Browse remote directories and metadata through SFTP on both clients.
+Browse remote directories/metadata through actual SFTP on desktop with shared contracts. Compact-phone navigation and paired result-clearing proof are retained in T009/T010; they remain core release requirements.
 
 ### Exclusions
 
@@ -30,21 +30,21 @@ Recursive content indexing, file transfer engines, automatic root browsing or pr
 
 Support breadcrumbs/back, selection, stat/permissions/ownership and bounded/paged listings. Preserve remote path encoding and symlink identity; do not assume Windows path rules. Directory contents are protected, ephemeral results.
 
-**Ticket dependencies:** [T013](F06-ssh-elevation.md), [T014](F06-ssh-elevation.md), [T007](F03-react-map.md).
+**Ticket dependencies:** [T014](F06-ssh-elevation.md), [T033](F04-native-shells.md), [T007](F03-react-map.md). Read-only browsing requires protected authentication/lifecycle, not sudo. T013 remains mandatory before elevation; T010 retains paired Files proof.
 
 ### Acceptance criteria
 
-- [ ] Root/home/deep/large directories, Unicode/space names, symlinks and permission-denied paths render correctly.
-- [ ] Navigation uses authenticated server/session context; locked/expired sessions cannot retain visible cached listings.
-- [ ] Desktop and phone selection/breadcrumb behavior is usable with bounded listing memory/output.
+- [x] Root/home/deep/large directories, Unicode/space names, symlinks and permission-denied paths render correctly.
+- [x] Navigation uses authenticated server/session context; locked/expired sessions cannot retain visible cached listings.
+- [x] Desktop selection/breadcrumbs/paging are usable with bounded memory/output; phone selection/breadcrumb/clearing journeys remain explicitly in T009/T010.
 
 ### Verification
 
-Controlled SFTP fixture with large/unusual/denied directories and one navigation/stat journey on each client.
+Controlled real SFTP fixture with large/unusual/denied directories and an actual native Windows navigation/stat/clearing journey. Compact-phone/paired journeys remain T009/T010, with physical-device acceptance T026.
 
 ### Evidence and closure
 
-Use a concise [feature acceptance record](../evidence/README.md), map results to T015, attach its relative path in ticket metadata, then check only proven criteria. Record tested revision/platform/fixtures, failures, limits and rollback as applicable. Current proof: **not run**. Use [the checkpoint](../evidence/CHECKPOINT.md) at handoff.
+Passed the desktop/core slice in [T014/T015 acceptance](../evidence/F06-F08-desktop-acceptance.md), with actual SFTP/native and reviewed lifecycle evidence. F08/S04 still require mutations, transfers and both-client proof. Resume from [the checkpoint](../evidence/CHECKPOINT.md).
 
 ### Stop conditions
 

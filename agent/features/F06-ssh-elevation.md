@@ -12,7 +12,7 @@
 
 Read [SCOPE.md](../SCOPE.md) for access boundaries; use [AGENT.md](../AGENT.md) for execution/proof rules. Ticket dependencies, not numeric ordering, control implementation. Feature completion is derived from its tickets and scope gate, not independently marked done.
 
-Relevant discoveries: [D014 desktop phasing](../discovery/D014-desktop-guard-phasing.md), [D015 decoding/admission](../discovery/D015-operation-decoding-and-admission.md). Reuse [OPERATIONS.md](../OPERATIONS.md); T032 does not complete production SSH/transport integration.
+Relevant discoveries: [D014 desktop phasing](../discovery/D014-desktop-guard-phasing.md), [D015 decoding/admission](../discovery/D015-operation-decoding-and-admission.md), [D017 feature entry](../discovery/D017-desktop-feature-entry.md), [D018 SFTP lifecycle](../discovery/D018-sftp-process-and-page-lifecycle.md). Reuse [OPERATIONS.md](../OPERATIONS.md) and the proven desktop session core; paired transport and fresh sudo remain their tickets.
 
 ## T012 — Resolve SSH identities and verify host trust
 
@@ -66,6 +66,8 @@ Permanent root shortcuts, modifying sudoers, silently reusing remote cached elev
 
 Default SSH session idle timeout is five minutes and absolute duration 30 minutes; lock/revoke closes it sooner. Sudo prompts name server/action/path, passwords stay only in the active flow and are not reused/saved/logged. Respect remote timestamp behavior without changing global policy or unrelated sessions.
 
+Reuse T014's proven desktop protected-session/clearing core. This ticket still needs paired integration and fresh per-action sudo; do not duplicate session/transport foundations or infer elevation from the read-only proof.
+
 **Ticket dependencies:** [T012](F06-ssh-elevation.md), [T011](F05-device-pairing.md).
 
 ### Acceptance criteria
@@ -88,11 +90,11 @@ Block elevation if fresh-auth behavior or result clearing is unproven; do not we
 
 ## T014 — Enforce safe operation and output boundaries
 
-<!-- atlas-ticket: {"id":"T014","feature":"F06","status":"todo","depends_on":["T003","T010","T032","T033"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T014","feature":"F06","status":"done","depends_on":["T003","T032","T033"],"scope_entry":{"S02":["T008","T032","T033"]},"evidence":"../evidence/F06-F08-desktop-acceptance.md"} -->
 
 ### Outcome and included work
 
-Integrate T032's shared backend authorisation/argument guard with the authenticated coordinator and actual SSH executor before enabling remote operations. T032 is the desktop-first foundation, separated on 2026-10-25; none of this ticket's paired transport, executor or mutation acceptance is claimed by its completion.
+Integrate T032/T033 with native protected session lifecycle and real read-only execution. Desktop-first entry uses the completed native prerequisites explicitly; paired coordinator integration and real revocation journeys remain required in T010/T011. Completion of this desktop/core slice does not complete S03's paired/sudo gates.
 
 ### Exclusions
 
@@ -102,21 +104,22 @@ Generic remote scripting API, unrestricted Tauri shell permissions or bypasses f
 
 Execute typed allowlisted operation requests, validate server/session/workload/path ownership, use bounded time/output and safe process argument handling, and separate terminal input from file/service commands. Return structured redacted failures; no arbitrary frontend shell command for managed operations.
 
-**Ticket dependencies:** [T003](F02-domain-persistence.md), [T010](F05-device-pairing.md), [T032](F04-native-shells.md), [T033](F04-native-shells.md). T033 proves desktop connection checks only; actual protected/coordinator operations remain this ticket.
+**Ticket dependencies:** [T003](F02-domain-persistence.md), [T032](F04-native-shells.md), [T033](F04-native-shells.md). T010/T011 retain paired transport proof. Native/core sessions use five-minute idle and 30-minute absolute limits, lock/revoke invalidates handles and clears protected results; sudo/mutations remain unavailable until their tickets pass.
 
 ### Acceptance criteria
 
-- [ ] Unauthenticated, revoked, mismatched-host/session and unknown operation requests are denied centrally for both transports.
-- [ ] Adversarial IDs/paths/arguments cannot escape the allowed operation or inject shell syntax; output/time limits fail predictably.
-- [ ] Logs/audit/progress omit credentials and protected payloads; operation cancellation/retry cannot duplicate a mutation silently.
+- [x] Unauthenticated, revoked, mismatched-host/session and unknown requests are denied by the shared guard and real native adapter; paired-adapter proof remains T010/T011.
+- [x] Actual authenticated SSH/SFTP sessions enforce five-minute idle/30-minute absolute expiry and locking, with handle invalidation, child cleanup and protected-result clearing.
+- [x] Adversarial IDs/paths/arguments cannot escape the allowed operation or inject shell syntax; output/time limits fail predictably.
+- [x] Logs/audit/progress omit credentials and protected payloads; operation cancellation/retry cannot duplicate a mutation silently.
 
 ### Verification
 
-Boundary/negative tests for auth, argument injection, output limit and cancellation using a fake executor; repeat relevant cases against the controlled SSH fixture after T012.
+Broker negative fixtures plus actual system OpenSSH/SFTP and native Files lifecycle proof. Paired-adapter/revocation proof remains T010/T011; fresh sudo remains T013.
 
 ### Evidence and closure
 
-Use a concise [feature acceptance record](../evidence/README.md), map results to T014, attach its relative path in ticket metadata, then check only proven criteria. Record tested revision/platform/fixtures, failures, limits and rollback as applicable. Current proof: **not run**. Use [the checkpoint](../evidence/CHECKPOINT.md) at handoff.
+Passed the desktop/core slice in [T014/T015 acceptance](../evidence/F06-F08-desktop-acceptance.md), including resolved independent review and the final actual-native rerun. S03's paired/sudo acceptance remains open. Resume from [the checkpoint](../evidence/CHECKPOINT.md).
 
 ### Stop conditions
 

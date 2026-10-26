@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { CONTRACT_VERSION, type AddRelationship, type AddServer, type MapState, type UpdateServer, type WorkspaceStatus, type OperationTicket, type SshVerification } from "./contracts.gen.ts";
+import { CONTRACT_VERSION, type AddRelationship, type AddServer, type MapState, type UpdateServer, type WorkspaceStatus, type OperationTicket, type SshVerification, type FileSession, type FileAction, type FileResult } from "./contracts.gen.ts";
 
 export type NativeTransport = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
 export function createWorkspaceClient(transport: NativeTransport = invoke) {
@@ -22,6 +22,10 @@ export function createWorkspaceClient(transport: NativeTransport = invoke) {
     prepareSsh: (serverId: string) => transport<OperationTicket>("ssh_prepare", { serverId }),
     verifySsh: (serverId: string, operationId: string) => request<SshVerification>("ssh_verify", { serverId, operationId }),
     cancelSsh: (operationId: string) => transport<void>("ssh_cancel", { operationId }),
+    prepareFiles: (serverId: string) => transport<OperationTicket>("files_prepare", { serverId }),
+    openFiles: (serverId: string, operationId: string) => transport<FileSession>("files_open", { serverId, operationId }),
+    readFiles: (serverId: string, sessionId: string, action: FileAction) => transport<FileResult>("files_read", { serverId, sessionId, action }),
+    lockFiles: (sessionId: string) => transport<void>("files_lock", { sessionId }),
   };
 }
 export type WorkspaceClient = ReturnType<typeof createWorkspaceClient>;

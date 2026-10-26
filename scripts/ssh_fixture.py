@@ -30,12 +30,24 @@ async def serve(directory):
     else:
         identity.chmod(0o600)
     stats, connections, listeners, ports = {}, set(), [], {}
+    filesystem = directory / 'filesystem'
+    home = filesystem / 'home' / 'fixture'
+    home.mkdir(parents=True)
+    (home / 'hello.txt').write_text('fixture-protected-content-never-read', encoding='utf-8')
+    (home / 'space folder').mkdir()
+    (home / 'space folder' / '日本語.txt').write_text('fixture unicode', encoding='utf-8')
+    (home / 'large').mkdir()
+    for number in range(350): (home / 'large' / f'entry-{number:04}.txt').write_text('fixture', encoding='utf-8')
+    deep = home / 'deep'
+    for _ in range(18): deep = deep / 'next'
+    deep.mkdir(parents=True)
+    for name in ['denied', 'stall', 'disconnect']: (home / name).mkdir()
     def save_stats():
         temporary = directory / 'stats-next.json'
         temporary.write_text(json.dumps(stats), encoding='utf-8')
         temporary.replace(directory / 'stats.json')
     for name in ['trusted', 'unknown', 'changed', 'rejected', 'agent-missing', 'slow', 'overflow', 'no-auth', 'certified', 'fallback', 'explicit-alias']:
-        stats[name] = {'auth_attempts': 0, 'authenticated': 0, 'commands': 0, 'active': 0}
+        stats[name] = {'auth_attempts': 0, 'authenticated': 0, 'commands': 0, 'active': 0, 'subsystems': 0, 'listings': 0, 'mutations': 0}
         class Server(asyncssh.SSHServer):
             def __init__(self, name=name): self.name = name
             def connection_made(self, connection):
@@ -60,7 +72,42 @@ async def serve(directory):
             if name == 'overflow': process.stdout.write('synthetic-protected-output-' * 10000)
             else: process.stdout.write(match[1] + '\n')
             process.exit(0)
-        listener = await asyncssh.create_server(Server, '127.0.0.1', 0, server_host_keys=[changed if name == 'changed' else primary], server_host_certs=[certificate] if name == 'certified' else [], process_factory=process, encoding='utf-8')
+        class Files(asyncssh.SFTPServer):
+            def __init__(self, channel, name=name):
+                super().__init__(channel, chroot=str(filesystem))
+                self.fixture_name = name
+                self.fixture_channel = channel
+                stats[name]['subsystems'] += 1; save_stats()
+            async def realpath(self, path):
+                if self.fixture_name == 'slow': await asyncio.sleep(60)
+                if path in [b'', b'.']: return b'/home/fixture'
+                if path == b'/home/fixture/folder-link': return b'/home/fixture/space folder'
+                if path == b'/home/fixture/broken-link': raise asyncssh.SFTPNoSuchFile('fixture missing')
+                return super().realpath(path)
+            def lstat(self, path):
+                if path in [b'/home/fixture/folder-link', b'/home/fixture/broken-link']:
+                    return asyncssh.SFTPAttrs(permissions=0o120777, size=12, uid=1000, gid=1000)
+                if path in [b'/home/fixture/odd-\xff-name', b'/home/fixture/;$(echo injected).txt']:
+                    return asyncssh.SFTPAttrs(permissions=0o100640, size=9007199254740993, uid=1000, gid=1000)
+                return super().lstat(path)
+            async def scandir(self, path):
+                stats[self.fixture_name]['listings'] += 1; save_stats()
+                if path == b'/home/fixture/denied': raise asyncssh.SFTPPermissionDenied('fixture denied')
+                if path == b'/home/fixture/stall': await asyncio.sleep(60)
+                if path == b'/home/fixture/disconnect':
+                    self.fixture_channel.get_connection().close()
+                    raise asyncssh.SFTPFailure('fixture disconnected')
+                if self.fixture_name == 'overflow':
+                    yield asyncssh.SFTPName(b'x' * 5000, attrs=asyncssh.SFTPAttrs(permissions=0o100644))
+                    return
+                async for entry in super().scandir(path): yield entry
+                if path == b'/home/fixture':
+                    for name in [b'folder-link', b'broken-link', b'odd-\xff-name', b';$(echo injected).txt']:
+                        yield asyncssh.SFTPName(name, attrs=self.lstat(path + b'/' + name))
+            def open(self, *args):
+                stats[self.fixture_name]['mutations'] += 1; save_stats()
+                raise asyncssh.SFTPPermissionDenied('fixture is read-only')
+        listener = await asyncssh.create_server(Server, '127.0.0.1', 0, server_host_keys=[changed if name == 'changed' else primary], server_host_certs=[certificate] if name == 'certified' else [], process_factory=process, sftp_factory=Files, encoding='utf-8')
         listeners.append(listener); ports[name] = listener.get_port()
     with socket.socket() as unused:
         unused.bind(('127.0.0.1', 0)); ports['unreachable'] = unused.getsockname()[1]

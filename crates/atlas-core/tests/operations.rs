@@ -657,3 +657,55 @@ fn captured_subprocess_bytes_use_the_same_sticky_output_budget() {
     );
     assert_eq!(code(result), ErrorCode::OutputLimit);
 }
+
+#[test]
+fn sftp_resources_are_backend_issued_session_bound_and_revocable() {
+    let (broker, authority, target, session) = fixture(Duration::from_secs(1), 128);
+    let resource = SessionId::generate().as_str().to_owned();
+    let input = || {
+        request(
+            &target,
+            &session,
+            Inspection::SftpRead {
+                resource_id: resource.clone(),
+            },
+        )
+    };
+    assert_eq!(
+        code(broker.prepare(Some(&authority), &target, input())),
+        ErrorCode::Denied
+    );
+    broker
+        .set_resources(&authority, &session, &target, vec![resource.clone()])
+        .unwrap();
+    let other = broker.issue_backend_authority().unwrap();
+    assert_eq!(
+        code(broker.prepare(Some(&other), &target, input())),
+        ErrorCode::Denied
+    );
+    assert_eq!(
+        code(broker.close_session(&other, &session)),
+        ErrorCode::Denied
+    );
+    let ticket = broker.prepare(Some(&authority), &target, input()).unwrap();
+    broker.close_session(&authority, &session).unwrap();
+    assert_eq!(
+        code(broker.execute(
+            Some(&authority),
+            &ticket.operation_id,
+            &target,
+            |_, _| panic!("locked resource")
+        )),
+        ErrorCode::ExpiredSession
+    );
+    let bootstrap = broker.prepare_sftp(Some(&authority), &target).unwrap();
+    assert_eq!(
+        code(broker.execute_connection_check(
+            Some(&authority),
+            &bootstrap.operation_id,
+            &target,
+            |_, _| panic!("wrong bootstrap")
+        )),
+        ErrorCode::Denied
+    );
+}
