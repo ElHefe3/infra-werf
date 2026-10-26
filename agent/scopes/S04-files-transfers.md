@@ -1,6 +1,6 @@
 # S04 — Files and transfers
 
-<!-- atlas-scope: {"id":"S04","features":["F08","F09"],"depends_on":["S03"],"window":2,"deferred":false} -->
+<!-- atlas-scope: {"id":"S04","features":["F08","F09"],"depends_on":["S03"],"window":2,"deferred":false,"evidence":"../evidence/S04-acceptance.md"} -->
 
 ## Outcome
 
@@ -8,7 +8,7 @@ An authenticated file-manager/transfer journey on Windows, including deliberate 
 
 ## Entry and sequence
 
-Full-scope entry requires S03 complete. T015/T016 explicitly permit desktop Files entry over completed T014; elevation gates remain open; phone/pairing is future S09. Use controlled local/remote files, scoped Android providers and explicitly approved protected test destinations.
+Full-scope entry requires S03 complete. T015/T016 explicitly permit desktop Files entry over completed T014; elevation gates remain open; phone/pairing is future S09. Use controlled local/remote files and explicitly approved protected test destinations.
 
 F08 browsing/stat precede file mutations; F09 reuses that session/path boundary for streaming jobs and protected staging.
 
@@ -25,10 +25,10 @@ Ticket status is canonical in the feature packets; scope progress is derived. Do
 
 ## Acceptance gate
 
-- [ ] Navigation/stat/permissions and deliberate mkdir/rename/move/delete handle unusual names, symlinks, collisions and denial.
-- [ ] Uploads/downloads stream through native Windows I/O; round-trip checksums match and progress reflects actual work.
-- [ ] Cancel/interruption/retry/expiry are recoverable without silent duplicate writes or hidden destructive defaults.
-- [ ] Protected placement stages unprivileged bytes and applies only reviewed narrow elevation, with content/ownership and cleanup proof.
+- [x] Navigation/stat/permissions and deliberate mkdir/rename/move/delete handle unusual names, symlinks, collisions and denial.
+- [x] Uploads/downloads stream through native Windows I/O; round-trip checksums match and progress reflects actual work.
+- [x] Cancel/interruption/retry/expiry are recoverable without silent duplicate writes or hidden destructive defaults.
+- [x] Protected placement stages unprivileged bytes and applies only reviewed narrow elevation, with content/ownership and cleanup proof.
 
 ## Verification and refinement
 

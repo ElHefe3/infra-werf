@@ -1,0 +1,8 @@
+#!/bin/sh
+case "$*" in
+  "ps -a --no-trunc --format {{.Names}}|{{.Image}}|{{.State}}") printf '%s\n' 'atlas-fixture-api|localhost/atlas-fixture-api:1|running' ;;
+  "inspect --format {{.State.Status}}|{{.State.ExitCode}}|{{.State.StartedAt}}|{{.State.FinishedAt}} -- atlas-fixture-api") printf '%s\n' 'running|0|2026-10-26T10:00:00Z|0001-01-01T00:00:00Z' ;;
+  "logs --tail=50 --timestamps -- atlas-fixture-api") printf '%s\n' 'ATLAS_TEST_PODMAN_CONTAINER_LOG' ;;
+  "inspect --format {{.State.Status}}|{{.State.ExitCode}}|{{.State.StartedAt}}|{{.State.FinishedAt}} -- atlas-fixture-missing") printf '%s\n' 'no such container' >&2; exit 125 ;;
+  *) exit 2 ;;
+esac

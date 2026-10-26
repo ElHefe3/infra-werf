@@ -6,14 +6,15 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     io::Read,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     sync::mpsc,
     time::Duration,
 };
 use ts_rs::{Config, TS};
+pub(crate) mod conversation;
 
-#[derive(Clone, Serialize, Deserialize, TS)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub struct SshProfile {
     pub alias: String,
     pub hostname: String,
@@ -94,7 +95,12 @@ impl SshOptions {
             "StrictHostKeyChecking=yes",
             "NoHostAuthenticationForLocalhost=no",
             "FingerprintHash=sha256",
-            "LogLevel=DEBUG1",
+            // Quiet mode suppresses server-controlled SSH_MSG_USERAUTH_BANNER
+            // text. Restore only the three local functions that emit evidence
+            // Atlas consumes; enabling an entire source file also exposes
+            // server-controlled identification diagnostics.
+            "LogLevel=QUIET",
+            "LogVerbose=*sshconnect.c:verify_host_key():*,*sshconnect.c:check_host_key():*,*sshconnect2.c:ssh_userauth2():*",
             "UpdateHostKeys=no",
             "CheckHostIP=no",
             "VerifyHostKeyDNS=no",
@@ -162,7 +168,6 @@ impl SshOptions {
         let mut check = self.command();
         check.arg("-o").arg("SessionType=default");
         check
-            .arg("-v")
             .arg("-o")
             .arg("KnownHostsCommand=none")
             .arg("-o")
@@ -191,8 +196,8 @@ impl SshOptions {
             Err(ProcessFailure::Guard(error)) => return Err(error),
         };
         let fingerprint = fingerprint(&checked.stderr);
-        let state = if checked.success && checked.stdout.trim() == marker && fingerprint.is_some() {
-            if publickey_authenticated(&checked.stderr) {
+        let state = if checked.success && checked.stdout.trim() == marker {
+            if fingerprint.is_some() && publickey_authenticated(&checked.stderr) {
                 SshCheckState::Verified
             } else {
                 SshCheckState::AuthenticationFailed
@@ -207,7 +212,7 @@ impl SshOptions {
         &self,
         alias: &str,
         context: &mut ExecutionContext,
-    ) -> Result<(SshProfile, Command), AtlasError> {
+    ) -> Result<(SshProfile, Command, Vec<String>), AtlasError> {
         if hostname(alias)? != alias {
             return Err(AtlasError::new(ErrorCode::InvalidInput));
         }
@@ -242,7 +247,11 @@ impl SshOptions {
             command.arg("-o").arg(format!("HostKeyAlias={alias}"));
         }
         command.arg("--").arg(alias).arg("sftp");
-        Ok((profile, command))
+        Ok((
+            profile,
+            command,
+            conversation::known_host_sources(&resolved.stdout),
+        ))
     }
 }
 
@@ -305,9 +314,16 @@ fn profile(alias: &str, data: &str) -> Option<(SshProfile, Option<String>)> {
 }
 pub(crate) fn fingerprint(data: &str) -> Option<(String, String)> {
     data.lines().find_map(|line| {
-        let key = line
-            .strip_prefix("debug1: Server host key: ")
-            .or_else(|| line.strip_prefix("debug1: Server host certificate: "))?;
+        let key =
+            local_diagnostic_message(line, "sshconnect.c", "verify_host_key", "Server host key: ")
+                .or_else(|| {
+                    local_diagnostic_message(
+                        line,
+                        "sshconnect.c",
+                        "verify_host_key",
+                        "Server host certificate: ",
+                    )
+                })?;
         let mut words = key.split_whitespace();
         let kind = words.next()?;
         let fingerprint = words.next()?.trim_end_matches(',');
@@ -326,13 +342,48 @@ pub(crate) fn fingerprint(data: &str) -> Option<(String, String)> {
         Some((kind.into(), fingerprint.into()))
     })
 }
-pub(crate) fn publickey_authenticated(stderr: &str) -> bool {
-    // OpenSSH initially attempts none even with PreferredAuthentications set.
-    // Reject genuine none success anywhere, including beside spoofed remote
-    // stderr/banner text that claims publickey success.
-    stderr.contains("Authenticated to ")
-        && stderr.contains(" using \"publickey\".")
-        && !stderr.contains("using \"none\"")
+/// Windows OpenSSH prefixes forced verbose diagnostics with its local source
+/// path, line number, and process ID. Require that shape and the exact
+/// allowlisted source file before consuming a message. A server identification
+/// line is logged from a different call site and remains untrusted text.
+pub(crate) fn local_diagnostic_message<'a>(
+    line: &'a str,
+    source: &str,
+    function: &str,
+    marker: &str,
+) -> Option<&'a str> {
+    let line = line.strip_prefix("debug1: ").unwrap_or(line);
+    let source_offset = line.find(source)?;
+    let source_prefix = &line[..source_offset];
+    if !source_prefix.is_empty() && !source_prefix.ends_with(['/', '\\']) {
+        return None;
+    }
+    let location = &line[source_offset + source.len()..];
+    let (actual_function, location) = location.strip_prefix(':')?.split_once("():")?;
+    if actual_function != function {
+        return None;
+    }
+    let (line_number, location) = location.split_once(" (pid=")?;
+    if line_number.is_empty() || !line_number.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    let (pid, message) = location.split_once("): ")?;
+    if pid.is_empty() || !pid.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    message.strip_prefix(marker)
+}
+pub(crate) fn none_authenticated(diagnostics: &str) -> bool {
+    diagnostics.lines().any(|line| {
+        local_diagnostic_message(line, "sshconnect2.c", "ssh_userauth2", "Authenticated to ")
+            .is_some_and(|message| message.ends_with(" using \"none\"."))
+    })
+}
+pub(crate) fn publickey_authenticated(diagnostics: &str) -> bool {
+    diagnostics.lines().any(|line| {
+        local_diagnostic_message(line, "sshconnect2.c", "ssh_userauth2", "Authenticated to ")
+            .is_some_and(|message| message.ends_with(" using \"publickey\"."))
+    }) && !none_authenticated(diagnostics)
 }
 pub(crate) fn classify(stderr: &str) -> SshCheckState {
     if stderr.contains("REMOTE HOST IDENTIFICATION HAS CHANGED") {
@@ -566,25 +617,40 @@ mod tests {
     fn diagnostics_expose_only_valid_fingerprints_and_fixed_states() {
         let fingerprint_value = "A".repeat(43);
         let raw = format!(
-            "debug1: Server host key: ssh-ed25519 SHA256:{fingerprint_value}\nsynthetic-private-banner"
+            "debug1: C:\\Windows\\System32\\OpenSSH\\sshconnect.c:verify_host_key():1451 (pid=41): Server host key: ssh-ed25519 SHA256:{fingerprint_value}\nsynthetic-private-banner"
         );
         assert_eq!(
             fingerprint(&raw),
             Some(("ssh-ed25519".into(), format!("SHA256:{fingerprint_value}")))
         );
-        assert!(fingerprint("debug1: Server host key: bad$key SHA256:secret").is_none());
+        assert!(fingerprint(
+            "debug1: C:\\Windows\\System32\\OpenSSH\\sshconnect.c:verify_host_key():1451 (pid=41): Server host key: bad$key SHA256:secret"
+        )
+        .is_none());
+        assert!(fingerprint(&format!(
+            "debug1: C:\\Windows\\System32\\OpenSSH\\sshconnect.c:ssh_exchange_identification():345 (pid=41): Server host key: ssh-ed25519 SHA256:{fingerprint_value}"
+        )).is_none());
         assert!(classify("REMOTE HOST IDENTIFICATION HAS CHANGED") == SshCheckState::ChangedHost);
         assert!(classify("Host key verification failed") == SshCheckState::UnknownHost);
         assert!(classify("Permission denied (publickey)") == SshCheckState::AuthenticationFailed);
         assert!(classify("Connection refused") == SshCheckState::Unreachable);
         assert!(publickey_authenticated(
-            "Authenticated to host using \"publickey\"."
+            "C:\\Windows\\System32\\OpenSSH\\sshconnect2.c:ssh_userauth2():501 (pid=41): Authenticated to host using \"publickey\"."
         ));
         assert!(!publickey_authenticated(
-            "Authenticated to host using \"none\".\nAuthenticated to spoofed using \"publickey\"."
+            "C:\\Windows\\System32\\OpenSSH\\sshconnect2.c:ssh_userauth2():501 (pid=41): Authenticated to host using \"none\".\nC:\\Windows\\System32\\OpenSSH\\sshconnect2.c:ssh_userauth2():501 (pid=41): Authenticated to spoofed using \"publickey\"."
         ));
         assert!(!publickey_authenticated(
-            "banner-prefixAuthenticated to host using \"none\".\nAuthenticated to spoofed using \"publickey\"."
+            "banner-prefix Authenticated to host using \"none\".\nAuthenticated to spoofed using \"publickey\"."
+        ));
+        assert!(!none_authenticated(
+            "Authenticated to spoofed using \"none\"."
+        ));
+        assert!(publickey_authenticated(
+            "Authenticated to spoofed using \"none\".\nC:\\Windows\\System32\\OpenSSH\\sshconnect2.c:ssh_userauth2():501 (pid=41): Authenticated to host using \"publickey\"."
+        ));
+        assert!(!publickey_authenticated(
+            "debug1: C:\\Windows\\System32\\OpenSSH\\sshconnect.c:ssh_exchange_identification():345 (pid=41): Authenticated to spoofed using \"publickey\"."
         ));
     }
     #[test]

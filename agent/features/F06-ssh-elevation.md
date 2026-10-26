@@ -54,7 +54,7 @@ Stop on unexpected trust changes or unavailable identity; never auto-accept host
 
 ## T013 — Implement protected SSH sessions and per-action sudo
 
-<!-- atlas-ticket: {"id":"T013","feature":"F06","status":"blocked","depends_on":["T012","T014"],"evidence":"../evidence/T013-blocker.md"} -->
+<!-- atlas-ticket: {"id":"T013","feature":"F06","status":"done","depends_on":["T012","T014"],"evidence":"../evidence/T013-progress.md"} -->
 
 ### Outcome and included work
 
@@ -74,9 +74,9 @@ Reuse T014's proven desktop protected-session/clearing core. This ticket needs f
 
 ### Acceptance criteria
 
-- [ ] Protected results are fetched only after SSH authentication and cleared at session expiry/lock/revoke.
-- [ ] Every privileged action requires its own visible approval/password flow; wrong-password/cancel/failure leaves no reusable secret or privileged handle.
-- [ ] Expired handles cannot read/mutate; persistent public inventory and logs contain no protected results or passwords.
+- [x] Protected results are fetched only after SSH authentication and cleared at session expiry/lock/revoke.
+- [x] Every privileged action requires its own visible approval/password flow; wrong-password/cancel/failure leaves no reusable secret or privileged handle.
+- [x] Expired handles cannot read/mutate; persistent public inventory and logs contain no protected results or passwords.
 
 ### Verification
 
@@ -84,7 +84,7 @@ Focused expiry/cancel/denial and secret-retention tests with a controlled sudo f
 
 ### Evidence and closure
 
-Current state: **blocked**. The controlled wrong-password case returns `IoFailure` before the pre-authentication command gate can be released. Windows OpenSSH reports sharing violation 32 when Atlas tries to read its active `-E` log. See [the blocker record](../evidence/T013-blocker.md) and [D023](../discovery/D023-windows-ssh-log-sharing.md). Keep the gate: automatic review rejected a variant that would have removed it. Do not weaken the authentication boundary. Resume only with a log-capture approach that preserves the pre-auth gate, then rerun the focused disposable sudo fixture and obtain review.
+Windows server and pre-identification banner spoofing are blocked by quiet OpenSSH logging, exact source-function `LogVerbose` diagnostics, and source-qualified parsing; the pre-authentication gate remains and waits for the public-key method and session-pinned host fingerprint. Disposable elevation and SFTP regressions pass, the native Windows journey passed, and bounded independent re-review found no concrete bypass. See [T013 acceptance](../evidence/T013-progress.md), [original blocker evidence](../evidence/T013-blocker.md), [D023](../discovery/D023-windows-ssh-log-sharing.md) and [D025](../discovery/D025-banner-safe-openssh-diagnostics.md). Owner-facing release acceptance remains T026.
 
 ### Stop conditions
 

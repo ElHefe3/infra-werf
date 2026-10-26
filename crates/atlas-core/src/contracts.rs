@@ -1,4 +1,7 @@
-use crate::validation;
+use crate::{
+    health::{HealthProbeConfig, HealthSnapshot, ProbeKind, ServiceHealth},
+    validation,
+};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Deserializer, Serialize};
 use ts_rs::{Config, TS};
@@ -73,7 +76,7 @@ impl std::error::Error for AtlasError {}
 
 macro_rules! identity {
     ($name:ident) => {
-        #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+        #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, TS)]
         #[serde(transparent)]
         pub struct $name(String);
         impl $name {
@@ -190,12 +193,41 @@ impl Default for HostReachability {
 pub struct BaselineInventory {
     pub hostname: String,
     pub collected_at: String,
+    /// SSH alias authenticated by Atlas for this complete refresh. Older and
+    /// imported observations remain readable but cannot grant live workloads.
+    #[serde(default)]
+    pub source_host: Option<String>,
+    /// Digest of the resolved SSH profile, authenticated remote key and account
+    /// used for this complete refresh. Imports deliberately cannot supply it.
+    #[serde(default)]
+    pub source_binding: Option<String>,
     #[ts(type = "number")]
     pub cpus: u64,
     #[ts(type = "number")]
     pub memory_total_kib: u64,
     pub services: Vec<ServiceSummary>,
     pub containers: Vec<ContainerSummary>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum InventoryRefreshStatus {
+    Updated,
+    Unchanged,
+    Partial,
+}
+
+/// Ephemeral result of an explicit authenticated inventory refresh.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct InventoryRefreshResult {
+    pub contract_version: u32,
+    pub server_id: ServerId,
+    pub status: InventoryRefreshStatus,
+    /// Timestamp reported by the remote collection command.
+    pub source_collected_at: Option<String>,
+    /// Local time Atlas received and handled the refresh result.
+    pub refreshed_at: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -413,7 +445,13 @@ pub fn typescript_contracts() -> String {
         Reachability,
         Health,
         HostReachability,
+        ProbeKind,
+        HealthProbeConfig,
+        ServiceHealth,
+        HealthSnapshot,
         BaselineInventory,
+        InventoryRefreshStatus,
+        InventoryRefreshResult,
         ServiceSummary,
         ContainerSummary,
         MapServer,
@@ -431,5 +469,12 @@ pub fn typescript_contracts() -> String {
     output.push_str(&crate::operations::typescript_contracts(&cfg));
     output.push_str(&crate::ssh::typescript_contracts(&cfg));
     output.push_str(&crate::files::typescript_contracts());
+    output.push_str(&crate::workloads::typescript_contracts());
+    let mut output = output
+        .lines()
+        .map(str::trim_end)
+        .collect::<Vec<_>>()
+        .join("\n");
+    output.push('\n');
     output
 }

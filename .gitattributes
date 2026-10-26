@@ -1,0 +1,3 @@
+scripts/fixtures/linux/*.sh text eol=lf
+scripts/fixtures/linux/Containerfile text eol=lf
+scripts/fixtures/linux/sshd_config text eol=lf

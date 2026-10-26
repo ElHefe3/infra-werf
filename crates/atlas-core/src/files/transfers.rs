@@ -150,6 +150,307 @@ impl LocalTransfer {
         }
     }
 }
+
+fn cleanup_entry(
+    client: &mut Client,
+    path: Vec<u8>,
+    directory: bool,
+    context: &mut ExecutionContext,
+) -> Result<(), AtlasError> {
+    let change = if directory {
+        WireChange::Rmdir(path)
+    } else {
+        WireChange::Remove(path)
+    };
+    match client.mutate(&change, context)? {
+        Ok(()) => Ok(()),
+        Err(failure) if failure.code == ErrorCode::NotFound => Ok(()),
+        Err(failure) => Err(failure),
+    }
+}
+
+pub(super) fn cleanup_placement(
+    client: &mut Client,
+    placement: &elevation::Placement,
+    context: &mut ExecutionContext,
+) -> Result<(), AtlasError> {
+    let attrs = match client.stat(&placement.stage_dir, context) {
+        Ok(attrs) => attrs,
+        Err(failure) if failure.code == ErrorCode::NotFound => return Ok(()),
+        Err(failure) => return Err(failure),
+    };
+    if kind(&attrs) != FileKind::Directory
+        || placement
+            .stage_owner
+            .is_some_and(|owner| attrs.uid != Some(owner))
+        || attrs.permissions.map(|mode| mode & 0o777) != Some(0o700)
+        || client.canonical(&placement.stage_dir, context)? != placement.stage_dir
+    {
+        return Err(error(ErrorCode::Denied));
+    }
+    match client.stat(&placement.stage_path, context) {
+        Ok(attrs) => {
+            if kind(&attrs) != FileKind::File
+                || placement
+                    .stage_owner
+                    .is_some_and(|owner| attrs.uid != Some(owner))
+                || attrs.permissions.map(|mode| mode & 0o777) != Some(0o600)
+            {
+                return Err(error(ErrorCode::Denied));
+            }
+            cleanup_entry(client, placement.stage_path.clone(), false, context)?;
+        }
+        Err(failure) if failure.code == ErrorCode::NotFound => {}
+        Err(failure) => return Err(failure),
+    }
+    cleanup_entry(client, placement.stage_dir.clone(), true, context)
+}
+
+fn stage_protected_upload(
+    client: &mut Client,
+    home: &[u8],
+    resource_id: &str,
+    label: &str,
+    file: &mut File,
+    total: u64,
+    session: &Session,
+    policy: SessionPolicy,
+    context: &mut ExecutionContext,
+) -> Result<elevation::Placement, AtlasError> {
+    let stage_id = token();
+    let stage_dir = joined(home, format!(".atlas-protected-{stage_id}").as_bytes())?;
+    let payload = joined(&stage_dir, b"payload")?;
+    let staging_location = sftp::display(&payload);
+    if let Err(failure) = client.private_dir(&stage_dir, context) {
+        if cleanup_entry(client, stage_dir.clone(), true, context).is_ok() {
+            return Err(failure);
+        }
+        return Ok(unready_placement(
+            stage_id,
+            stage_dir,
+            payload,
+            resource_id,
+            label,
+            0,
+            staging_location,
+            None,
+            failure.code,
+        ));
+    }
+    let stage_directory = match client.stat(&stage_dir, context) {
+        Ok(attrs) => attrs,
+        Err(failure) => {
+            if cleanup_entry(client, stage_dir.clone(), true, context).is_ok() {
+                return Err(failure);
+            }
+            return Ok(unready_placement(
+                stage_id,
+                stage_dir,
+                payload,
+                resource_id,
+                label,
+                0,
+                staging_location,
+                None,
+                failure.code,
+            ));
+        }
+    };
+    let stage_owner = stage_directory.uid;
+    let canonical = client.canonical(&stage_dir, context);
+    if kind(&stage_directory) != FileKind::Directory
+        || stage_directory.permissions.map(|mode| mode & 0o777) != Some(0o700)
+        || !matches!(canonical.as_ref(), Ok(path) if path == &stage_dir)
+        || stage_owner.is_none()
+    {
+        let failure = canonical.err().unwrap_or_else(|| error(ErrorCode::Denied));
+        let cleanup_spec = elevation::Placement {
+            stage_id: stage_id.clone(),
+            stage_dir: stage_dir.clone(),
+            stage_path: payload.clone(),
+            resource_id: resource_id.to_owned(),
+            stage: ProtectedPlacementStage {
+                stage_id: stage_id.clone(),
+                name: label.to_owned(),
+                size_bytes: "0".into(),
+                sha256: None,
+                staging_location: staging_location.clone(),
+                cleanup_needed: true,
+                failure: Some(failure.code),
+            },
+            stage_owner,
+            ready: false,
+            applied: false,
+        };
+        if cleanup_placement(client, &cleanup_spec, context).is_ok() {
+            return Err(failure);
+        }
+        return Ok(unready_placement(
+            stage_id,
+            stage_dir,
+            payload,
+            resource_id,
+            label,
+            0,
+            staging_location,
+            stage_owner,
+            failure.code,
+        ));
+    }
+    let mut write_handle: Option<Vec<u8>> = None;
+    let mut read_handle: Option<Vec<u8>> = None;
+    let mut written = 0u64;
+    let mut sha256 = None;
+    let result = (|| {
+        let handle = client.open_file(&payload, true, context)?;
+        write_handle = Some(handle.clone());
+        let mut hash = Sha256::new();
+        let mut buffer = [0u8; 32768];
+        loop {
+            stage_checkpoint(session, policy, context)?;
+            let count = file
+                .read(&mut buffer)
+                .map_err(|_| error(ErrorCode::IoFailure))?;
+            if count == 0 {
+                break;
+            }
+            if written + count as u64 > total {
+                return Err(error(ErrorCode::Conflict));
+            }
+            client.write_file(&handle, written, &buffer[..count], context)?;
+            hash.update(&buffer[..count]);
+            written += count as u64;
+            *lock(&session.last_used)? = Instant::now();
+        }
+        if written != total {
+            return Err(error(ErrorCode::Conflict));
+        }
+        client.close_dir(&handle, context)?;
+        write_handle = None;
+        let expected = digest(hash);
+        let verifier = client.open_file(&payload, false, context)?;
+        read_handle = Some(verifier.clone());
+        let attrs = client.fstat(&verifier, context)?;
+        if kind(&attrs) != FileKind::File
+            || attrs.size != Some(total)
+            || attrs.permissions.map(|mode| mode & 0o777) != Some(0o600)
+        {
+            return Err(error(ErrorCode::Conflict));
+        }
+        let file_owner = attrs.uid.ok_or_else(|| error(ErrorCode::Denied))?;
+        if stage_owner != Some(file_owner) {
+            return Err(error(ErrorCode::Denied));
+        }
+        let mut verified = Sha256::new();
+        let mut read = 0u64;
+        while let Some(bytes) = client.read_file(&verifier, read, context)? {
+            stage_checkpoint(session, policy, context)?;
+            read += bytes.len() as u64;
+            if read > total {
+                return Err(error(ErrorCode::Conflict));
+            }
+            verified.update(&bytes);
+        }
+        client.close_dir(&verifier, context)?;
+        read_handle = None;
+        if read != total || digest(verified) != expected {
+            return Err(error(ErrorCode::Conflict));
+        }
+        sha256 = Some(expected);
+        Ok(())
+    })();
+    if let Err(failure) = result {
+        if let Some(handle) = read_handle.take() {
+            let _ = client.close_dir(&handle, context);
+        }
+        if let Some(handle) = write_handle.take() {
+            let _ = client.close_dir(&handle, context);
+        }
+        let cleanup_spec = unready_placement(
+            stage_id.clone(),
+            stage_dir.clone(),
+            payload.clone(),
+            resource_id,
+            label,
+            written,
+            staging_location.clone(),
+            stage_owner,
+            failure.code,
+        );
+        let cleanup = cleanup_placement(client, &cleanup_spec, context);
+        if cleanup.is_ok() {
+            return Err(failure);
+        }
+        return Ok(cleanup_spec);
+    }
+    let stage = ProtectedPlacementStage {
+        stage_id: stage_id.clone(),
+        name: label.to_owned(),
+        size_bytes: total.to_string(),
+        sha256,
+        staging_location,
+        cleanup_needed: false,
+        failure: None,
+    };
+    Ok(elevation::Placement {
+        stage_id,
+        stage_dir,
+        stage_path: payload,
+        resource_id: resource_id.to_owned(),
+        stage,
+        stage_owner,
+        ready: true,
+        applied: false,
+    })
+}
+
+fn unready_placement(
+    stage_id: String,
+    stage_dir: Vec<u8>,
+    stage_path: Vec<u8>,
+    resource_id: &str,
+    name: &str,
+    size_bytes: u64,
+    staging_location: String,
+    stage_owner: Option<u32>,
+    failure: ErrorCode,
+) -> elevation::Placement {
+    elevation::Placement {
+        stage_id: stage_id.clone(),
+        stage_dir,
+        stage_path,
+        resource_id: resource_id.to_owned(),
+        stage: ProtectedPlacementStage {
+            stage_id,
+            name: name.to_owned(),
+            size_bytes: size_bytes.to_string(),
+            sha256: None,
+            staging_location,
+            cleanup_needed: true,
+            failure: Some(failure),
+        },
+        stage_owner,
+        ready: false,
+        applied: false,
+    }
+}
+
+fn stage_checkpoint(
+    session: &Session,
+    policy: SessionPolicy,
+    context: &ExecutionContext,
+) -> Result<(), AtlasError> {
+    context.checkpoint()?;
+    if !session.valid(policy) {
+        return Err(error(ErrorCode::ExpiredSession));
+    }
+    if !session.visible.load(Ordering::Acquire) || session.close_requested.load(Ordering::Acquire) {
+        return Err(error(ErrorCode::Cancelled));
+    }
+    *lock(&session.last_used)? = Instant::now();
+    Ok(())
+}
+
 struct Record {
     view: Mutex<TransferView>,
     session: Weak<Session>,
@@ -350,6 +651,186 @@ impl FileSessions {
         if !view.state.terminal() {
             record.cancel.store(true, Ordering::Release);
             view.state = TransferState::Cancelling;
+        }
+        Ok(())
+    }
+    pub fn stage_protected_upload(
+        &self,
+        target: &ServerTarget,
+        id: &SessionId,
+        resource_id: &str,
+        local: LocalTransfer,
+    ) -> Result<ProtectedPlacementStage, AtlasError> {
+        let LocalTransfer { source, label } = local;
+        let (mut file, size) = match source {
+            LocalData::Upload { file, size } => (file, size),
+            LocalData::Download { .. } => return Err(error(ErrorCode::InvalidInput)),
+        };
+        name(&label)?;
+        let resource_id = resource_id.to_owned();
+        let session = self.session(target, id)?;
+        {
+            let _stage_gate = lock(&session.stage_gate)?;
+            if !session.view_valid(self.policy) {
+                return Err(error(ErrorCode::ExpiredSession));
+            }
+            if session.staging.load(Ordering::Acquire) || lock(&session.placement)?.is_some() {
+                return Err(error(ErrorCode::Conflict));
+            }
+            let data = session
+                .data
+                .try_lock()
+                .map_err(|_| error(ErrorCode::Conflict))?;
+            if !data
+                .resources
+                .get(&resource_id)
+                .is_some_and(|resource| resource.kind == FileKind::Directory)
+            {
+                return Err(error(ErrorCode::Denied));
+            }
+            session.staging.store(true, Ordering::Release);
+        }
+        let ticket = match self.broker.prepare(
+            Some(&self.authority),
+            target,
+            InspectionRequest {
+                server_id: target.server_id().clone(),
+                session_id: id.clone(),
+                inspection: Inspection::SftpTransfer {
+                    resource_id: resource_id.clone(),
+                },
+            },
+        ) {
+            Ok(ticket) => ticket,
+            Err(failure) => {
+                let _stage_gate = lock(&session.stage_gate)?;
+                session.staging.store(false, Ordering::Release);
+                let close_after_failure = session.close_requested.load(Ordering::Acquire)
+                    && lock(&session.placement)?.is_none();
+                drop(_stage_gate);
+                if close_after_failure {
+                    self.close(id)?;
+                }
+                return Err(failure);
+            }
+        };
+        session.transfers.fetch_add(1, Ordering::AcqRel);
+        let worker = session.clone();
+        let policy = self.policy;
+        let operation = self.broker.execute_transfer(
+            Some(&self.authority),
+            &ticket.operation_id,
+            target,
+            move |_, context| {
+                if !worker.view_valid(policy) {
+                    return Err(error(ErrorCode::ExpiredSession));
+                }
+                let mut data = worker
+                    .data
+                    .try_lock()
+                    .map_err(|_| error(ErrorCode::Conflict))?;
+                if !data
+                    .resources
+                    .get(&resource_id)
+                    .is_some_and(|resource| resource.kind == FileKind::Directory)
+                    || lock(&worker.placement)?.is_some()
+                {
+                    return Err(error(ErrorCode::Conflict));
+                }
+                let home = data.home_path.clone();
+                let mut placement = stage_protected_upload(
+                    &mut data.client,
+                    &home,
+                    &resource_id,
+                    &label,
+                    &mut file,
+                    size,
+                    &worker,
+                    policy,
+                    context,
+                )?;
+                if !worker.visible.load(Ordering::Acquire) {
+                    if cleanup_placement(&mut data.client, &placement, context).is_ok() {
+                        return Err(error(ErrorCode::Cancelled));
+                    }
+                    placement.stage.cleanup_needed = true;
+                }
+                let stage = placement.stage.clone();
+                *lock(&worker.placement)? = Some(placement);
+                *lock(&worker.last_used)? = Instant::now();
+                let serialized =
+                    serde_json::to_string(&stage).map_err(|_| error(ErrorCode::IoFailure))?;
+                context.write(&serialized)
+            },
+        );
+        let remaining = session.transfers.fetch_sub(1, Ordering::AcqRel) - 1;
+        let _stage_gate = lock(&session.stage_gate)?;
+        let has_cleanup_handle = lock(&session.placement)?.is_some();
+        let close_after_stage =
+            remaining == 0 && !session.visible.load(Ordering::Acquire) && !has_cleanup_handle;
+        session.staging.store(false, Ordering::Release);
+        drop(_stage_gate);
+        if close_after_stage
+            || (session.close_requested.load(Ordering::Acquire) && !has_cleanup_handle)
+            || (session.close_requested.load(Ordering::Acquire) && !session.cleanup_valid())
+        {
+            self.close(id)?;
+        }
+        let result = operation?;
+        serde_json::from_str(&result).map_err(|_| error(ErrorCode::IoFailure))
+    }
+    pub fn cancel_protected_placement(
+        &self,
+        target: &ServerTarget,
+        id: &SessionId,
+        resource_id: &str,
+    ) -> Result<(), AtlasError> {
+        let session = self.session_for_cleanup(target, id)?;
+        let placement = lock(&session.placement)?
+            .as_ref()
+            .filter(|placement| placement.resource_id == resource_id)
+            .cloned()
+            .ok_or_else(|| error(ErrorCode::NotFound))?;
+        let ticket = self.broker.prepare(
+            Some(&self.authority),
+            target,
+            InspectionRequest {
+                server_id: target.server_id().clone(),
+                session_id: id.clone(),
+                inspection: Inspection::SftpMutation {
+                    resource_id: resource_id.to_owned(),
+                },
+            },
+        )?;
+        let worker = session.clone();
+        self.broker.execute_mutation(
+            Some(&self.authority),
+            &ticket.operation_id,
+            target,
+            move |_, context| {
+                if !worker.cleanup_valid() {
+                    return Err(error(ErrorCode::ExpiredSession));
+                }
+                let mut data = worker
+                    .data
+                    .try_lock()
+                    .map_err(|_| error(ErrorCode::Conflict))?;
+                cleanup_placement(&mut data.client, &placement, context)?;
+                let mut current = lock(&worker.placement)?;
+                if current
+                    .as_ref()
+                    .is_some_and(|active| active.stage_id == placement.stage_id)
+                {
+                    *current = None;
+                }
+                *lock(&worker.last_used)? = Instant::now();
+                context.write("removed")
+            },
+        )?;
+        if !session.visible.load(Ordering::Acquire)
+            && session.transfers.load(Ordering::Acquire) == 0
+        {
+            self.close(id)?;
         }
         Ok(())
     }

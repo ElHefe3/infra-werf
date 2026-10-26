@@ -1,17 +1,26 @@
-use atlas_core::files::{LocalSelection, LocalTransfer, TransferDirection, TransferView};
+use atlas_core::files::{
+    ActionPassword, ElevationPreview, ElevationReceipt, LocalSelection, LocalTransfer,
+    ProtectedPlacementReceipt, ProtectedPlacementRequest, ProtectedPlacementStage,
+    TransferDirection, TransferView,
+};
 use atlas_core::*;
 use atlas_core::{
     files::{
         FileAction, FileChange, FileMutationPreview, FileMutationReceipt, FileResult, FileSession,
         FileSessions, SessionPolicy,
     },
+    health::{HealthProbeConfig, HealthSnapshot, SharedSnapshot, backoff_seconds, probe_once},
     operations::{Authority, OperationBroker, OperationTicket, ServerTarget},
     ssh::{SshOptions, SshVerification},
+    workloads::WorkloadInspection,
 };
 use std::{
     collections::HashMap,
     path::PathBuf,
+    sync::atomic::AtomicBool,
     sync::{Arc, Mutex},
+    thread,
+    time::{Duration, Instant},
 };
 struct LocalGrant {
     value: LocalTransfer,
@@ -67,6 +76,22 @@ struct Lifecycle {
     closing: bool,
 }
 
+struct HealthTask {
+    config: HealthProbeConfig,
+    snapshot: SharedSnapshot,
+    cancel: Arc<AtomicBool>,
+    generation: u64,
+    due: Instant,
+    active: bool,
+    failures: u8,
+}
+#[derive(Default)]
+struct HealthMonitor {
+    tasks: HashMap<ServerId, HealthTask>,
+    active: usize,
+    generation: u64,
+}
+
 pub struct Workspace {
     paths: Paths,
     store: Mutex<Result<Store, AtlasError>>,
@@ -76,6 +101,7 @@ pub struct Workspace {
     ssh: SshOptions,
     files: FileSessions,
     local_grants: Mutex<HashMap<String, LocalGrant>>,
+    health: Arc<Mutex<HealthMonitor>>,
 }
 
 impl Workspace {
@@ -101,6 +127,7 @@ impl Workspace {
             ssh,
             files,
             local_grants: Mutex::new(HashMap::new()),
+            health: Arc::new(Mutex::new(HealthMonitor::default())),
         })
     }
 
@@ -126,6 +153,7 @@ impl Workspace {
     /// The same lock admits operations and closes the app, avoiding a race
     /// between the close event and a queued persistence operation.
     pub fn request_close(&self) -> bool {
+        self.cancel_all_health();
         let Ok(mut lifecycle) = self.lifecycle.lock() else {
             return false;
         };
@@ -152,9 +180,197 @@ impl Workspace {
         if lock.is_err() {
             *lock = self.paths.open();
         }
-        match &*lock {
+        let snapshot = match &*lock {
             Ok(store) => store.snapshot(),
             Err(error) => Err(error.clone()),
+        }?;
+        self.apply_health(snapshot)
+    }
+
+    pub fn apply_health(&self, mut state: MapState) -> Result<MapState, AtlasError> {
+        let monitor = self.health.lock().map_err(|_| failure())?;
+        for server in &mut state.servers {
+            if let Some(task) = monitor.tasks.get(&server.id) {
+                server.reachability = task.snapshot.get()?.host_reachability;
+            }
+        }
+        Ok(state)
+    }
+
+    pub fn configure_health(
+        &self,
+        id: &ServerId,
+        config: HealthProbeConfig,
+    ) -> Result<HealthSnapshot, AtlasError> {
+        config.validate()?;
+        if config.server_id != *id || self.ssh_target(id)?.host() != config.host {
+            return Err(AtlasError::new(ErrorCode::Denied));
+        }
+        let snapshot = SharedSnapshot::new(&config);
+        let initial = snapshot.get()?;
+        let mut monitor = self.health.lock().map_err(|_| failure())?;
+        if let Some(previous) = monitor.tasks.remove(id) {
+            previous
+                .cancel
+                .store(true, std::sync::atomic::Ordering::Release);
+        }
+        monitor.generation = monitor.generation.wrapping_add(1).max(1);
+        let generation = monitor.generation;
+        monitor.tasks.insert(
+            id.clone(),
+            HealthTask {
+                config,
+                snapshot,
+                cancel: Arc::new(AtomicBool::new(false)),
+                generation,
+                due: Instant::now(),
+                active: false,
+                failures: 0,
+            },
+        );
+        Ok(initial)
+    }
+
+    pub fn health_status(&self, id: &ServerId) -> Result<HealthSnapshot, AtlasError> {
+        self.health
+            .lock()
+            .map_err(|_| failure())?
+            .tasks
+            .get(id)
+            .ok_or_else(|| AtlasError::new(ErrorCode::NotFound))?
+            .snapshot
+            .get()
+    }
+
+    pub fn cancel_health(&self, id: &ServerId) -> Result<(), AtlasError> {
+        if let Some(task) = self.health.lock().map_err(|_| failure())?.tasks.remove(id) {
+            task.cancel
+                .store(true, std::sync::atomic::Ordering::Release);
+        }
+        Ok(())
+    }
+
+    pub fn tick_health(self: &Arc<Self>) {
+        let selected = {
+            let Ok(mut monitor) = self.health.lock() else {
+                return;
+            };
+            if monitor.active >= 4 {
+                return;
+            }
+            let now = Instant::now();
+            let selected = {
+                let Some((id, task)) = monitor
+                    .tasks
+                    .iter_mut()
+                    .find(|(_, task)| !task.active && task.due <= now)
+                else {
+                    return;
+                };
+                task.active = true;
+                (
+                    id.clone(),
+                    task.config.clone(),
+                    task.snapshot.clone(),
+                    task.cancel.clone(),
+                    task.generation,
+                )
+            };
+            monitor.active += 1;
+            selected
+        };
+        let operation = match self.begin() {
+            Ok(value) => value,
+            Err(_) => {
+                if let Ok(mut monitor) = self.health.lock() {
+                    monitor.active = monitor.active.saturating_sub(1);
+                    if let Some(task) = monitor.tasks.get_mut(&selected.0) {
+                        task.active = false;
+                    }
+                }
+                return;
+            }
+        };
+        let workspace = self.clone();
+        let failed_id = selected.0.clone();
+        if thread::Builder::new()
+            .name("atlas-health-probe".into())
+            .spawn(move || {
+                let _operation = operation;
+                let result = probe_once(&selected.1, &selected.3);
+                let Ok(mut monitor) = workspace.health.lock() else {
+                    return;
+                };
+                monitor.active = monitor.active.saturating_sub(1);
+                let Some(task) = monitor
+                    .tasks
+                    .get_mut(&selected.0)
+                    .filter(|task| task.generation == selected.4)
+                else {
+                    return;
+                };
+                task.active = false;
+                match result {
+                    Ok(mut snapshot) if !selected.3.load(std::sync::atomic::Ordering::Acquire) => {
+                        if let Ok(previous) = selected.2.get() {
+                            if snapshot.host_reachability.last_success_at.is_none() {
+                                snapshot.host_reachability.last_success_at =
+                                    previous.host_reachability.last_success_at;
+                            }
+                            if snapshot.host_reachability.last_failure_at.is_none() {
+                                snapshot.host_reachability.last_failure_at =
+                                    previous.host_reachability.last_failure_at;
+                            }
+                            if snapshot.service.last_success_at.is_none() {
+                                snapshot.service.last_success_at = previous.service.last_success_at;
+                            }
+                            if snapshot.service.last_failure_at.is_none() {
+                                snapshot.service.last_failure_at = previous.service.last_failure_at;
+                            }
+                        }
+                        let failed = snapshot.host_reachability.state != Reachability::Reachable
+                            || snapshot.service.state != Health::Healthy;
+                        let delay = if failed {
+                            let delay =
+                                backoff_seconds(task.config.interval_seconds, task.failures);
+                            task.failures = task.failures.saturating_add(1);
+                            delay
+                        } else {
+                            task.failures = 0;
+                            u64::from(task.config.interval_seconds)
+                        };
+                        let _ = task.snapshot.set(snapshot);
+                        task.due = Instant::now() + Duration::from_secs(delay);
+                    }
+                    Err(error) if error.code == ErrorCode::Cancelled => {}
+                    _ => {
+                        task.failures = task.failures.saturating_add(1);
+                        task.due = Instant::now()
+                            + Duration::from_secs(backoff_seconds(
+                                task.config.interval_seconds,
+                                task.failures,
+                            ));
+                    }
+                }
+            })
+            .is_err()
+        {
+            if let Ok(mut monitor) = self.health.lock() {
+                monitor.active = monitor.active.saturating_sub(1);
+                if let Some(task) = monitor.tasks.get_mut(&failed_id) {
+                    task.active = false;
+                    task.due = Instant::now() + Duration::from_secs(1);
+                }
+            }
+        }
+    }
+
+    fn cancel_all_health(&self) {
+        if let Ok(mut monitor) = self.health.lock() {
+            for (_, task) in monitor.tasks.drain() {
+                task.cancel
+                    .store(true, std::sync::atomic::Ordering::Release);
+            }
         }
     }
 
@@ -164,10 +380,11 @@ impl Workspace {
             .reports
             .as_ref()
             .ok_or_else(|| AtlasError::new(ErrorCode::Denied))?;
-        self.with_store(|store| {
+        let state = self.with_store(|store| {
             store.import_reports(path)?;
             store.snapshot()
-        })
+        })?;
+        self.apply_health(state)
     }
     fn ssh_target(&self, id: &ServerId) -> Result<ServerTarget, AtlasError> {
         let state = self.with_store(|store| store.snapshot())?;
@@ -223,12 +440,94 @@ impl Workspace {
     ) -> Result<FileSession, AtlasError> {
         let admission = self.begin()?;
         let target = self.ssh_target(id)?;
-        let result = self.files.open(&target, operation, Box::new(admission))?;
-        if !self.ssh_target(id).is_ok_and(|current| current == target) {
+        let inventory = self.with_store(|store| {
+            let state = store.snapshot()?;
+            let server = state
+                .servers
+                .iter()
+                .find(|server| server.id == *id)
+                .ok_or_else(|| AtlasError::new(ErrorCode::NotFound))?;
+            if server.host != target.host() {
+                return Err(AtlasError::new(ErrorCode::Denied));
+            }
+            Ok(server.inventory.clone())
+        })?;
+        let result =
+            self.files
+                .open(&target, operation, Box::new(admission), inventory.as_ref())?;
+        let still_current = self.with_store(|store| {
+            let state = store.snapshot()?;
+            let server = state
+                .servers
+                .iter()
+                .find(|server| server.id == *id)
+                .ok_or_else(|| AtlasError::new(ErrorCode::NotFound))?;
+            Ok(server.host == target.host() && server.inventory == inventory)
+        })?;
+        if !still_current || !self.ssh_target(id).is_ok_and(|current| current == target) {
             self.files.close(&result.session_id)?;
             return Err(AtlasError::new(ErrorCode::Denied));
         }
         Ok(result)
+    }
+    pub fn refresh_inventory(
+        self: &Arc<Self>,
+        id: &ServerId,
+    ) -> Result<InventoryRefreshResult, AtlasError> {
+        let _refresh_admission = self.begin()?;
+        let target = self.ssh_target(id)?;
+        let ticket = self.files.prepare(&target)?;
+        let session_admission = self.begin()?;
+        let session = self.files.open(
+            &target,
+            &ticket.operation_id,
+            Box::new(session_admission),
+            None,
+        )?;
+        let collected = self.files.collect_inventory(&target, &session.session_id);
+        let closed = self.files.close(&session.session_id);
+        let probe = match (collected, closed) {
+            (Err(failure), _) => return Err(failure),
+            (Ok(_), Err(failure)) => return Err(failure),
+            (Ok(probe), Ok(())) => probe,
+        };
+        // Keep target validation and the write under the same Store mutex.
+        // Otherwise update_server could change the connection host after the
+        // check but before refresh_inventory writes by stable ServerId.
+        let (status, refreshed_at) = self.with_store(|store| {
+            let current = store.snapshot()?;
+            let server = current
+                .servers
+                .iter()
+                .find(|server| server.id == *id)
+                .ok_or_else(|| AtlasError::new(ErrorCode::NotFound))?;
+            if server.host != target.host() {
+                return Err(AtlasError::new(ErrorCode::Denied));
+            }
+            let status = match probe.inventory.as_ref() {
+                Some(inventory) => {
+                    let source_binding = probe
+                        .source_binding
+                        .as_deref()
+                        .ok_or_else(|| AtlasError::new(ErrorCode::Denied))?;
+                    if store.refresh_inventory(id, inventory, source_binding)? {
+                        InventoryRefreshStatus::Updated
+                    } else {
+                        InventoryRefreshStatus::Unchanged
+                    }
+                }
+                None => InventoryRefreshStatus::Partial,
+            };
+            let refreshed_at = store.snapshot()?.served_at;
+            Ok((status, refreshed_at))
+        })?;
+        Ok(InventoryRefreshResult {
+            contract_version: CONTRACT_VERSION,
+            server_id: id.clone(),
+            status,
+            source_collected_at: probe.source_collected_at,
+            refreshed_at,
+        })
     }
     pub fn read_files(
         self: &Arc<Self>,
@@ -245,8 +544,155 @@ impl Workspace {
         }
         Ok(result)
     }
+    pub fn inspect_workload(
+        self: &Arc<Self>,
+        id: &ServerId,
+        session: &SessionId,
+        workload_id: &str,
+    ) -> Result<WorkloadInspection, AtlasError> {
+        let _admission = self.begin()?;
+        let target = self.ssh_target(id)?;
+        let result = self.files.inspect_workload(&target, session, workload_id)?;
+        if !self.ssh_target(id).is_ok_and(|current| current == target) {
+            self.files.close(session)?;
+            return Err(AtlasError::new(ErrorCode::Denied));
+        }
+        Ok(result)
+    }
     pub fn lock_files(&self, session: &SessionId) -> Result<(), AtlasError> {
         self.files.close(session)
+    }
+    pub fn start_terminal(
+        self: &Arc<Self>,
+        id: &ServerId,
+        session: &SessionId,
+        cols: u16,
+        rows: u16,
+    ) -> Result<(), AtlasError> {
+        let _admission = self.begin()?;
+        let target = self.ssh_target(id)?;
+        self.files.start_terminal(&target, session, cols, rows)?;
+        if self.ssh_target(id)? != target {
+            self.files.close(session)?;
+            return Err(AtlasError::new(ErrorCode::Denied));
+        }
+        Ok(())
+    }
+    pub fn poll_terminal(
+        &self,
+        id: &ServerId,
+        session: &SessionId,
+    ) -> Result<atlas_core::files::TerminalPoll, AtlasError> {
+        self.files.poll_terminal(&self.ssh_target(id)?, session)
+    }
+    pub fn write_terminal(
+        self: &Arc<Self>,
+        id: &ServerId,
+        session: &SessionId,
+        bytes: &[u8],
+    ) -> Result<(), AtlasError> {
+        let _admission = self.begin()?;
+        let target = self.ssh_target(id)?;
+        self.files.write_terminal(&target, session, bytes)?;
+        if self.ssh_target(id)? != target {
+            self.files.close(session)?;
+            return Err(AtlasError::new(ErrorCode::Denied));
+        }
+        Ok(())
+    }
+    pub fn resize_terminal(
+        self: &Arc<Self>,
+        id: &ServerId,
+        session: &SessionId,
+        cols: u16,
+        rows: u16,
+    ) -> Result<(), AtlasError> {
+        let _admission = self.begin()?;
+        let target = self.ssh_target(id)?;
+        self.files.resize_terminal(&target, session, cols, rows)?;
+        if self.ssh_target(id)? != target {
+            self.files.close(session)?;
+            return Err(AtlasError::new(ErrorCode::Denied));
+        }
+        Ok(())
+    }
+    pub fn preview_elevation(
+        self: &Arc<Self>,
+        id: &ServerId,
+        session: &SessionId,
+    ) -> Result<ElevationPreview, AtlasError> {
+        let _admission = self.begin()?;
+        self.files.preview_elevation(&self.ssh_target(id)?, session)
+    }
+    pub fn confirm_elevation(
+        self: &Arc<Self>,
+        id: &ServerId,
+        session: &SessionId,
+        operation: &OperationId,
+        password: ActionPassword,
+    ) -> Result<ElevationReceipt, AtlasError> {
+        let _admission = self.begin()?;
+        let target = self.ssh_target(id)?;
+        let result = self
+            .files
+            .confirm_elevation(&target, session, operation, password)?;
+        if self.ssh_target(id)? != target {
+            return Err(AtlasError::new(ErrorCode::Denied));
+        }
+        Ok(result)
+    }
+    pub fn preview_protected_placement(
+        self: &Arc<Self>,
+        id: &ServerId,
+        session: &SessionId,
+        request: ProtectedPlacementRequest,
+    ) -> Result<ElevationPreview, AtlasError> {
+        let _admission = self.begin()?;
+        let target = self.ssh_target(id)?;
+        let result = self
+            .files
+            .preview_protected_placement(&target, session, request)?;
+        if !self.ssh_target(id).is_ok_and(|current| current == target) {
+            self.files.close(session)?;
+            return Err(AtlasError::new(ErrorCode::Denied));
+        }
+        Ok(result)
+    }
+    pub fn confirm_protected_placement(
+        self: &Arc<Self>,
+        id: &ServerId,
+        session: &SessionId,
+        operation: &OperationId,
+        password: ActionPassword,
+    ) -> Result<ProtectedPlacementReceipt, AtlasError> {
+        let _admission = self.begin()?;
+        let target = self.ssh_target(id)?;
+        let result = self
+            .files
+            .confirm_protected_placement(&target, session, operation, password)?;
+        if !self.ssh_target(id).is_ok_and(|current| current == target) {
+            self.files.close(session)?;
+            return Err(AtlasError::new(ErrorCode::OutcomeUnknown));
+        }
+        Ok(result)
+    }
+    pub fn cancel_protected_placement(
+        &self,
+        id: &ServerId,
+        session: &SessionId,
+        resource: &str,
+    ) -> Result<(), AtlasError> {
+        self.files
+            .cancel_protected_placement(&self.ssh_target(id)?, session, resource)
+    }
+    pub fn cancel_elevation(
+        &self,
+        id: &ServerId,
+        session: &SessionId,
+        operation: &OperationId,
+    ) -> Result<(), AtlasError> {
+        self.files
+            .cancel_elevation(&self.ssh_target(id)?, session, operation)
     }
     pub fn release_files(&self, session: &SessionId) -> Result<(), AtlasError> {
         self.files.release_view(session)
@@ -337,6 +783,39 @@ impl Workspace {
         drop(grants);
         self.files
             .enqueue_transfer(&target, session, resource, owned.value)
+    }
+    pub fn stage_protected_placement(
+        self: &Arc<Self>,
+        id: &ServerId,
+        session: &SessionId,
+        resource: &str,
+        grant: &str,
+    ) -> Result<ProtectedPlacementStage, AtlasError> {
+        let _admission = self.begin()?;
+        let target = self.ssh_target(id)?;
+        self.files.validate_view(&target, session)?;
+        let mut grants = self.local_grants.lock().map_err(|_| failure())?;
+        let owned = grants
+            .get(grant)
+            .ok_or_else(|| AtlasError::new(ErrorCode::Denied))?;
+        if owned.target != target
+            || owned.session != *session
+            || owned.expires <= std::time::Instant::now()
+        {
+            return Err(AtlasError::new(ErrorCode::Denied));
+        }
+        let owned = grants
+            .remove(grant)
+            .ok_or_else(|| AtlasError::new(ErrorCode::Denied))?;
+        drop(grants);
+        let stage = self
+            .files
+            .stage_protected_upload(&target, session, resource, owned.value)?;
+        if !self.ssh_target(id).is_ok_and(|current| current == target) {
+            self.files.close(session)?;
+            return Err(AtlasError::new(ErrorCode::OutcomeUnknown));
+        }
+        Ok(stage)
     }
     pub fn transfers(&self) -> Result<Vec<TransferView>, AtlasError> {
         self.files.transfer_views()

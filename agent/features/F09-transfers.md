@@ -42,11 +42,11 @@ Stream bytes rather than buffering whole files, supporting native Windows select
 
 ### Verification
 
-Streaming/job-state tests and one native round-trip/interruption journey per client with controlled files; inspect bounded memory behavior without a broad benchmark campaign.
+Streaming/job-state tests and one native Windows round-trip/interruption journey with controlled files; inspect bounded memory behavior without a broad benchmark campaign. Android content-URI transfer proof remains future S09 work.
 
 ### Evidence and closure
 
-Passed in [T017 desktop acceptance](../evidence/F09-transfers-acceptance.md): actual bounded SFTP round trips, queue/recovery races, native Windows pickers/review/background/clearing/close guard, regression and resolved independent review. Elevated placement remains T018.
+Passed in [T017 desktop acceptance](../evidence/F09-transfers-acceptance.md) and [T018 protected-placement acceptance](../evidence/T018-acceptance.md): native picker/transfer and reviewed elevated placement journeys, fixture recovery proof, and bounded independent review. Startup discovery for force-quit staging remains noted in [D027](../discovery/D027-protected-stage-session-lifecycle.md).
 
 ### Stop conditions
 
@@ -54,7 +54,7 @@ Record unsupported provider/partial-transfer behavior instead of silently copyin
 
 ## T018 — Implement reviewed protected placement
 
-<!-- atlas-ticket: {"id":"T018","feature":"F09","status":"todo","depends_on":["T013","T016","T017"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T018","feature":"F09","status":"done","depends_on":["T013","T016","T017"],"evidence":"../evidence/T018-acceptance.md"} -->
 
 ### Outcome and included work
 
@@ -72,9 +72,9 @@ Use a private staging path, show affected host/path/ownership/mode, request fres
 
 ### Acceptance criteria
 
-- [ ] Unprivileged staging and protected application are distinct and require explicit reviewed elevation.
-- [ ] Wrong sudo/cancel/expired session or collision cannot silently overwrite the protected destination.
-- [ ] Success applies intended content/ownership/mode; interruption/cleanup behavior is proven and does not leak passwords or orphan unrestricted plaintext.
+- [x] Unprivileged staging and protected application are distinct and require explicit reviewed elevation.
+- [x] Wrong sudo/cancel/expired session or collision cannot silently overwrite the protected destination.
+- [x] Success applies intended content/ownership/mode; interruption/cleanup behavior is proven and does not leak passwords or orphan unrestricted plaintext.
 
 ### Verification
 
@@ -82,7 +82,7 @@ Controlled protected destination fixture: success, wrong password, cancel and fa
 
 ### Evidence and closure
 
-Use a concise [feature acceptance record](../evidence/README.md), map results to T018, attach its relative path in ticket metadata, then check only proven criteria. Record tested revision/platform/fixtures, failures, limits and rollback as applicable. Current proof: **not run**. Use [the checkpoint](../evidence/CHECKPOINT.md) at handoff.
+Use a concise [feature acceptance record](../evidence/README.md), map results to T018, attach its relative path in ticket metadata, then check only proven criteria. Record tested revision/platform/fixtures, failures, limits and rollback as applicable. Passed in [T018 acceptance](../evidence/T018-acceptance.md): actual SSH/SFTP/sudo protected staging and placement, cancellation/failure/collision, cleanup and expiry fixture, Windows debug build, native elevation regression and bounded review. [D027](../discovery/D027-protected-stage-session-lifecycle.md) records the stage/Lock and expiry recovery contract. Absolute expiry closes the session even if a restricted stage remains; the UI exposes the exact location for ordinary-user recovery. Use [the checkpoint](../evidence/CHECKPOINT.md) at handoff.
 
 ### Stop conditions
 

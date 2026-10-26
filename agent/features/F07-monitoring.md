@@ -14,11 +14,11 @@ Current owner decision (2026-10-26): desktop is the complete release target. Pho
 
 Read [SCOPE.md](../SCOPE.md) for access boundaries; use [AGENT.md](../AGENT.md) for execution/proof rules. Ticket dependencies, not numeric ordering, control implementation. Feature completion is derived from its tickets and scope gate, not independently marked done.
 
-**Relevant discoveries:** [D004](../discovery/D004-migration-baseline.md).
+**Relevant discoveries:** [D004](../discovery/D004-migration-baseline.md), [D028](../discovery/D028-health-staleness-is-a-render-time-state.md), [D029](../discovery/D029-windows-temp-sqlite-sandbox.md).
 
 ## T019 — Implement bounded HTTP/TCP health checks
 
-<!-- atlas-ticket: {"id":"T019","feature":"F07","status":"ready","depends_on":["T003","T007","T014"],"scope_entry":{"S03":["T014"]},"evidence":null} -->
+<!-- atlas-ticket: {"id":"T019","feature":"F07","status":"done","depends_on":["T003","T007","T014"],"scope_entry":{"S03":["T014"]},"evidence":"../evidence/T019-acceptance.md"} -->
 
 ### Outcome and included work
 
@@ -34,21 +34,21 @@ Use cancellable periodic HTTP/TCP checks with configured endpoints, bounded time
 
 **Ticket dependencies:** [T003](F02-domain-persistence.md), [T007](F03-react-map.md), [T014](F06-ssh-elevation.md).
 
-This bounded health-check ticket uses the completed T014 desktop entry from S03 while T013 is blocked. That entry does not complete S03; T020 and the terminal/service tickets retain their T013 dependency.
+This bounded health-check ticket uses the completed T014 desktop entry from S03 while T013 remains incomplete. That entry does not complete S03; T020 and the terminal/service tickets retain their T013 dependency.
 
 ### Acceptance criteria
 
-- [ ] Reachable host plus failing service, unreachable endpoint and missing/old observation are distinct states.
-- [ ] Check cancellation, timeout/backoff and endpoint validation prevent runaway scheduling or fabricated success.
-- [ ] Both clients receive consistent timestamped health updates without background protected collection.
+- [x] Reachable host plus failing service, unreachable endpoint and missing/old observation are distinct states.
+- [x] Check cancellation, timeout/backoff and endpoint validation prevent runaway scheduling or fabricated success.
+- [x] The Windows desktop shows timestamped host/service results without background protected collection. Android UI and its native polling adapters remain future S09 work.
 
 ### Verification
 
-Deterministic fake HTTP/TCP endpoints and clock-controlled scheduling checks; one healthy-to-failed/stale UI journey.
+Deterministic loopback HTTP/TCP fixtures, bounded interval/backoff and mid-read cancellation checks; one healthy-to-failed/stale native UI journey.
 
 ### Evidence and closure
 
-Use a concise [feature acceptance record](../evidence/README.md), map results to T019, attach its relative path in ticket metadata, then check only proven criteria. Record tested revision/platform/fixtures, failures, limits and rollback as applicable. Current proof: **not run**. Use [the checkpoint](../evidence/CHECKPOINT.md) at handoff.
+Passed in [T019 acceptance](../evidence/T019-acceptance.md): focused Rust/UI fixtures, workspace checks, rebuilt Windows app, native healthy→failed/stale/cancel journey against loopback fixtures, and bounded independent review. Mobile remains S09.
 
 ### Stop conditions
 
@@ -56,7 +56,7 @@ Record unavailable approved endpoints as setup/target blockers; do not broaden p
 
 ## T020 — Refresh approved inventory through SSH
 
-<!-- atlas-ticket: {"id":"T020","feature":"F07","status":"todo","depends_on":["T005","T013","T019"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T020","feature":"F07","status":"done","depends_on":["T005","T013","T019"],"evidence":"../evidence/T020-acceptance.md"} -->
 
 ### Outcome and included work
 
@@ -74,9 +74,9 @@ Reuse the baseline allowlist and protected-session boundary. Merge observations 
 
 ### Acceptance criteria
 
-- [ ] Approved inventory updates keep stable host/workload identity and original source times; partial/stale reports remain explicit.
-- [ ] Unapproved process/log/configuration data is not silently cached or collected by periodic overview refresh.
-- [ ] Authentication/expiry/failure leaves the last approved observation timestamped, without inventing live CPU/disk values.
+- [x] Approved inventory updates keep stable host/workload identity and original source times; partial/stale reports remain explicit.
+- [x] Unapproved process/log/configuration data is not silently cached or collected by periodic overview refresh.
+- [x] Authentication/expiry/failure leaves the last approved observation timestamped, without inventing live CPU/disk values.
 
 ### Verification
 
@@ -84,7 +84,7 @@ Allowlist/merge/freshness tests with partial and malicious reports; one authenti
 
 ### Evidence and closure
 
-Use a concise [feature acceptance record](../evidence/README.md), map results to T020, attach its relative path in ticket metadata, then check only proven criteria. Record tested revision/platform/fixtures, failures, limits and rollback as applicable. Current proof: **not run**. Use [the checkpoint](../evidence/CHECKPOINT.md) at handoff.
+Passed in [T020 acceptance](../evidence/T020-acceptance.md): focused parser/store checks, rebuilt Windows app, native authenticated success/partial/authentication-failure journey against loopback-only fixtures, and bounded independent review. See [D029](../discovery/D029-windows-temp-sqlite-sandbox.md) for the isolated SQLite test sandbox requirement. Mobile remains S09.
 
 ### Stop conditions
 

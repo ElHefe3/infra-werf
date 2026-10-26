@@ -16,7 +16,7 @@ const labels: Record<SshVerification["state"], [string, string]> = {
   failed: ["SSH verification did not complete", "The SSH check did not produce a verified response. Review your existing SSH configuration and retry."],
 };
 
-export function SshConnection({ server, onBusy }: { server: MapServer; onBusy: (busy: boolean) => void }) {
+export function SshConnection({ server, onBusy, disabled = false }: { server: MapServer; onBusy: (busy: boolean) => void; disabled?: boolean }) {
   const [result, setResult] = useState<SshVerification | null>(null);
   const [busy, setBusy] = useState(false);
   const [cancellable, setCancellable] = useState(false);
@@ -52,7 +52,7 @@ export function SshConnection({ server, onBusy }: { server: MapServer; onBusy: (
   }
   const copy = result ? labels[result.state] : null;
   return <section className="ssh-connection" aria-label="SSH connection verification">
-    <div className="section-heading"><div><h3>SSH connection</h3><p>Uses this PC’s existing OpenSSH configuration and identities.</p></div><div className="ssh-actions"><button className="primary" disabled={busy} onClick={() => void verify()}>{busy ? "Verifying SSH…" : "Verify SSH access"}</button>{busy && <button disabled={!cancellable} onClick={() => void cancel()}>Cancel check</button>}</div></div>
+    <div className="section-heading"><div><h3>SSH connection</h3><p>Uses this PC’s existing OpenSSH configuration and identities.</p></div><div className="ssh-actions"><button className="primary" disabled={busy || disabled} onClick={() => void verify()}>{busy ? "Verifying SSH…" : "Verify SSH access"}</button>{busy && <button disabled={!cancellable} onClick={() => void cancel()}>Cancel check</button>}</div></div>
     <p className="muted">Alias: <strong>{server.host}</strong> · Strict host checking · No trust-file changes</p>
     <div aria-live="polite">
       {error && <p role="alert" className="form-error">{error}</p>}
@@ -63,6 +63,6 @@ export function SshConnection({ server, onBusy }: { server: MapServer; onBusy: (
         <small>Checked {new Date(result.checked_at).toLocaleString()}</small>
       </div>}
     </div>
-    <p className="muted">Open a protected session in Files to browse. Terminal, service controls and sudo remain unavailable.</p>
+    <p className="muted">Open a protected session in Files to browse. A protected session below can check fresh sudo access. Terminal and service controls remain unavailable.</p>
   </section>;
 }

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -8,13 +8,17 @@ import { createWorkspaceClient } from "./workspace-client";
 import { SshConnection } from "./ssh-connection";
 import { FileBrowser } from "./file-browser";
 import { TransferQueue, useTransfers } from "./transfer-queue";
+import { WorkloadInspectionPanel } from "./workload-inspection";
+import { ElevationCheck } from "./elevation-check";
+import { HealthMonitor } from "./health-monitor";
 import type { MapServer, MapState, Relationship, WorkspaceStatus } from "./contracts.gen";
-import { errorMessage, inventoryRows, matches, observedLabel, workloads } from "./map-model";
+import { errorMessage, inventoryRows, matches, observedLabel, reachabilityLabel, workloads } from "./map-model";
 import "@xyflow/react/dist/style.css";
 import "./style.css";
 
 const client = createWorkspaceClient();
-const workspaceTabs = ["Services", "Files", "Terminal", "System", "Settings", "Transfers"] as const;
+const TerminalPanel = lazy(() => import("./terminal-panel").then(module => ({ default: module.TerminalPanel })));
+const workspaceTabs = ["Services", "Health", "Files", "Terminal", "System", "Settings", "Transfers"] as const;
 type WorkspaceTab = typeof workspaceTabs[number];
 type Modal = { kind: "add" } | { kind: "edit"; id: string } | { kind: "relationship"; source: string; target: string } | { kind: "remove-server"; id: string } | { kind: "remove-edge"; edge: Relationship };
 type ServerFlowNode = Node<{ server: MapServer; matched: boolean; open: (id: string) => void }, "server">;
@@ -100,20 +104,39 @@ function SavedInventory({ state, query, open, single = false }: { state: MapStat
   </div>;
 }
 
-function ServerWorkspace({ server, state, close, edit, initialTab = "Services" }: { server: MapServer; state: MapState; close: () => void; edit: () => void; initialTab?: WorkspaceTab }) {
+function ServerWorkspace({ server, state, close, edit, reload, initialTab = "Services" }: { server: MapServer; state: MapState; close: () => void; edit: () => void; reload: () => Promise<void>; initialTab?: WorkspaceTab }) {
   const [tab, setTab] = useState<WorkspaceTab>(initialTab);
   const transfers = useTransfers();
   const [filter, setFilter] = useState("");
-  const [checkingSsh, setCheckingSsh] = useState(false);
+  const [busySources, setBusySources] = useState<Record<string, boolean>>({});
+  const [refreshMessage, setRefreshMessage] = useState("");
+  const [refreshFailure, setRefreshFailure] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const reportBusy = useCallback((source: string, value: boolean) => setBusySources(current => current[source] === value ? current : { ...current, [source]: value }), []);
+  const checkingSsh = Object.values(busySources).some(Boolean);
+  const refreshInventory = async () => {
+    setRefreshing(true); setRefreshFailure(false); setRefreshMessage(""); reportBusy("inventory", true);
+    try {
+      const result = await client.refreshInventory(server.id);
+      await reload();
+      const status = result.status === "updated" ? "Approved inventory updated" : result.status === "unchanged" ? "No newer source inventory was found; the saved snapshot is unchanged" : "Collection was partial; the saved snapshot is unchanged";
+      setRefreshMessage(`${status}. Source collection: ${date(result.source_collected_at)} · Atlas received: ${date(result.refreshed_at)}.`);
+    } catch (failure) {
+      setRefreshFailure(true);
+      setRefreshMessage(`Inventory refresh failed. The last saved observation was retained. ${errorMessage(failure)}`);
+    } finally { reportBusy("inventory", false); setRefreshing(false); }
+  };
   return <Dialog title={server.name} close={close} wide busy={checkingSsh}><div className="workspace-server-line"><span>{server.host}</span><span>{observedLabel(server)} · {date(server.inventory?.collected_at)}</span></div>
     <div className="workspace-tabs" role="tablist" aria-label="Server workspace">{workspaceTabs.map(name => <button key={name} role="tab" disabled={checkingSsh} aria-selected={tab === name} onClick={() => setTab(name)}>{name}</button>)}</div>
     <section className="workspace-body" role="tabpanel" aria-label={tab}>
-      {tab === "Services" && <><div className="section-heading"><div><h3>Saved services & containers</h3><p>The last approved inventory. Live inspection and controls require SSH.</p></div><input aria-label="Filter saved workloads" placeholder="Find a workload…" value={filter} onChange={e => setFilter(e.target.value)} /></div><SavedInventory state={{ ...state, servers: [server] }} query={filter} open={() => {}} single /></>}
-      {tab === "System" && <><h3>Saved system inventory</h3>{server.inventory ? <><dl className="system-grid"><div><dt>Hostname</dt><dd>{server.inventory.hostname}</dd></div><div><dt>Logical CPUs</dt><dd>{server.inventory.cpus}</dd></div><div><dt>Total memory</dt><dd>{memory(server.inventory.memory_total_kib)}</dd></div><div><dt>Collected</dt><dd>{date(server.inventory.collected_at)}</dd></div></dl><Notice>These are saved hardware details. Live utilisation and reachability checks are not available yet.</Notice></> : <Notice>No saved system inventory is available for this server.</Notice>}</>}
-      {tab === "Settings" && <><h3>Map details</h3><dl className="system-grid"><div><dt>Name</dt><dd>{server.name}</dd></div><div><dt>Host</dt><dd>{server.host}</dd></div></dl><button className="primary" disabled={checkingSsh} onClick={edit}>Edit server details</button><SshConnection key={`${server.id}:${server.host}`} server={server} onBusy={setCheckingSsh} /></>}
-      {tab === "Files" && <FileBrowser key={`${server.id}:${server.host}`} server={server} onBusy={setCheckingSsh} />}
+      {refreshMessage && <p className={`inventory-refresh-status ${refreshFailure ? "form-error" : "muted"}`} role={refreshFailure ? "alert" : "status"}>{refreshMessage}</p>}
+      {tab === "Services" && <><div className="section-heading"><div><h3>Saved services & containers</h3><p>The last approved inventory; live details and logs are fetched only when requested.</p></div><div className="inventory-refresh-actions"><input aria-label="Filter saved workloads" placeholder="Find a workload…" value={filter} onChange={e => setFilter(e.target.value)} /><button className="primary" disabled={checkingSsh} onClick={() => void refreshInventory()}>{refreshing ? "Refreshing…" : "Refresh inventory"}</button></div></div><SavedInventory state={{ ...state, servers: [server] }} query={filter} open={() => {}} single /><WorkloadInspectionPanel key={`${server.id}:${server.host}:workloads`} server={server} onBusy={value => reportBusy("workload", value)} /></>}
+      {tab === "Health" && <HealthMonitor key={`${server.id}:${server.host}`} server={server} />}
+      {tab === "System" && <><div className="section-heading"><div><h3>Saved system inventory</h3><p>Approved host details, services and containers from the latest complete collection.</p></div><button className="primary" disabled={checkingSsh} onClick={() => void refreshInventory()}>{refreshing ? "Refreshing…" : "Refresh inventory"}</button></div>{server.inventory ? <><dl className="system-grid"><div><dt>Hostname</dt><dd>{server.inventory.hostname}</dd></div><div><dt>Logical CPUs</dt><dd>{server.inventory.cpus}</dd></div><div><dt>Total memory</dt><dd>{memory(server.inventory.memory_total_kib)}</dd></div><div><dt>Collected on host</dt><dd>{date(server.inventory.collected_at)}</dd></div></dl><Notice>These are saved hardware details. Live utilisation is not collected. Open Health for separate host and service checks.</Notice></> : <Notice>No saved system inventory is available for this server.</Notice>}</>}
+      {tab === "Settings" && <><h3>Map details</h3><dl className="system-grid"><div><dt>Name</dt><dd>{server.name}</dd></div><div><dt>Host</dt><dd>{server.host}</dd></div></dl><button className="primary" disabled={checkingSsh} onClick={edit}>Edit server details</button><SshConnection key={`${server.id}:${server.host}`} server={server} disabled={checkingSsh} onBusy={value => reportBusy("ssh", value)} /><ElevationCheck key={`elevation:${server.id}:${server.host}`} server={server} disabled={checkingSsh} onBusy={value => reportBusy("elevation", value)} /></>}
+      {tab === "Files" && <FileBrowser key={`${server.id}:${server.host}`} server={server} onBusy={value => reportBusy("files", value)} />}
       {tab === "Transfers" && <TransferQueue rows={transfers.rows.filter(row => row.server_id === server.id)} failure={transfers.failure} retry={() => setTab("Files")} />}
-      {tab === "Terminal" && <div className="unavailable"><span className="unavailable-icon">⌁</span><h3>A deliberate connection.</h3><p>Terminal access requires its protected operation controls.</p><span className="state-pill">Operation unavailable</span></div>}
+      {tab === "Terminal" && <Suspense fallback={<div className="unavailable"><p>Loading terminal controls…</p></div>}><TerminalPanel server={server} onBusy={value => reportBusy("terminal", value)} /></Suspense>}
     </section><footer className="workspace-footer">{tab === "Files" ? "File results stay in memory · Queued transfers continue until finished or locked" : "Saved inventory view · Live controls require an authenticated session"}</footer>
   </Dialog>;
 }
@@ -192,7 +215,7 @@ function App() {
           </div>
           {inspector && view === "topology" && <aside className="inspector"><div className="inspector-title"><span>INSPECTOR</span><span>⌘</span></div><div className="inspector-tabs">{["Overview", "Relationships", "Activity"].map(name => <button className={inspectorTab === name ? "active" : ""} key={name} onClick={() => setInspectorTab(name)}>{name}</button>)}</div><div className="inspector-body">{server ? <>
             <div className="selected-heading"><span className="server-icon">▤</span><span className={`observation-tag ${server.freshness}`}>{observedLabel(server)}</span></div><h2>{server.name}</h2><p className="hostname">{server.host}</p>
-            {inspectorTab === "Overview" && <><p className="section-label">SAVED OBSERVATION</p><dl className="facts"><div><dt>Collected</dt><dd>{date(server.inventory?.collected_at)}</dd></div><div><dt>Logical CPUs</dt><dd>{server.inventory?.cpus ?? "Unknown"}</dd></div><div><dt>Total memory</dt><dd>{server.inventory ? memory(server.inventory.memory_total_kib) : "Unknown"}</dd></div><div><dt>Workloads</dt><dd>{workloads(server).length}</dd></div><div><dt>Reachability</dt><dd>Not checked</dd></div></dl><Notice>Files, live metrics and controls become available through an authenticated SSH session.</Notice><div className="inspector-actions"><button disabled={busy} onClick={() => setModal({ kind: "edit", id: server.id })}>Edit details</button><button disabled={!available || state!.servers.length < 2} onClick={() => relationship()}>＋ Document relationship</button></div></>}
+            {inspectorTab === "Overview" && <><p className="section-label">SAVED OBSERVATION</p><dl className="facts"><div><dt>Collected</dt><dd>{date(server.inventory?.collected_at)}</dd></div><div><dt>Logical CPUs</dt><dd>{server.inventory?.cpus ?? "Unknown"}</dd></div><div><dt>Total memory</dt><dd>{server.inventory ? memory(server.inventory.memory_total_kib) : "Unknown"}</dd></div><div><dt>Workloads</dt><dd>{workloads(server).length}</dd></div><div><dt>Reachability</dt><dd>{reachabilityLabel(server)}</dd></div></dl><Notice>Files, live metrics and controls become available through an authenticated SSH session.</Notice><div className="inspector-actions"><button disabled={busy} onClick={() => setModal({ kind: "edit", id: server.id })}>Edit details</button><button disabled={!available || state!.servers.length < 2} onClick={() => relationship()}>＋ Document relationship</button></div></>}
             {inspectorTab === "Relationships" && <><p className="section-label">DOCUMENTED CONNECTIONS</p>{related.map(edge => <div className="relationship-item" key={edge.id}><strong>{state!.servers.find(s => s.id === edge.source)?.name} → {state!.servers.find(s => s.id === edge.target)?.name}</strong><span>{edge.label || "Unlabelled"}</span><button className="text-button" disabled={busy} onClick={() => setModal({ kind: "remove-edge", edge })}>Remove relationship</button></div>)}{!related.length && <p>No relationships documented.</p>}<button disabled={!available || state!.servers.length < 2} onClick={() => relationship()}>＋ Document relationship</button><p className="muted">Diagram links describe your infrastructure. They do not change server configuration.</p></>}
             {inspectorTab === "Activity" && state && <ActivityList state={{ ...state, events: state.events.filter(e => e.server_id === server.id) }} />}
           </> : <p className="empty-copy">Select a server to inspect its saved details.</p>}</div>{server && <footer className="inspector-footer"><button className="primary" onClick={() => open(server.id)}>Open workspace <span>↗</span></button></footer>}</aside>}
@@ -201,7 +224,7 @@ function App() {
         <footer className="app-footer"><b>Atlas<span>·</span></b><span>Built for the things you run.</span></footer>
       </main>
     </div>
-    {workspaceServer && state && <ServerWorkspace key={workspaceServer.id} server={workspaceServer} state={state} initialTab={workspaceTab} close={() => setWorkspace(null)} edit={() => { setWorkspace(null); setModal({ kind: "edit", id: workspaceServer.id }); }} />}
+    {workspaceServer && state && <ServerWorkspace key={workspaceServer.id} server={workspaceServer} state={state} reload={async () => { setState(await client.retry()); }} initialTab={workspaceTab} close={() => setWorkspace(null)} edit={() => { setWorkspace(null); setModal({ kind: "edit", id: workspaceServer.id }); }} />}
     {modal && state && <Dialog title={modal.kind === "add" ? "Add a server" : modal.kind === "edit" ? "Edit server" : modal.kind === "relationship" ? "Document a relationship" : modal.kind === "remove-server" ? "Remove server from map?" : "Remove relationship?"} close={() => setModal(null)} busy={busy}>
       {error && <p role="alert" className="form-error">{error}</p>}
       {modal.kind === "add" || modal.kind === "edit" ? <form onSubmit={formSubmit}><p className="muted">A map entry stores a name and address. It does not connect to the server.</p><label>Server name<input name="name" required maxLength={80} autoFocus defaultValue={editServer?.name} placeholder="e.g. Forgejo" /></label><label>Host or IP address<input name="host" required maxLength={253} defaultValue={editServer?.host} placeholder="server.example or 192.168.1.10" spellCheck={false} /></label><div className="form-actions">{modal.kind === "edit" && <button type="button" className="danger text-button" disabled={busy} onClick={() => setModal({ kind: "remove-server", id: modal.id })}>Remove from map</button>}<button type="button" disabled={busy} onClick={() => setModal(null)}>Cancel</button><button className="primary" disabled={busy}>{busy ? "Saving…" : "Save server"}</button></div></form>

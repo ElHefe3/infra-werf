@@ -90,7 +90,7 @@ Use a concise [feature acceptance record](../evidence/README.md), map results to
 
 Record signing/installer/device approval blocks explicitly; never embed keys or bypass OS security warnings to manufacture a pass.
 
-## T026 — Complete actual-device acceptance and cutover
+## T026 — Complete Windows desktop acceptance and cutover
 
 <!-- atlas-ticket: {"id":"T026","feature":"F12","status":"todo","depends_on":["T025"],"evidence":null} -->
 
@@ -104,13 +104,13 @@ Assuming acceptance, silently retiring the only fallback, installing agents or s
 
 ### Implementation and contracts
 
-Use the actual Windows app on the selected LAN/existing VPN. Verify migration, pair/revoke/reconnect, file round trip/protected placement, terminal, health and scoped control on explicitly approved fixtures/targets. Document availability/restart/rollback and remaining limits.
+Use the actual Windows app on the selected LAN/existing VPN. Verify migration, strict-trust SSH authentication/lock/reconnect, file round trip/protected placement, terminal, health and scoped control on explicitly approved fixtures/targets. Pairing, phone access and Android journeys remain future S09 work. Document availability/restart/rollback and remaining limits.
 
 **Ticket dependencies:** [T025](F12-release-acceptance.md).
 
 ### Acceptance criteria
 
-- [ ] Owner/device evidence covers full core controls on Windows, including session/host-trust failures and application lifecycle.
+- [ ] Owner evidence on the actual Windows PC covers the full desktop core, including session/host-trust failures and application lifecycle.
 - [ ] Cutover preserves data with verified recovery; reference/original backups are retained until acceptance and retirement is separately deliberate.
 - [ ] Roadmap/tickets/evidence/release instructions accurately state what shipped, what is deferred and any unresolved blocker.
 
@@ -124,4 +124,4 @@ Use a concise [feature acceptance record](../evidence/README.md), map results to
 
 ### Stop conditions
 
-Keep release acceptance open if a required physical-device/owner check or recovery proof is missing.
+Keep release acceptance open if a required Windows-PC owner check or recovery proof is missing.

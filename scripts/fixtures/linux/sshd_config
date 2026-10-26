@@ -1,0 +1,15 @@
+Port 22
+ListenAddress 0.0.0.0
+HostKey /etc/ssh/ssh_host_ed25519_key
+PasswordAuthentication yes
+PermitEmptyPasswords yes
+KbdInteractiveAuthentication no
+PermitRootLogin no
+UsePAM no
+PubkeyAuthentication yes
+StrictModes yes
+AllowUsers fixture fixture-nopass fixture-none
+AuthorizedKeysFile .ssh/authorized_keys
+Subsystem sftp internal-sftp
+Banner /etc/ssh/atlas-banner
+LogLevel ERROR

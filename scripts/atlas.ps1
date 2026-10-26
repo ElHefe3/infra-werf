@@ -65,6 +65,23 @@ switch ($Action) {
             Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-core', '--test', 'operations', '--locked')
             Run-AtlasCommand 'cargo' @('run', '-p', 'atlas-core', '--bin', 'export-contracts', '--locked', '--', '--check')
             Run-AtlasCommand 'pnpm' @('check')
+        } elseif ($Feature -eq 'T019') {
+            Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-core', '--lib', 'health::', '--locked')
+            Run-AtlasCommand 'cargo' @('run', '-p', 'atlas-core', '--bin', 'export-contracts', '--locked', '--', '--check')
+            Run-AtlasCommand 'pnpm' @('check')
+            Run-AtlasCommand 'node' @('--test', 'ui/map-model.test.ts')
+        } elseif ($Feature -eq 'T020') {
+            Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-core', '--lib', 'inventory::', '--locked')
+            Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-core', '--test', 'inventory', '--locked')
+            Run-AtlasCommand 'cargo' @('run', '-p', 'atlas-core', '--bin', 'export-contracts', '--locked', '--', '--check')
+            Run-AtlasCommand 'pnpm' @('check')
+            Run-AtlasCommand 'node' @('--test', 'ui/client.test.ts', 'ui/map-model.test.ts')
+        } elseif ($Feature -eq 'T022') {
+            Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-core', '--lib', 'workloads::', '--locked')
+            Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-core', '--test', 'inventory', '--locked')
+            Run-AtlasCommand 'cargo' @('run', '-p', 'atlas-core', '--bin', 'export-contracts', '--locked', '--', '--check')
+            Run-AtlasCommand 'pnpm' @('check')
+            Run-AtlasCommand 'node' @('--test', 'ui/client.test.ts', 'ui/map-model.test.ts')
         } elseif ($Feature -in @('T033', 'T014', 'T015', 'T016', 'T017')) {
             Run-AtlasCommand 'cargo' @('test', '--workspace', '--locked')
             Run-AtlasCommand 'cargo' @('run', '-p', 'atlas-core', '--bin', 'export-contracts', '--locked', '--', '--check')
@@ -102,6 +119,17 @@ switch ($Action) {
     }
     'test-ssh-native' { Run-AtlasCommand 'node' @('scripts/verify_native_ssh.mjs') }
     'test-files' { Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-core', '--test', 'files', '--locked', '--', '--ignored', '--nocapture') }
+    'test-elevation' { Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-core', '--test', 'elevation', '--locked', '--', '--ignored', '--nocapture') }
+    'test-elevation-native' { Run-AtlasCommand 'node' @('scripts/verify_native_elevation.mjs') }
+    'test-health-native' { Run-AtlasCommand 'node' @('scripts/verify_native_health.mjs') }
+    'test-inventory-native' {
+        Run-AtlasCommand 'podman' @('--connection', 'podman-machine-default', 'build', '--tag', 'localhost/atlas-linux-fixture:20261026', '--file', 'scripts/fixtures/linux/Containerfile', 'scripts/fixtures/linux')
+        Run-AtlasCommand 'node' @('scripts/verify_native_inventory.mjs')
+    }
+    'test-workloads-native' {
+        Run-AtlasCommand 'podman' @('--connection', 'podman-machine-default', 'build', '--tag', 'localhost/atlas-linux-fixture:20261026', '--file', 'scripts/fixtures/linux/Containerfile', 'scripts/fixtures/linux')
+        Run-AtlasCommand 'node' @('scripts/verify_native_workloads.mjs')
+    }
     'test-files-native' { Run-AtlasCommand 'node' @('scripts/verify_native_files.mjs') }
     'test-file-changes-native' { Run-AtlasCommand 'node' @('scripts/verify_native_files.mjs', '--mutations') }
     'dev-android' { Run-AtlasCommand 'pnpm' @('tauri', 'android', 'dev') }

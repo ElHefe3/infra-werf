@@ -14,7 +14,31 @@ export type Freshness = "saved" | "stale" | "unknown";
 export type Reachability = "unknown" | "reachable" | "unreachable";
 export type Health = "unknown" | "healthy" | "degraded" | "unhealthy";
 export type HostReachability = { state: Reachability, last_checked_at: string | null, last_success_at: string | null, last_failure_at: string | null, };
-export type BaselineInventory = { hostname: string, collected_at: string, cpus: number, memory_total_kib: number, services: Array<ServiceSummary>, containers: Array<ContainerSummary>, };
+export type ProbeKind = "tcp" | "http";
+export type HealthProbeConfig = { server_id: ServerId, host: string, host_port: number, service_port: number, service_kind: ProbeKind, path: string | null, interval_seconds: number, };
+export type ServiceHealth = { state: Health, last_checked_at: string | null, last_success_at: string | null, last_failure_at: string | null, };
+export type HealthSnapshot = { contract_version: number, server_id: ServerId, host: string, host_reachability: HostReachability, service: ServiceHealth, observed_at: string | null, };
+export type BaselineInventory = { hostname: string, collected_at: string,
+/**
+ * SSH alias authenticated by Atlas for this complete refresh. Older and
+ * imported observations remain readable but cannot grant live workloads.
+ */
+source_host: string | null,
+/**
+ * Digest of the resolved SSH profile, authenticated remote key and account
+ * used for this complete refresh. Imports deliberately cannot supply it.
+ */
+source_binding: string | null, cpus: number, memory_total_kib: number, services: Array<ServiceSummary>, containers: Array<ContainerSummary>, };
+export type InventoryRefreshStatus = "updated" | "unchanged" | "partial";
+export type InventoryRefreshResult = { contract_version: number, server_id: ServerId, status: InventoryRefreshStatus,
+/**
+ * Timestamp reported by the remote collection command.
+ */
+source_collected_at: string | null,
+/**
+ * Local time Atlas received and handled the refresh result.
+ */
+refreshed_at: string, };
 export type ServiceSummary = { scope: string, name: string, state: string, substate: string, };
 export type ContainerSummary = { scope: string, engine: string, name: string, image: string, state: string, };
 export type MapServer = { id: ServerId, name: string, host: string, x: number, y: number, created_at: string, inventory: BaselineInventory | null, freshness: Freshness, reachability: HostReachability, };
@@ -28,7 +52,7 @@ export type ProtectedText = { session_id: SessionId, operation_id: OperationId, 
 export type LiveMetrics = { cpu_percent: number | null, memory_used_kib: number | null, disk_used_bytes: number | null, };
 export type OperationPhase = "queued" | "running" | "completed" | "failed" | "cancelled";
 export type OperationProgress = { operation_id: OperationId, session_id: SessionId, phase: OperationPhase, bytes_completed: number, bytes_total: number | null, };
-export type Inspection = { "kind": "system_summary", } | { "kind": "file_metadata", path: string, } | { "kind": "service_status", workload_id: string, } | { "kind": "sftp_read", resource_id: string, } | { "kind": "sftp_mutation", resource_id: string, } | { "kind": "sftp_transfer", resource_id: string, };
+export type Inspection = { "kind": "system_summary", } | { "kind": "file_metadata", path: string, } | { "kind": "service_status", workload_id: string, } | { "kind": "sftp_read", resource_id: string, } | { "kind": "sftp_mutation", resource_id: string, } | { "kind": "sftp_transfer", resource_id: string, } | { "kind": "elevation_check", } | { "kind": "protected_placement", } | { "kind": "terminal_open", };
 export type InspectionRequest = { server_id: ServerId, session_id: SessionId, inspection: Inspection, };
 export type OperationTicket = { operation_id: OperationId, expires_at: string, };
 export type SshProfile = { alias: string, hostname: string, user: string, port: number, identity_files: number, };
@@ -38,7 +62,8 @@ export type FileResource = { id: string, label: string, };
 export type FileKind = "file" | "directory" | "symlink" | "other" | "unknown";
 export type FileEntry = { resource: FileResource, kind: FileKind, size_bytes: string | null, permissions: string | null, owner: number | null, group: number | null, modified_at: string | null, };
 export type FilePage = { directory: FileResource, breadcrumbs: Array<FileResource>, entries: Array<FileEntry>, next_cursor: string | null, };
-export type FileSession = { session_id: SessionId, profile: SshProfile, fingerprint: string, home: FileResource, absolute_expires_at: string, idle_seconds: number, };
+export type FileSession = { session_id: SessionId, profile: SshProfile, fingerprint: string, home: FileResource, absolute_expires_at: string, idle_seconds: number, workloads: Array<WorkloadIdentity>, workload_inventory_matches_session: boolean, };
+export type TerminalPoll = { data: Array<number>, ended: boolean, overflow: boolean, };
 export type FileAction = { "kind": "list", resource_id: string, cursor: string | null, } | { "kind": "stat", resource_id: string, } | { "kind": "follow_link", resource_id: string, } | { "kind": "pin_source", resource_id: string, } | { "kind": "clear_source", resource_id: string, };
 export type FileResult = { "kind": "directory", page: FilePage, } | { "kind": "metadata", entry: FileEntry, } | { "kind": "selection", resource: FileResource | null, };
 export type FileChange = { "kind": "mkdir", parent_id: string, name: string, } | { "kind": "rename", resource_id: string, name: string, } | { "kind": "move", resource_id: string, parent_id: string, } | { "kind": "delete", resource_id: string, };
@@ -49,3 +74,14 @@ export type TransferDirection = "upload" | "download";
 export type TransferState = "queued" | "opening" | "transferring" | "verifying" | "publishing" | "cancelling" | "complete" | "cancelled" | "failed" | "outcome_unknown";
 export type TransferView = { id: OperationId, server_id: ServerId, session_id: SessionId, direction: TransferDirection, state: TransferState, bytes: string, total: string | null, remote: string | null, local_name: string | null, verified: boolean, checksum: string | null, cleanup_needed: boolean, failure: ErrorCode | null, };
 export type LocalSelection = { grant_id: string, name: string, path_label: string, bytes: string | null, direction: TransferDirection, };
+export type ElevationPreview = { operation_id: OperationId, expires_at: string, server: string, endpoint: string, action: string, };
+export type ElevationReceipt = { operation_id: OperationId, verified: boolean, };
+export type ProtectedPlacementRequest = { destination: string, owner: number, group: number, mode: number, };
+export type ProtectedPlacementStage = { stage_id: string, name: string, size_bytes: string, sha256: string | null, staging_location: string, cleanup_needed: boolean, failure: ErrorCode | null, };
+export type ProtectedPlacementReceipt = { operation_id: OperationId, destination: string, owner: number, group: number, mode: string, size_bytes: string, sha256: string, cleanup_needed: boolean, staging_location: string | null, };
+export type WorkloadKind = "service" | "container";
+export type WorkloadIdentity = { id: string, kind: WorkloadKind, scope: string, runtime: string, name: string, reported_state: string, reported_detail: string, supported: boolean, };
+export type WorkloadState = "running" | "stopped" | "permission_denied" | "unavailable";
+export type WorkloadLogState = "available" | "permission_denied" | "unavailable";
+export type WorkloadDetail = { label: string, value: string, };
+export type WorkloadInspection = { contract_version: number, workload_id: string, inspected_at: string, state: WorkloadState, details: Array<WorkloadDetail>, logs_state: WorkloadLogState, logs: string, logs_truncated: boolean, };

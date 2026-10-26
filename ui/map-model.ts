@@ -47,3 +47,10 @@ export function errorMessage(error: unknown): string {
 export function observedLabel(server: MapServer): string {
   return server.freshness === "saved" ? "Recent saved observation" : server.freshness === "stale" ? "Stale observation" : "Not observed";
 }
+
+export function reachabilityLabel(server: MapServer, now = Date.now()): string {
+  const checked = server.reachability.last_checked_at;
+  if (!checked) return "Unknown · not checked";
+  const state = server.reachability.state;
+  return now - Date.parse(checked) > 15 * 60 * 1000 ? `Stale · ${state}` : state;
+}

@@ -270,6 +270,7 @@ pub(crate) struct Client {
     request_deadline: Instant,
     pub profile: SshProfile,
     pub fingerprint: String,
+    pub host_key: Option<crate::ssh::conversation::HostKey>,
 }
 impl Client {
     #[cfg(not(windows))]
@@ -288,7 +289,7 @@ impl Client {
         context: &mut ExecutionContext,
         lease: Box<dyn Send>,
     ) -> Result<Self, AtlasError> {
-        let (profile, mut command) = options.sftp_command(alias, context)?;
+        let (profile, mut command, trust_sources) = options.sftp_command(alias, context)?;
         let child = command.spawn().map_err(|_| fail())?;
         let (process, stderr) = PipeProcess::attach(child, lease, |name, task| {
             std::thread::Builder::new().name(name.into()).spawn(task)
@@ -302,6 +303,7 @@ impl Client {
             request_deadline: Instant::now() + Duration::from_secs(30),
             profile,
             fingerprint: String::new(),
+            host_key: None,
         };
         let handshake = client
             .send(&[1, 0, 0, 0, 3], context)
@@ -335,6 +337,11 @@ impl Client {
         client.fingerprint = ssh::fingerprint(&diagnostics)
             .map(|(_, fp)| fp)
             .ok_or_else(|| AtlasError::new(ErrorCode::HostTrustFailure))?;
+        client.host_key = ssh::conversation::authenticated_host_key(
+            &trust_sources,
+            &diagnostics,
+            &client.fingerprint,
+        );
         client.diagnostics.clear();
         context.checkpoint()?;
         Ok(client)

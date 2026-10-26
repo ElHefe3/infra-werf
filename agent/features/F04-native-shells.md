@@ -1,4 +1,4 @@
-# F04 — Real native Windows and Android clients with a shared domain adapter and platform-specific lifecycle/I/O.
+# F04 — Native Windows desktop shell and lifecycle over the shared Rust/React domain.
 
 <!-- atlas-feature: {"id":"F04","scope":"S02","depends_on":["F03","F01"],"deferred":false} -->
 
@@ -6,15 +6,15 @@ Current owner decision (2026-10-26): desktop is the complete release target. Pho
 
 ## Work packet
 
-**Outcome:** Real native Windows and Android clients with a shared domain adapter and platform-specific lifecycle/I/O.
+**Outcome:** A real Windows desktop client with shared domain behavior and a guarded native lifecycle. Android composition, adapters and phone access remain future S09 work.
 
-**User journey:** Launch Windows coordinator → open both native clients → navigate the shared map/workspace → handle lifecycle without losing work.
+**User journey:** Launch the Windows client → open the local map/workspace → handle lifecycle without losing active work.
 
 **Scope:** [S02](../scopes/S02-applications-map.md). **Feature prerequisites:** [F03](F03-react-map.md), [F01](F01-build-environment.md).
 
 Read [SCOPE.md](../SCOPE.md) for access boundaries; use [AGENT.md](../AGENT.md) for execution/proof rules. Ticket dependencies, not numeric ordering, control implementation. Feature completion is derived from its tickets and scope gate, not independently marked done.
 
-**Relevant discoveries:** [D002](../discovery/D002-rust-host.md), [D003](../discovery/D003-android-prerequisites.md), [D014](../discovery/D014-desktop-guard-phasing.md), [D015](../discovery/D015-operation-decoding-and-admission.md). Shared guard API/integration obligations: [OPERATIONS.md](../OPERATIONS.md).
+**Relevant discoveries:** [D002](../discovery/D002-rust-host.md), [D003](../discovery/D003-android-prerequisites.md), [D014](../discovery/D014-desktop-guard-phasing.md), [D015](../discovery/D015-operation-decoding-and-admission.md), [D026](../discovery/D026-active-session-lifecycle-count.md). Shared guard API/integration obligations: [OPERATIONS.md](../OPERATIONS.md).
 
 ## T008 — Integrate Windows Tauri and coordinator lifecycle
 
@@ -37,7 +37,7 @@ Replace dependency on the Python foreground/background launcher in the new build
 ### Acceptance criteria
 
 - [x] Native Windows app loads real persisted data and invokes restricted Rust domain commands.
-- [x] Local workspace startup/restart errors and remote-coordinator availability are visible; native close refuses active domain work. Real phone/transfer registration and close-warning journeys remain required before those features are enabled in F05/F08/F09.
+- [x] Local workspace startup/restart errors and remote-coordinator availability are visible; native close refuses active domain work. Desktop transfer close-warning proof is recorded in T017; remote phone/coordinator registration remains future S09 work.
 - [x] The legacy database/reference remains recoverable; no unauthenticated LAN binding or frontend arbitrary shell access is introduced.
 
 ### Verification
@@ -46,7 +46,7 @@ Native launch/restart and lifecycle smoke journey plus targeted capability/error
 
 ### Evidence and closure
 
-Use a concise [feature acceptance record](../evidence/README.md), map results to T008, attach its relative path in ticket metadata, then check only proven criteria. Record tested revision/platform/fixtures, failures, limits and rollback as applicable. Current proof: **passed for T008** in [Windows acceptance](../evidence/F04-desktop-acceptance.md); remote work/device proof remains explicitly staged. Use [the checkpoint](../evidence/CHECKPOINT.md) at handoff.
+Use a concise [feature acceptance record](../evidence/README.md), map results to T008, attach its relative path in ticket metadata, then check only proven criteria. Record tested revision/platform/fixtures, failures, limits and rollback as applicable. Current proof: **passed for T008** in [Windows acceptance](../evidence/F04-desktop-acceptance.md); phone/coordinator proof remains in future S09. Use [the checkpoint](../evidence/CHECKPOINT.md) at handoff.
 
 ### Stop conditions
 

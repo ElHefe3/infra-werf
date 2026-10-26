@@ -36,6 +36,9 @@ pub enum Inspection {
     SftpRead { resource_id: String },
     SftpMutation { resource_id: String },
     SftpTransfer { resource_id: String },
+    ElevationCheck {},
+    ProtectedPlacement {},
+    TerminalOpen {},
 }
 
 #[derive(Clone, Serialize, Deserialize, TS)]
@@ -146,6 +149,9 @@ pub enum InspectionPlan {
     SftpRead { resource_id: String },
     SftpMutation { resource_id: String },
     SftpTransfer { resource_id: String },
+    ElevationCheck,
+    ProtectedPlacement,
+    TerminalOpen,
     SystemSummary,
     FileMetadata(ScopedPath),
     ServiceStatus { workload_id: String },
@@ -183,6 +189,9 @@ impl SessionScope {
     }
     fn plan(&self, inspection: Inspection) -> Result<InspectionPlan, AtlasError> {
         Ok(match inspection {
+            Inspection::ElevationCheck {} => InspectionPlan::ElevationCheck,
+            Inspection::ProtectedPlacement {} => InspectionPlan::ProtectedPlacement,
+            Inspection::TerminalOpen {} => InspectionPlan::TerminalOpen,
             Inspection::SftpTransfer { resource_id } => {
                 if !self.resources.contains(&resource_id) {
                     return Err(error(ErrorCode::Denied));
@@ -656,6 +665,8 @@ impl OperationBroker {
                 | InspectionPlan::SftpOpen
                 | InspectionPlan::SftpMutation { .. }
                 | InspectionPlan::SftpTransfer { .. }
+                | InspectionPlan::ElevationCheck
+                | InspectionPlan::ProtectedPlacement
         ) {
             return Err(error(ErrorCode::Denied));
         }
@@ -741,6 +752,29 @@ impl OperationBroker {
     {
         let job = self.job(authority, id)?;
         if job.session_id.is_none() || !matches!(job.plan, InspectionPlan::SftpTransfer { .. }) {
+            return Err(error(ErrorCode::Denied));
+        }
+        self.execute_job(authority, id, target, job, executor)
+    }
+    pub fn execute_elevation<F>(
+        &self,
+        authority: Option<&Authority>,
+        id: &OperationId,
+        target: &ServerTarget,
+        executor: F,
+    ) -> Result<String, AtlasError>
+    where
+        F: FnOnce(&InspectionPlan, &mut ExecutionContext) -> Result<(), AtlasError>
+            + Send
+            + 'static,
+    {
+        let job = self.job(authority, id)?;
+        if job.session_id.is_none()
+            || !matches!(
+                job.plan,
+                InspectionPlan::ElevationCheck | InspectionPlan::ProtectedPlacement
+            )
+        {
             return Err(error(ErrorCode::Denied));
         }
         self.execute_job(authority, id, target, job, executor)
@@ -956,5 +990,55 @@ mod tests {
             .err()
             .unwrap();
         assert_eq!(error.code, ErrorCode::Denied);
+    }
+
+    #[test]
+    fn terminal_open_uses_an_authenticated_session_ticket_and_audits_no_shell_data() {
+        let broker = OperationBroker::default();
+        let caller = broker.issue_backend_authority().unwrap();
+        let target = ServerTarget::new(
+            ServerId::parse("terminal-host").unwrap(),
+            "terminal.invalid",
+        )
+        .unwrap();
+        let session = broker
+            .register_authenticated_session(
+                &caller,
+                target.clone(),
+                SessionScope::new(vec![], vec![]).unwrap(),
+                Duration::from_secs(60),
+            )
+            .unwrap();
+        let request = InspectionRequest {
+            server_id: target.server_id.clone(),
+            session_id: session,
+            inspection: Inspection::TerminalOpen {},
+        };
+        let ticket = broker
+            .prepare(Some(&caller), &target, request.clone())
+            .unwrap();
+        let result = broker
+            .execute(
+                Some(&caller),
+                &ticket.operation_id,
+                &target,
+                |plan, context| {
+                    assert!(matches!(plan, InspectionPlan::TerminalOpen));
+                    context.checkpoint()
+                },
+            )
+            .unwrap();
+        assert!(result.text.is_empty());
+        assert!(broker.audit().unwrap().last().unwrap().failure.is_none());
+
+        broker.close_session(&caller, &request.session_id).unwrap();
+        assert_eq!(
+            broker
+                .prepare(Some(&caller), &target, request)
+                .err()
+                .unwrap()
+                .code,
+            ErrorCode::ExpiredSession
+        );
     }
 }

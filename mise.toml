@@ -63,6 +63,26 @@ run = "powershell -NoProfile -File scripts/atlas.ps1 dev-android"
 description = "Actual loopback SFTP session lifetime, handle revocation, timeout and cleanup proof"
 run = "powershell -NoProfile -File scripts/atlas.ps1 test-files"
 
+[tasks."test:elevation"]
+description = "Actual fresh sudo and host-pinned operation proof in a disposable local Linux container"
+run = "powershell -NoProfile -File scripts/atlas.ps1 test-elevation"
+
+[tasks."test:elevation-native"]
+description = "Actual native UI wrong-password, fresh sudo, cancellation and protected-session clearing proof"
+run = "powershell -NoProfile -File scripts/atlas.ps1 test-elevation-native"
+
+[tasks."test:health-native"]
+description = "Actual Windows Health tab loopback healthy/stale/failure UI journey"
+run = "powershell -NoProfile -File scripts/atlas.ps1 test-health-native"
+
+[tasks."test:inventory-native"]
+description = "Actual Windows approved inventory refresh over disposable authenticated SSH"
+run = "powershell -NoProfile -File scripts/atlas.ps1 test-inventory-native"
+
+[tasks."test:workloads-native"]
+description = "Actual Windows protected workload inspection and bounded log proof on fixture-only SSH"
+run = "powershell -NoProfile -File scripts/atlas.ps1 test-workloads-native"
+
 [tasks."test:files-native"]
 description = "Actual native Files browse/stat/lock/error journey on isolated fixture data (build first)"
 run = "powershell -NoProfile -File scripts/atlas.ps1 test-files-native"

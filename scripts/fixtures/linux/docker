@@ -1,0 +1,9 @@
+#!/bin/sh
+case "$*" in
+  "ps -a --no-trunc --format {{.Names}}|{{.Image}}|{{.State}}") printf '%s\n' 'atlas-fixture-db|localhost/atlas-fixture-db:1|exited' 'atlas-fixture-denied|localhost/atlas-fixture-denied:1|running' ;;
+  "inspect --format {{.State.Status}}|{{.State.ExitCode}}|{{.State.StartedAt}}|{{.State.FinishedAt}} -- atlas-fixture-db") printf '%s\n' 'exited|0|2026-10-26T09:00:00Z|2026-10-26T09:30:00Z' ;;
+  "logs --tail=50 --timestamps -- atlas-fixture-db") printf '%s\n' 'ATLAS_TEST_DOCKER_CONTAINER_LOG' ;;
+  "inspect --format {{.State.Status}}|{{.State.ExitCode}}|{{.State.StartedAt}}|{{.State.FinishedAt}} -- atlas-fixture-denied") printf '%s\n' 'permission denied connecting to docker daemon' >&2; exit 1 ;;
+  "logs --tail=50 --timestamps -- atlas-fixture-denied") printf '%s\n' 'permission denied connecting to docker daemon' >&2; exit 1 ;;
+  *) exit 2 ;;
+esac

@@ -1,6 +1,6 @@
 # S03 — Secure connections
 
-<!-- atlas-scope: {"id":"S03","features":["F06"],"depends_on":["S02"],"window":1,"deferred":false} -->
+<!-- atlas-scope: {"id":"S03","features":["F06"],"depends_on":["S02"],"window":1,"deferred":false,"evidence":"../evidence/S03-desktop-acceptance.md"} -->
 
 ## Outcome
 
@@ -8,7 +8,7 @@ Host-verified desktop SSH, protected session lifecycle and deliberately fresh pe
 
 ## Entry and sequence
 
-Full-scope entry requires S02 complete and controlled trust/SSH/sudo fixtures available. T014 explicitly permits desktop-first entry over T008/T032/T033; this does not pass the paired/phone/sudo scope gates. Actual installation/trust/credential actions require their applicable authorisations.
+Full-scope entry requires S02 complete and controlled trust/SSH/sudo fixtures available. T014 explicitly permits desktop-first entry over T008/T032/T033; this does not complete the SSH-session or fresh-sudo gates. Pairing and phone access remain future S09 work. Actual installation/trust/credential actions require their applicable authorisations.
 
 F05 is deferred in S09. Within F06, T014 operation boundaries precede T012 SSH resolution, then T013 protected sessions/sudo. Follow dependencies, not ticket numbering.
 
@@ -24,9 +24,9 @@ Ticket status is canonical in the feature packets; scope progress is derived. Do
 
 ## Acceptance gate
 
-- [ ] Desktop SSH session expiry/lock/disconnect does not replay mutations or resurrect protected sessions.
-- [ ] Existing agent identities authenticate without key copying; unknown/changed SSH host identity stops access.
-- [ ] Per-action fresh sudo, secret redaction, protected-result clearing and safe argument/output boundaries are proven; bounded auth review is recorded when available.
+- [x] Desktop SSH session expiry/lock/disconnect does not replay mutations or resurrect protected sessions.
+- [x] Existing agent identities authenticate without key copying; unknown/changed SSH host identity stops access.
+- [x] Per-action fresh sudo, secret redaction, protected-result clearing and safe argument/output boundaries are proven; bounded auth review is recorded when available.
 
 ## Verification and refinement
 

@@ -1,0 +1,33 @@
+#!/bin/sh
+if [ -e /tmp/atlas-inventory-partial ]; then exit 1; fi
+case "$*" in
+  "--system list-units --all --type=service --no-legend --no-pager --plain --full")
+    printf '%s\n' 'atlas-fixture.service loaded active running Synthetic Atlas fixture service'
+    printf '%s\n' 'fixture-stopped.service loaded inactive dead Synthetic stopped fixture service'
+    printf '%s\n' 'fixture-denied.service loaded active running Synthetic permission fixture service'
+    printf '%s\n' 'fixture-log-denied.service loaded active running Synthetic log denial fixture service'
+    printf '%s\n' 'fixture-large.service loaded active running Synthetic bounded log fixture service'
+    printf '%s\n' 'fixture-missing.service loaded inactive dead Synthetic unavailable fixture service'
+    ;;
+  "--user list-units --all --type=service --no-legend --no-pager --plain --full")
+    printf '%s\n' 'fixture-worker.service loaded inactive dead Synthetic fixture user service'
+    ;;
+  "--system show --no-pager --property=LoadState --property=ActiveState --property=SubState --property=UnitFileState -- fixture-denied.service")
+    printf '%s\n' 'Permission denied' >&2
+    exit 1
+    ;;
+  "--system show --no-pager --property=LoadState --property=ActiveState --property=SubState --property=UnitFileState -- fixture-missing.service")
+    printf '%s\n' 'Unit could not be found.' >&2
+    exit 4
+    ;;
+  "--system show --no-pager --property=LoadState --property=ActiveState --property=SubState --property=UnitFileState -- fixture-stopped.service")
+    printf '%s\n' 'LoadState=loaded' 'ActiveState=inactive' 'SubState=dead' 'UnitFileState=disabled'
+    ;;
+  --system\ show\ --no-pager\ --property=LoadState\ --property=ActiveState\ --property=SubState\ --property=UnitFileState\ --\ atlas-*.service|--system\ show\ --no-pager\ --property=LoadState\ --property=ActiveState\ --property=SubState\ --property=UnitFileState\ --\ fixture-*.service)
+    printf '%s\n' 'LoadState=loaded' 'ActiveState=active' 'SubState=running' 'UnitFileState=enabled'
+    ;;
+  "--user show --no-pager --property=LoadState --property=ActiveState --property=SubState --property=UnitFileState -- fixture-worker.service")
+    printf '%s\n' 'LoadState=loaded' 'ActiveState=inactive' 'SubState=dead' 'UnitFileState=static'
+    ;;
+  *) exit 2 ;;
+esac

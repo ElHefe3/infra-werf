@@ -1,0 +1,14 @@
+#!/bin/sh
+case "$*" in
+  *"--unit=fixture-log-denied.service"*) printf '%s\n' 'Permission denied' >&2; exit 1 ;;
+  *"--lines=50"*"--unit=fixture-large.service"*)
+    printf 'X'
+    i=1
+    while [ "$i" -le 2731 ]; do printf '界'; i=$((i + 1)); done
+    printf '%s\n' 'ATLAS_TEST_WORKLOAD_LOG_TAIL'
+    ;;
+  *"--unit=fixture-stopped.service"*) printf '%s\n' 'ATLAS_TEST_STOPPED_SERVICE_LOG' ;;
+  *"--unit=atlas-fixture.service"*) printf '%s\n' 'ATLAS_TEST_SYSTEM_SERVICE_LOG' ;;
+  *"--user-unit=fixture-worker.service"*) printf '%s\n' 'ATLAS_TEST_USER_SERVICE_LOG' ;;
+  *) printf '%s\n' 'No journal entries for this fixture'; exit 1 ;;
+esac

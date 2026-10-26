@@ -14,11 +14,11 @@ Current owner decision (2026-10-26): desktop is the complete release target. Pho
 
 Read [SCOPE.md](../SCOPE.md) for access boundaries; use [AGENT.md](../AGENT.md) for execution/proof rules. Ticket dependencies, not numeric ordering, control implementation. Feature completion is derived from its tickets and scope gate, not independently marked done.
 
-No seed discovery applies beyond the shared scope. Link new findings when material.
+See [D031](../discovery/D031-workload-inventory-host-binding.md), [D033](../discovery/D033-workload-identity-binds-ssh-profile.md), and [D034](../discovery/D034-utf8-safe-log-bounds.md) for the saved-inventory authentication binding and bounded UTF-8 log rules.
 
 ## T022 — Implement protected workload inspection and logs
 
-<!-- atlas-ticket: {"id":"T022","feature":"F11","status":"todo","depends_on":["T020","T013"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T022","feature":"F11","status":"done","depends_on":["T020","T013"],"evidence":"../evidence/T022-acceptance.md"} -->
 
 ### Outcome and included work
 
@@ -36,9 +36,9 @@ Use authenticated workload IDs and runtime/scope ownership, not arbitrary comman
 
 ### Acceptance criteria
 
-- [ ] System/user service and supported container identities resolve to their correct host/runtime scope.
-- [ ] Log selection/output is bounded; permission-denied, stopped and unavailable workloads have explicit results.
-- [ ] Protected details/logs are never persisted in overview records, telemetry or acceptance artifacts.
+- [x] System/user service and supported container identities resolve to their correct authenticated host/account/runtime scope.
+- [x] Log selection/output is bounded; permission-denied, stopped and unavailable workloads have explicit results.
+- [x] Protected details/logs are never persisted in overview records, telemetry or acceptance artifacts.
 
 ### Verification
 
@@ -46,7 +46,7 @@ Fixtures for systemd plus the supported runtime adapters, wrong-scope/unknown wo
 
 ### Evidence and closure
 
-Use a concise [feature acceptance record](../evidence/README.md), map results to T022, attach its relative path in ticket metadata, then check only proven criteria. Record tested revision/platform/fixtures, failures, limits and rollback as applicable. Current proof: **not run**. Use [the checkpoint](../evidence/CHECKPOINT.md) at handoff.
+See [T022 acceptance](../evidence/T022-acceptance.md). Independent bounded review passed after the profile-binding and UTF-8 repairs; the final Windows native proof used only a disposable loopback SSH fixture.
 
 ### Stop conditions
 
@@ -54,7 +54,7 @@ Record unsupported runtime/account permissions as explicit limits requiring scop
 
 ## T023 — Implement scoped workload control
 
-<!-- atlas-ticket: {"id":"T023","feature":"F11","status":"todo","depends_on":["T022","T013","T014"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T023","feature":"F11","status":"in_progress","depends_on":["T022","T013","T014"],"evidence":null} -->
 
 ### Outcome and included work
 

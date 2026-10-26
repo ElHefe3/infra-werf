@@ -2,6 +2,7 @@ use atlas_core::{
     inventory::{ImportRecord, MAX_REPORT_BYTES},
     *,
 };
+use chrono::{SecondsFormat, Utc};
 use rusqlite::Connection;
 use serde_json::{Value, json};
 
@@ -205,4 +206,203 @@ fn directory_loader_is_fixed_bounded_and_does_not_accept_arbitrary_files() {
     assert!(store.import_reports(&directory).is_err());
     assert_eq!(store.snapshot().unwrap().servers.len(), 1);
     assert!(store.import_reports(&directory.join("missing")).is_err());
+}
+
+#[test]
+fn authenticated_refresh_store_write_preserves_owner_map_fields_and_rejects_old_source_times() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mut store = Store::create(&tmp.path().join("native.sqlite3")).unwrap();
+    let id = store
+        .add_server(AddServer {
+            name: "Owner name".into(),
+            host: "owner-ssh-alias.home".into(),
+        })
+        .unwrap();
+    let other = store
+        .add_server(AddServer {
+            name: "Other host".into(),
+            host: "other-ssh-alias.home".into(),
+        })
+        .unwrap();
+    let edge = store
+        .add_relationship(AddRelationship {
+            source: id.clone(),
+            target: other,
+            label: "owner link".into(),
+        })
+        .unwrap();
+    store
+        .update_server(
+            &id,
+            UpdateServer {
+                name: Some("Renamed by owner".into()),
+                host: Some("renamed-ssh-alias.home".into()),
+                x: Some(321.0),
+                y: Some(654.0),
+            },
+        )
+        .unwrap();
+    let before = store.snapshot().unwrap();
+    let now = Utc::now();
+    let collected_at =
+        (now - chrono::Duration::seconds(2)).to_rfc3339_opts(SecondsFormat::Secs, true);
+    let inventory = BaselineInventory {
+        hostname: "fixture-node.home".into(),
+        collected_at: collected_at.clone(),
+        source_host: None,
+        source_binding: None,
+        cpus: 4,
+        memory_total_kib: 4_000_000,
+        services: vec![ServiceSummary {
+            scope: "system".into(),
+            name: "ssh.service".into(),
+            state: "active".into(),
+            substate: "running".into(),
+        }],
+        containers: vec![ContainerSummary {
+            scope: "user".into(),
+            engine: "podman".into(),
+            name: "api".into(),
+            image: "localhost/api:v1".into(),
+            state: "running".into(),
+        }],
+    };
+    let source_binding = format!("src1_{}", "a".repeat(64));
+    assert!(
+        store
+            .refresh_inventory(&id, &inventory, &source_binding)
+            .unwrap()
+    );
+    let after = store.snapshot().unwrap();
+    assert_eq!(after.edges.len(), 1);
+    assert_eq!(after.edges[0].id, edge);
+    let before_server = before
+        .servers
+        .iter()
+        .find(|server| server.id == id)
+        .unwrap();
+    let after_server = after.servers.iter().find(|server| server.id == id).unwrap();
+    assert_eq!(
+        after_server
+            .inventory
+            .as_ref()
+            .unwrap()
+            .source_host
+            .as_deref(),
+        Some("renamed-ssh-alias.home")
+    );
+    assert_eq!(
+        after_server
+            .inventory
+            .as_ref()
+            .unwrap()
+            .source_binding
+            .as_deref(),
+        Some(source_binding.as_str())
+    );
+    assert_eq!(after_server.name, before_server.name);
+    assert_eq!(after_server.host, before_server.host);
+    assert_eq!(
+        (after_server.x, after_server.y),
+        (before_server.x, before_server.y)
+    );
+    assert_eq!(after_server.created_at, before_server.created_at);
+    assert_eq!(
+        after_server.inventory.as_ref().unwrap().collected_at,
+        collected_at
+    );
+    assert!(
+        !store
+            .refresh_inventory(&id, &inventory, &source_binding)
+            .unwrap()
+    );
+
+    let mut older = inventory;
+    older.collected_at =
+        (now - chrono::Duration::minutes(1)).to_rfc3339_opts(SecondsFormat::Secs, true);
+    assert!(
+        !store
+            .refresh_inventory(&id, &older, &source_binding)
+            .unwrap()
+    );
+    let final_server = store
+        .snapshot()
+        .unwrap()
+        .servers
+        .into_iter()
+        .find(|server| server.id == id)
+        .unwrap();
+    assert_eq!(final_server.inventory.unwrap().collected_at, collected_at);
+}
+
+#[test]
+fn equal_time_refresh_rebinds_only_an_identical_imported_inventory() {
+    let collected_at = "2026-01-01T00:00:00Z";
+    for identical in [true, false] {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut store = Store::create(&tmp.path().join("native.sqlite3")).unwrap();
+        let id = store
+            .add_server(AddServer {
+                name: "Fixture host".into(),
+                host: "fixture-node.home".into(),
+            })
+            .unwrap();
+        assert_eq!(
+            store
+                .import_batch(&[input("git", "fixture-node.home", collected_at)])
+                .unwrap(),
+            1
+        );
+        store
+            .update_server(
+                &id,
+                UpdateServer {
+                    host: Some("fixture-ssh-alias.home".into()),
+                    ..UpdateServer::default()
+                },
+            )
+            .unwrap();
+        let imported = store.snapshot().unwrap();
+        let event_count = imported.events.len();
+        let mut incoming =
+            atlas_core::inventory::classify(&report(collected_at, "fixture-node.home"), Utc::now())
+                .unwrap();
+        if !identical {
+            incoming.containers.clear();
+        }
+
+        let source_binding = format!("src1_{}", if identical { "b" } else { "c" }.repeat(64));
+        assert!(
+            !store
+                .refresh_inventory(&id, &incoming, &source_binding)
+                .unwrap()
+        );
+        let after = store.snapshot().unwrap();
+        let saved = after
+            .servers
+            .iter()
+            .find(|server| server.id == id)
+            .unwrap()
+            .inventory
+            .as_ref()
+            .unwrap();
+        assert_eq!(
+            saved.source_host.as_deref(),
+            if identical {
+                Some("fixture-ssh-alias.home")
+            } else {
+                None
+            }
+        );
+        assert_eq!(
+            saved.source_binding.as_deref(),
+            if identical {
+                Some(source_binding.as_str())
+            } else {
+                None
+            }
+        );
+        assert_eq!(saved.containers.len(), 1);
+        assert_eq!(after.events.len(), event_count);
+    }
 }

@@ -3,8 +3,8 @@
 //! authority. Protected results never enter Store or audit records.
 use crate::{
     operations::{
-        Authority, ExecutionContext, Inspection, InspectionRequest, OperationBroker,
-        OperationTicket, ServerTarget, SessionScope,
+        Authority, ExecutionContext, Inspection, InspectionPlan, InspectionRequest,
+        OperationBroker, OperationTicket, ServerTarget, SessionScope,
     },
     sftp::{self, Attrs, Client, Name},
     ssh::{SshOptions, SshProfile},
@@ -21,8 +21,13 @@ use std::{
     time::{Duration, Instant},
 };
 use ts_rs::{Config, TS};
+mod elevation;
 mod mutations;
 mod transfers;
+pub use elevation::{
+    ActionPassword, ElevationPreview, ElevationReceipt, ProtectedPlacementReceipt,
+    ProtectedPlacementRequest, ProtectedPlacementStage,
+};
 pub use mutations::{FileChange, FileMutationPreview, FileMutationReceipt, MutationKind};
 pub use transfers::{
     LocalSelection, LocalTransfer, TransferDirection, TransferState, TransferView,
@@ -33,6 +38,20 @@ fn error(code: ErrorCode) -> AtlasError {
 }
 fn lock<T>(mutex: &Mutex<T>) -> Result<std::sync::MutexGuard<'_, T>, AtlasError> {
     mutex.lock().map_err(|_| error(ErrorCode::IoFailure))
+}
+fn publish_if_visible<T>(
+    slot: &Mutex<Option<T>>,
+    visible: impl FnOnce() -> bool,
+    value: T,
+) -> Result<(), T> {
+    let Ok(mut slot) = slot.lock() else {
+        return Err(value);
+    };
+    if !visible() {
+        return Err(value);
+    }
+    *slot = Some(value);
+    Ok(())
 }
 fn token() -> String {
     SessionId::generate().as_str().into()
@@ -78,6 +97,15 @@ pub struct FileSession {
     pub home: FileResource,
     pub absolute_expires_at: String,
     pub idle_seconds: u32,
+    pub workloads: Vec<crate::workloads::WorkloadIdentity>,
+    pub workload_inventory_matches_session: bool,
+}
+#[derive(Clone, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct TerminalPoll {
+    pub data: Vec<u8>,
+    pub ended: bool,
+    pub overflow: bool,
 }
 #[derive(Clone, Serialize, Deserialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
@@ -157,6 +185,7 @@ struct Directory {
 }
 struct Data {
     client: Client,
+    home_path: Vec<u8>,
     resources: HashMap<String, Resource>,
     directory: Option<Directory>,
     pinned: Option<(String, Resource)>,
@@ -169,9 +198,70 @@ struct Session {
     last_used: Mutex<Instant>,
     closed: AtomicBool,
     visible: AtomicBool,
+    terminal_starting: AtomicBool,
+    terminal: Mutex<Option<crate::terminal::Process>>,
+    terminal_output: Mutex<TerminalOutputState>,
     snapshot: Mutex<HashMap<String, Resource>>,
     transfers: AtomicUsize,
+    stage_gate: Mutex<()>,
+    staging: AtomicBool,
+    close_requested: AtomicBool,
     data: Mutex<Data>,
+    profile: crate::ssh::SshProfile,
+    fingerprint: String,
+    elevation: Mutex<Option<elevation::Pending>>,
+    placement: Mutex<Option<elevation::Placement>>,
+    host_key: Option<crate::ssh::conversation::HostKey>,
+    workloads: HashMap<String, crate::workloads::WorkloadIdentity>,
+}
+const MAX_TERMINAL_OUTPUT: usize = 64 * 1024;
+#[derive(Default)]
+struct TerminalOutputState {
+    chunks: VecDeque<Vec<u8>>,
+    buffered: usize,
+    ended: bool,
+    overflow: bool,
+}
+impl TerminalOutputState {
+    fn push(&mut self, bytes: Vec<u8>) {
+        if self.ended || self.overflow {
+            return;
+        }
+        if self.buffered.saturating_add(bytes.len()) > MAX_TERMINAL_OUTPUT {
+            self.chunks.clear();
+            self.buffered = 0;
+            self.overflow = true;
+            self.ended = true;
+            return;
+        }
+        self.buffered += bytes.len();
+        self.chunks.push_back(bytes);
+    }
+    fn poll(&mut self) -> TerminalPoll {
+        if self.overflow {
+            return TerminalPoll {
+                data: Vec::new(),
+                ended: true,
+                overflow: true,
+            };
+        }
+        let mut data = Vec::with_capacity(self.buffered);
+        while let Some(chunk) = self.chunks.pop_front() {
+            data.extend(chunk);
+        }
+        self.buffered = 0;
+        TerminalPoll {
+            data,
+            ended: self.ended,
+            overflow: false,
+        }
+    }
+}
+struct TerminalStart<'a>(&'a AtomicBool);
+impl Drop for TerminalStart<'_> {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::Release);
+    }
 }
 impl Session {
     fn view_valid(&self, policy: SessionPolicy) -> bool {
@@ -184,6 +274,9 @@ impl Session {
                 .last_used
                 .lock()
                 .is_ok_and(|last| last.elapsed() < policy.idle)
+    }
+    fn cleanup_valid(&self) -> bool {
+        !self.closed.load(Ordering::Acquire) && self.deadline > Instant::now()
     }
 }
 #[derive(Clone)]
@@ -225,6 +318,7 @@ impl FileSessions {
         target: &ServerTarget,
         operation: &OperationId,
         lease: Box<dyn Send>,
+        inventory: Option<&BaselineInventory>,
     ) -> Result<FileSession, AtlasError> {
         let slot = Arc::new(Mutex::new(None));
         let output = slot.clone();
@@ -249,10 +343,31 @@ impl FileSessions {
         if sessions.len() >= 8 {
             return Err(error(ErrorCode::Conflict));
         }
+        let source_binding =
+            crate::inventory::authenticated_source_binding(&client.profile, &client.fingerprint);
+        let workload_inventory_matches_session = inventory.is_some_and(|saved| {
+            saved.source_host.as_deref() == Some(target.host())
+                && saved.source_binding.as_deref() == Some(source_binding.as_str())
+        });
+        let workloads = crate::workloads::WorkloadIdentity::for_authenticated_session(
+            target.server_id(),
+            target.host(),
+            &source_binding,
+            inventory,
+        );
+        let workload_ids = workloads
+            .iter()
+            .map(|workload| workload.id.clone())
+            .collect();
+        let workload_map = workloads
+            .iter()
+            .cloned()
+            .map(|workload| (workload.id.clone(), workload))
+            .collect();
         let id = self.broker.register_authenticated_session(
             &self.authority,
             target.clone(),
-            SessionScope::new(vec![], vec![])?,
+            SessionScope::new(vec![], workload_ids)?,
             self.policy.absolute,
         )?;
         let home = FileResource {
@@ -266,11 +381,13 @@ impl FileSessions {
             home: home.clone(),
             absolute_expires_at: (Utc::now() + self.policy.absolute).to_rfc3339(),
             idle_seconds: self.policy.idle.as_secs().max(1) as u32,
+            workloads,
+            workload_inventory_matches_session,
         };
         let resources = HashMap::from([(
             home.id.clone(),
             Resource {
-                path: home_path,
+                path: home_path.clone(),
                 kind: FileKind::Directory,
                 label: home.label.clone(),
                 mutable: false,
@@ -285,6 +402,7 @@ impl FileSessions {
             let _ = self.broker.close_session(&self.authority, &id);
             return Err(error);
         }
+        let host_key = client.host_key.clone();
         sessions.insert(
             id.as_str().into(),
             Arc::new(Session {
@@ -294,15 +412,28 @@ impl FileSessions {
                 last_used: Mutex::new(Instant::now()),
                 closed: AtomicBool::new(false),
                 visible: AtomicBool::new(true),
+                terminal_starting: AtomicBool::new(false),
+                terminal: Mutex::new(None),
+                terminal_output: Mutex::new(TerminalOutputState::default()),
                 snapshot: Mutex::new(resources.clone()),
                 transfers: AtomicUsize::new(0),
+                stage_gate: Mutex::new(()),
+                staging: AtomicBool::new(false),
+                close_requested: AtomicBool::new(false),
                 data: Mutex::new(Data {
                     client,
+                    home_path: home_path.clone(),
                     resources,
                     directory: None,
                     pinned: None,
                     pending: None,
                 }),
+                profile: result.profile.clone(),
+                fingerprint: result.fingerprint.clone(),
+                elevation: Mutex::new(None),
+                placement: Mutex::new(None),
+                host_key,
+                workloads: workload_map,
             }),
         );
         Ok(result)
@@ -320,6 +451,206 @@ impl FileSessions {
                 self.close(id)?;
             }
             return Err(error(ErrorCode::ExpiredSession));
+        }
+        Ok(session)
+    }
+
+    /// Starts the fixed login shell only after an authenticated file session
+    /// exists. A short pinned SSH probe proves public-key authentication and
+    /// the same host identity before the persistent terminal connection opens.
+    pub fn start_terminal(
+        &self,
+        target: &ServerTarget,
+        id: &SessionId,
+        cols: u16,
+        rows: u16,
+    ) -> Result<(), AtlasError> {
+        let session = self.session(target, id)?;
+        if session
+            .terminal_starting
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .is_err()
+        {
+            return Err(error(ErrorCode::Conflict));
+        }
+        let _starting = TerminalStart(&session.terminal_starting);
+        let host_key = session
+            .host_key
+            .clone()
+            .ok_or_else(|| error(ErrorCode::HostTrustFailure))?;
+        let previous = {
+            let mut terminal = lock(&session.terminal)?;
+            if terminal
+                .as_ref()
+                .is_some_and(|process| !process.is_closed())
+            {
+                return Err(error(ErrorCode::Conflict));
+            }
+            terminal.take()
+        };
+        drop(previous);
+        *lock(&session.terminal_output)? = TerminalOutputState::default();
+
+        let ticket = self.broker.prepare(
+            Some(&self.authority),
+            target,
+            InspectionRequest {
+                server_id: target.server_id().clone(),
+                session_id: id.clone(),
+                inspection: Inspection::TerminalOpen {},
+            },
+        )?;
+        let output = Arc::new(Mutex::new(None));
+        let output_slot = output.clone();
+        let worker = session.clone();
+        let options = self.options.clone();
+        let profile = session.profile.clone();
+        let fingerprint = session.fingerprint.clone();
+        let policy = self.policy;
+        let weak_session = Arc::downgrade(&session);
+        let callback = Arc::new(move |event| {
+            let Some(session) = weak_session.upgrade() else {
+                return;
+            };
+            if !session.view_valid(policy) {
+                return;
+            }
+            match event {
+                crate::terminal::Event::Data(data) => {
+                    if let Ok(mut last_used) = session.last_used.lock() {
+                        *last_used = Instant::now();
+                    } else {
+                        return;
+                    }
+                    if let Ok(mut output) = session.terminal_output.lock() {
+                        output.push(data);
+                    }
+                }
+                crate::terminal::Event::Ended => {
+                    if let Ok(mut output) = session.terminal_output.lock() {
+                        output.ended = true;
+                    }
+                }
+            }
+        });
+        let executed = self.broker.execute(
+            Some(&self.authority),
+            &ticket.operation_id,
+            target,
+            move |plan, context| {
+                if !matches!(plan, InspectionPlan::TerminalOpen) {
+                    return Err(error(ErrorCode::Denied));
+                }
+                let valid = || {
+                    if worker.view_valid(policy) {
+                        Ok(())
+                    } else {
+                        Err(error(ErrorCode::ExpiredSession))
+                    }
+                };
+                valid()?;
+                let peer = options.pin_peer(&profile, &fingerprint, &host_key, context)?;
+                let probe = peer.run(&["true"], None, context, &valid)?;
+                if !probe.success {
+                    return Err(error(ErrorCode::Unauthenticated));
+                }
+                let process =
+                    crate::terminal::Process::start(peer, cols, rows, context, &valid, callback)?;
+                *lock(&output_slot)? = Some(process);
+                Ok(())
+            },
+        );
+        if let Err(failure) = executed {
+            *lock(&session.terminal_output)? = TerminalOutputState::default();
+            return Err(failure);
+        }
+        let process = lock(&output)?
+            .take()
+            .ok_or_else(|| error(ErrorCode::IoFailure))?;
+        if let Err(process) = publish_if_visible(
+            &session.terminal,
+            || session.view_valid(self.policy),
+            process,
+        ) {
+            drop(process);
+            self.close(id)?;
+            return Err(error(ErrorCode::ExpiredSession));
+        }
+        *lock(&session.last_used)? = Instant::now();
+        Ok(())
+    }
+
+    pub fn poll_terminal(
+        &self,
+        target: &ServerTarget,
+        id: &SessionId,
+    ) -> Result<TerminalPoll, AtlasError> {
+        let session = self.session(target, id)?;
+        if lock(&session.terminal)?.is_none() {
+            return Err(error(ErrorCode::ExpiredSession));
+        }
+        Ok(lock(&session.terminal_output)?.poll())
+    }
+
+    pub fn write_terminal(
+        &self,
+        target: &ServerTarget,
+        id: &SessionId,
+        bytes: &[u8],
+    ) -> Result<(), AtlasError> {
+        if bytes.is_empty() || bytes.len() > 16 * 1024 {
+            return Err(error(ErrorCode::InvalidInput));
+        }
+        let session = self.session(target, id)?;
+        let terminal = lock(&session.terminal)?;
+        if !session.view_valid(self.policy) {
+            return Err(error(ErrorCode::ExpiredSession));
+        }
+        terminal
+            .as_ref()
+            .ok_or_else(|| error(ErrorCode::ExpiredSession))?
+            .write(bytes)?;
+        *lock(&session.last_used)? = Instant::now();
+        Ok(())
+    }
+
+    pub fn resize_terminal(
+        &self,
+        target: &ServerTarget,
+        id: &SessionId,
+        cols: u16,
+        rows: u16,
+    ) -> Result<(), AtlasError> {
+        let session = self.session(target, id)?;
+        let terminal = lock(&session.terminal)?;
+        if !session.view_valid(self.policy) {
+            return Err(error(ErrorCode::ExpiredSession));
+        }
+        terminal
+            .as_ref()
+            .ok_or_else(|| error(ErrorCode::ExpiredSession))?
+            .resize(cols, rows)?;
+        *lock(&session.last_used)? = Instant::now();
+        Ok(())
+    }
+    fn session_for_cleanup(
+        &self,
+        target: &ServerTarget,
+        id: &SessionId,
+    ) -> Result<Arc<Session>, AtlasError> {
+        let session = lock(&self.sessions)?
+            .get(id.as_str())
+            .cloned()
+            .ok_or_else(|| error(ErrorCode::ExpiredSession))?;
+        if session.target != *target {
+            return Err(error(ErrorCode::Denied));
+        }
+        if !session.cleanup_valid() {
+            self.close(id)?;
+            return Err(error(ErrorCode::ExpiredSession));
+        }
+        if !lock(&session.placement)?.is_some() {
+            return Err(error(ErrorCode::NotFound));
         }
         Ok(session)
     }
@@ -405,6 +736,208 @@ impl FileSessions {
             }
         }
     }
+
+    /// Collect the fixed approved baseline over a host-pinned SSH exec channel
+    /// while an authenticated SFTP session supplies the protected lifetime.
+    /// Raw remote output is parsed inside the trusted adapter and never leaves
+    /// as a frontend or persistence DTO.
+    pub fn collect_inventory(
+        &self,
+        target: &ServerTarget,
+        id: &SessionId,
+    ) -> Result<crate::inventory::InventoryProbe, AtlasError> {
+        let session = self.session(target, id)?;
+        let ticket = self.broker.prepare(
+            Some(&self.authority),
+            target,
+            InspectionRequest {
+                server_id: target.server_id().clone(),
+                session_id: id.clone(),
+                inspection: Inspection::SystemSummary {},
+            },
+        )?;
+        let worker = session.clone();
+        let options = self.options.clone();
+        let profile = session.profile.clone();
+        let fingerprint = session.fingerprint.clone();
+        let source_binding = crate::inventory::authenticated_source_binding(&profile, &fingerprint);
+        let host_key = session
+            .host_key
+            .clone()
+            .ok_or_else(|| error(ErrorCode::HostTrustFailure))?;
+        let policy = self.policy;
+        let result = self.broker.execute(
+            Some(&self.authority),
+            &ticket.operation_id,
+            target,
+            move |plan, context| {
+                if !matches!(plan, InspectionPlan::SystemSummary) {
+                    return Err(error(ErrorCode::Denied));
+                }
+                let valid = || {
+                    if worker.view_valid(policy) {
+                        Ok(())
+                    } else {
+                        Err(error(ErrorCode::ExpiredSession))
+                    }
+                };
+                valid()?;
+                let peer = options.pin_peer(&profile, &fingerprint, &host_key, context)?;
+                let reply = peer.run(
+                    &["/bin/bash", "-c", crate::inventory::REMOTE_BASELINE_COMMAND],
+                    None,
+                    context,
+                    &valid,
+                )?;
+                let probe = if reply.success {
+                    crate::inventory::parse_remote_baseline(&reply.stdout, Utc::now())
+                } else {
+                    crate::inventory::InventoryProbe {
+                        inventory: None,
+                        source_collected_at: None,
+                        source_binding: None,
+                    }
+                };
+                let mut probe = probe;
+                if probe.inventory.is_some() {
+                    probe.source_binding = Some(source_binding.clone());
+                }
+                let encoded =
+                    serde_json::to_string(&probe).map_err(|_| error(ErrorCode::IoFailure))?;
+                context.write(&encoded)?;
+                *lock(&worker.last_used)? = Instant::now();
+                Ok(())
+            },
+        );
+        match result {
+            Ok(value) => serde_json::from_str(&value.text).map_err(|_| error(ErrorCode::IoFailure)),
+            Err(failure) if failure.code == ErrorCode::OutputLimit => {
+                Ok(crate::inventory::InventoryProbe {
+                    inventory: None,
+                    source_collected_at: None,
+                    source_binding: None,
+                })
+            }
+            Err(failure) => Err(failure),
+        }
+    }
+
+    /// Inspect one saved workload through its authenticated, host-pinned SSH
+    /// session. The typed identity is reconstructed from trusted inventory at
+    /// session open; no caller field is ever used as a remote command.
+    pub fn inspect_workload(
+        &self,
+        target: &ServerTarget,
+        id: &SessionId,
+        workload_id: &str,
+    ) -> Result<crate::workloads::WorkloadInspection, AtlasError> {
+        let session = self.session(target, id)?;
+        let identity = session
+            .workloads
+            .get(workload_id)
+            .cloned()
+            .ok_or_else(|| error(ErrorCode::Denied))?;
+        if !identity.supported {
+            return Ok(crate::workloads::WorkloadInspection::unsupported(
+                workload_id,
+            ));
+        }
+        let ticket = self.broker.prepare(
+            Some(&self.authority),
+            target,
+            InspectionRequest {
+                server_id: target.server_id().clone(),
+                session_id: id.clone(),
+                inspection: Inspection::ServiceStatus {
+                    workload_id: workload_id.to_owned(),
+                },
+            },
+        )?;
+        let worker = session.clone();
+        let options = self.options.clone();
+        let profile = session.profile.clone();
+        let fingerprint = session.fingerprint.clone();
+        let host_key = session
+            .host_key
+            .clone()
+            .ok_or_else(|| error(ErrorCode::HostTrustFailure))?;
+        let policy = self.policy;
+        let broker_result = self.broker.execute(
+            Some(&self.authority),
+            &ticket.operation_id,
+            target,
+            move |plan, context| {
+                if !matches!(plan, InspectionPlan::ServiceStatus { workload_id: id } if id == &identity.id)
+                {
+                    return Err(error(ErrorCode::Denied));
+                }
+                let valid = || {
+                    if worker.view_valid(policy) {
+                        Ok(())
+                    } else {
+                        Err(error(ErrorCode::ExpiredSession))
+                    }
+                };
+                valid()?;
+                let peer = options.pin_peer(&profile, &fingerprint, &host_key, context)?;
+                let kind = match identity.kind {
+                    crate::workloads::WorkloadKind::Service => "service",
+                    crate::workloads::WorkloadKind::Container => "container",
+                };
+                let reply = peer.run(
+                    &[
+                        "/bin/bash",
+                        "-c",
+                        crate::workloads::REMOTE_WORKLOAD_INSPECTION,
+                        "atlas-workload",
+                        kind,
+                        &identity.scope,
+                        &identity.runtime,
+                        &identity.name,
+                    ],
+                    None,
+                    context,
+                    &valid,
+                )?;
+                if !reply.success {
+                    return Err(error(ErrorCode::IoFailure));
+                }
+                let inspection = crate::workloads::parse_workload_inspection(
+                    &reply.stdout,
+                    &identity.id,
+                )?;
+                let encoded =
+                    serde_json::to_string(&inspection).map_err(|_| error(ErrorCode::IoFailure))?;
+                context.write(&encoded)?;
+                *lock(&worker.last_used)? = Instant::now();
+                Ok(())
+            },
+        );
+        match broker_result {
+            Ok(value) => {
+                if !session.view_valid(self.policy) {
+                    if !session.valid(self.policy) {
+                        self.close(id)?;
+                    }
+                    return Err(error(ErrorCode::ExpiredSession));
+                }
+                serde_json::from_str(&value.text).map_err(|_| error(ErrorCode::IoFailure))
+            }
+            Err(failure) => {
+                if !matches!(
+                    failure.code,
+                    ErrorCode::Denied
+                        | ErrorCode::NotFound
+                        | ErrorCode::InvalidInput
+                        | ErrorCode::Conflict
+                ) {
+                    let _ = self.close(id);
+                }
+                Err(failure)
+            }
+        }
+    }
+
     fn perform(
         data: &mut Data,
         action: FileAction,
@@ -651,12 +1184,31 @@ impl FileSessions {
         })
     }
     pub fn close(&self, id: &SessionId) -> Result<(), AtlasError> {
+        let active = lock(&self.sessions)?.get(id.as_str()).cloned();
+        let Some(active) = active else {
+            return self.broker.close_session(&self.authority, id);
+        };
+        // Serialize stage admission with revocation. Whichever acquires this
+        // gate first either registers staging before Lock can inspect it, or
+        // sees the closed/hidden session before any remote stage begins.
+        let _stage_gate = lock(&active.stage_gate)?;
+        let protected_stage_pending = active.staging.load(Ordering::Acquire)
+            || (active.cleanup_valid() && lock(&active.placement)?.is_some());
+        if protected_stage_pending {
+            active.close_requested.store(true, Ordering::Release);
+            active.visible.store(false, Ordering::Release);
+            lock(&active.snapshot)?.clear();
+            Self::stop_terminal(&active)?;
+            return Ok(());
+        }
         // Revoke before waiting for process cleanup. A concurrent read cannot
         // deliver data after lock wins the broker registry lock.
+        active.visible.store(false, Ordering::Release);
         let revoked = self.broker.close_session(&self.authority, id);
         let session = lock(&self.sessions)?.remove(id.as_str());
         if let Some(session) = session {
             session.closed.store(true, Ordering::Release);
+            Self::stop_terminal(&session)?;
             let mut events = lock(&self.closed)?;
             if events.len() >= 128 {
                 // Bounded overflow requests clearing all protected views.
@@ -670,6 +1222,12 @@ impl FileSessions {
         }
         revoked
     }
+    fn stop_terminal(session: &Session) -> Result<(), AtlasError> {
+        *lock(&session.terminal_output)? = TerminalOutputState::default();
+        let terminal = lock(&session.terminal)?.take();
+        drop(terminal);
+        Ok(())
+    }
     pub fn take_closed(&self) -> Vec<Option<SessionId>> {
         self.closed
             .lock()
@@ -681,8 +1239,8 @@ impl FileSessions {
         if let Some(session) = session {
             session.visible.store(false, Ordering::Release);
             lock(&session.snapshot)?.clear();
-            self.broker
-                .set_resources(&self.authority, id, &session.target, vec![])?;
+            session.close_requested.store(true, Ordering::Release);
+            Self::stop_terminal(&session)?;
             if session.transfers.load(Ordering::Acquire) == 0 {
                 return self.close(id);
             }
@@ -727,6 +1285,24 @@ impl FileSessions {
             })
             .unwrap_or_default();
         for id in &ids {
+            let cleanup = lock(&self.sessions).ok().and_then(|sessions| {
+                sessions.get(id.as_str()).and_then(|session| {
+                    if session.cleanup_valid() && !session.staging.load(Ordering::Acquire) {
+                        lock(&session.placement)
+                            .ok()
+                            .and_then(|placement| placement.clone())
+                            .map(|placement| (session.target.clone(), placement.resource_id))
+                    } else {
+                        None
+                    }
+                })
+            });
+            if let Some((target, resource_id)) = cleanup {
+                // Idle expiry revokes browsing but retains the SSH channel only
+                // for this backend-recorded private-stage cleanup. Absolute
+                // expiry below still closes the channel even if cleanup fails.
+                let _ = self.cancel_protected_placement(&target, id, &resource_id);
+            }
             let _ = self.close(id);
         }
         ids
@@ -765,6 +1341,7 @@ pub fn typescript_contracts() -> String {
         FileEntry::decl(&config),
         FilePage::decl(&config),
         FileSession::decl(&config),
+        TerminalPoll::decl(&config),
         FileAction::decl(&config),
         FileResult::decl(&config),
     ]
@@ -772,4 +1349,57 @@ pub fn typescript_contracts() -> String {
     .join("")
         + &mutations::typescript_contracts()
         + &transfers::typescript_contracts()
+        + &elevation::typescript_contracts()
+}
+
+#[cfg(test)]
+mod terminal_output_tests {
+    use super::*;
+
+    #[test]
+    fn terminal_output_is_drained_in_memory_and_capped_at_64_kib() {
+        let mut output = TerminalOutputState::default();
+        output.push(vec![b'a'; 32 * 1024]);
+        output.push(vec![b'b'; 32 * 1024]);
+        let drained = output.poll();
+        assert_eq!(drained.data.len(), MAX_TERMINAL_OUTPUT);
+        assert!(!drained.ended);
+        assert!(!drained.overflow);
+        assert_eq!(output.buffered, 0);
+
+        output.push(vec![b'x'; MAX_TERMINAL_OUTPUT]);
+        output.push(vec![b'y']);
+        let overflow = output.poll();
+        assert!(overflow.ended);
+        assert!(overflow.overflow);
+        assert!(overflow.data.is_empty());
+        assert_eq!(output.buffered, 0);
+    }
+}
+
+#[cfg(test)]
+mod terminal_publication_tests {
+    use super::*;
+
+    #[test]
+    fn lock_winning_the_terminal_slot_prevents_late_process_publication() {
+        let slot = Arc::new(Mutex::new(None));
+        let visible = Arc::new(AtomicBool::new(true));
+        let held = slot.lock().unwrap();
+        let worker_slot = slot.clone();
+        let worker_visible = visible.clone();
+        let worker = std::thread::spawn(move || {
+            publish_if_visible(
+                &worker_slot,
+                || worker_visible.load(Ordering::Acquire),
+                "shell",
+            )
+        });
+
+        visible.store(false, Ordering::Release);
+        drop(held);
+
+        assert_eq!(worker.join().unwrap(), Err("shell"));
+        assert!(slot.lock().unwrap().is_none());
+    }
 }

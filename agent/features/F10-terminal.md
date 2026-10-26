@@ -14,11 +14,11 @@ Current owner decision (2026-10-26): desktop is the complete release target. Pho
 
 Read [SCOPE.md](../SCOPE.md) for access boundaries; use [AGENT.md](../AGENT.md) for execution/proof rules. Ticket dependencies, not numeric ordering, control implementation. Feature completion is derived from its tickets and scope gate, not independently marked done.
 
-No seed discovery applies beyond the shared scope. Link new findings when material.
+See [D030](../discovery/D030-windows-conpty-terminal-startup.md) for Windows ConPTY handle setup and pinned authentication evidence.
 
 ## T021 — Implement authenticated interactive terminal
 
-<!-- atlas-ticket: {"id":"T021","feature":"F10","status":"todo","depends_on":["T013","T014","T007","T008"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T021","feature":"F10","status":"done","depends_on":["T013","T014","T007","T008"],"evidence":"../evidence/T021-acceptance.md"} -->
 
 ### Outcome and included work
 
@@ -36,9 +36,9 @@ Use a bounded PTY/channel with a terminal UI suited to the desktop; Android keyb
 
 ### Acceptance criteria
 
-- [ ] Interactive input, Unicode, control/interrupt keys, resize and desktop keyboard behavior pass a controlled session journey.
-- [ ] Slow/large output remains bounded and disconnect/lock/expiry reliably stops input/output and clears protected content.
-- [ ] A new connection requires fresh valid handles; stale input cannot reach another session/host and terminal contents are not persisted or logged.
+- [x] Interactive input, Unicode, control/interrupt keys, resize and desktop keyboard behavior pass a controlled session journey.
+- [x] Slow/large output remains bounded and disconnect/lock/expiry reliably stops input/output and clears protected content.
+- [x] A new connection requires fresh valid handles; stale input cannot reach another session/host and terminal contents are not persisted or logged.
 
 ### Verification
 
@@ -46,7 +46,7 @@ Focused PTY/transport lifecycle checks plus one actual Windows terminal journey;
 
 ### Evidence and closure
 
-Use a concise [feature acceptance record](../evidence/README.md), map results to T021, attach its relative path in ticket metadata, then check only proven criteria. Record tested revision/platform/fixtures, failures, limits and rollback as applicable. Current proof: **not run**. Use [the checkpoint](../evidence/CHECKPOINT.md) at handoff.
+See [T021 acceptance](../evidence/T021-acceptance.md) for the mapped results, tested revision/platform/fixture, repairs, limits and cleanup.
 
 ### Stop conditions
 

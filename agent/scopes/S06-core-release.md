@@ -10,7 +10,7 @@ A packaged and owner-accepted native core release with data recovery and a rever
 
 ## Entry and sequence
 
-All included feature tickets have valid proof. Required owner/device access and signing/installation permissions are available or explicitly blocked.
+All included desktop feature tickets have valid proof. Required owner access and Windows installation permissions are available or explicitly blocked. Mobile signing, phone installation and pairing remain future S09 work.
 
 T024 integrated/recovery proof, T025 release artifacts/install smoke, then T026 desktop acceptance and cutover. Reuse unchanged artifacts/evidence.
 
@@ -33,7 +33,7 @@ Ticket status is canonical in the feature packets; scope progress is derived. Do
 
 ## Verification and refinement
 
-One targeted integrated regression/recovery, one Windows release build and one concise physical-device owner acceptance set. Do not rerun unchanged component suites for documentation cleanup.
+One targeted integrated regression/recovery, one Windows release build and one concise owner acceptance set on the actual Windows desktop. Do not rerun unchanged component suites for documentation cleanup.
 
 Link actual feature/gate proof and revision in [the checkpoint](../evidence/CHECKPOINT.md). Use the proportional evidence rules in [AGENT.md](../AGENT.md) and do not record native/owner tests as passed if unavailable.
 

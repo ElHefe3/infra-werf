@@ -1,0 +1,27 @@
+# Cached Debian userspace for disposable OpenSSH/sudo/PTY tests only.
+# Atlas itself continues to use the mise-pinned Node26/Rust toolchain.
+FROM docker.io/library/node:24-bookworm
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends openssh-server sudo && rm -rf /var/lib/apt/lists/* \
+    && useradd -m -s /bin/sh fixture && useradd -m -s /bin/sh fixture-nopass \
+    && useradd -m -s /bin/sh fixture-none \
+    && mkdir -p /run/sshd /home/fixture/.ssh /home/fixture-nopass/.ssh /home/fixture-none/.ssh \
+    && chmod 700 /home/fixture/.ssh /home/fixture-nopass/.ssh /home/fixture-none/.ssh \
+    && chown -R fixture:fixture /home/fixture/.ssh \
+    && chown -R fixture-nopass:fixture-nopass /home/fixture-nopass/.ssh \
+    && chown -R fixture-none:fixture-none /home/fixture-none/.ssh \
+    && rm -f /etc/ssh/ssh_host_* \
+    && printf '%s\n' 'Defaults:fixture timestamp_type=global,timestamp_timeout=15' 'fixture ALL=(root) ALL' 'fixture-nopass ALL=(root) NOPASSWD: ALL' > /etc/sudoers.d/atlas-fixture \
+    && chmod 440 /etc/sudoers.d/atlas-fixture && visudo -cf /etc/sudoers.d/atlas-fixture \
+    && mv /usr/bin/sudo /usr/bin/sudo.real \
+    && printf '%s\n' '#!/bin/sh' 'if [ "$(id -un)" = fixture-none ]; then' '  prompt=' '  while [ "$#" -gt 0 ]; do case "$1" in -p) prompt="$2"; shift 2;; *) shift;; esac; done' '  printf "%s" "$prompt"' '  IFS= read -r supplied || supplied=' '  printf "%s" "$supplied" > /tmp/atlas-none-sudo-password' '  exit 1' 'fi' 'exec /usr/bin/sudo.real "$@"' > /usr/bin/sudo \
+    && chmod 755 /usr/bin/sudo \
+    && : > /etc/ssh/atlas-banner
+COPY sshd_config /etc/atlas-sshd-config
+COPY entrypoint.sh /usr/local/bin/atlas-fixture-start
+COPY systemctl /usr/local/bin/systemctl
+COPY podman /usr/local/bin/podman
+COPY journalctl /usr/local/bin/journalctl
+COPY docker /usr/local/bin/docker
+RUN chmod 755 /usr/local/bin/atlas-fixture-start /usr/local/bin/systemctl /usr/local/bin/podman /usr/local/bin/journalctl /usr/local/bin/docker
+EXPOSE 22
+ENTRYPOINT ["/usr/local/bin/atlas-fixture-start"]
