@@ -1,7 +1,7 @@
 # T023 acceptance — Scoped workload control
 
 Date: 2026-10-26  
-Revision: `88a4f91` plus the final uncommitted T023 working tree used for the native proof.  
+Revision: `df9e991` (the source tree was exercised immediately before this commit).<br>
 Result: pass  
 Feature/ticket: F11 / T023
 

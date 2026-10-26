@@ -2,7 +2,7 @@
 
 Date: 2026-10-26
 State: S01–S05 desktop gates complete. T019 bounded health, T020 approved SSH inventory refresh, T021 native interactive terminal, T022 protected workload inspection/logs, and T023 scoped workload control pass. T013 native Windows sudo/elevation journey, T018 isolated SSH/SFTP/sudo fixture, and T019–T023 native Windows journeys pass. T024 integrated recovery proof is in progress. Mobile/coordinator/Android is future S09. Continue all authorised desktop batches without asking routine permission between them.
-Revision: `88a4f91` plus the uncommitted T023/S05 evidence and tracker updates.
+Revision: `df9e991` for the committed T023/S05 closeout.
 
 ## Resume
 

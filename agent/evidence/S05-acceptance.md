@@ -2,7 +2,7 @@
 
 Date: 2026-10-26  
 Scope: S05  
-Revision: `88a4f91` plus the T023 working tree; earlier feature proofs are linked individually.  
+Revision: `df9e991` for the S05 closeout; earlier feature proofs retain their per-ticket revisions.<br>
 Result: pass
 
 ## Acceptance gate
