@@ -2,7 +2,7 @@
 
 Date: 2026-10-27
 Feature/ticket: F12 / T026
-Revision: T026 verification based on preparation commit `f7bedb1`; application binary built from `7f9ba84`.
+Revision: Application binary built from `7f9ba84`; read-only T026 verification recorded in commit `3a63e3c`.
 Result: technical preflight passed; owner acceptance is pending.
 
 This is a preparation checklist, **not acceptance evidence**. T026 stays in progress until the owner reviews the installed app and accepts the desktop cutover.
