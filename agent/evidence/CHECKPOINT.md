@@ -1,12 +1,12 @@
 # Atlas restart checkpoint
 
 Date: 2026-10-26
-State: S01/S02 desktop complete. T017 transfers now passes; S03–S06 desktop remains authorised. Mobile/coordinator/Android is future S09. Continue all desktop batches without asking routine permission between them.
+State: S01/S02 desktop complete. T017 transfers pass. T013 is blocked on Windows OpenSSH live-log sharing while preserving its pre-authentication gate; T019 is ready via completed T014 only. S03–S06 desktop remains authorised. Mobile/coordinator/Android is future S09. Continue all independently ready desktop batches without asking routine permission between them.
 Revision: a6706d8 + T012 proof/documentation working tree; its completion commit contains this checkpoint.
 
 ## Resume
 
-Read [AGENT.md](../AGENT.md), the selected packet and its evidence only. Next: T013 fresh per-action sudo; T012 existing SSH identities/agent and strict host trust is complete. After that T019/T020 monitoring, T021 real terminal, T022/T023 services, T018 elevated placement, and T024–T026 Windows release/actual owner acceptance. Do not infer release acceptance or mobile completion from desktop source or fixture tests.
+Read [AGENT.md](../AGENT.md), the selected packet and its evidence only. T012 strict host trust is complete. T013 is blocked; see [T013 blocker](T013-blocker.md) and [D023](../discovery/D023-windows-ssh-log-sharing.md). Next independent desktop ticket: T019 bounded HTTP/TCP monitoring. T020, T021–T023 and T018 still require T013. Then T024–T026 Windows release/actual owner acceptance. Do not infer release acceptance or mobile completion from desktop source or fixture tests.
 
 [T012](T012-acceptance.md) passed14 actual OpenSSH cases including a disposable Windows named-pipe agent (1 identity request/1 signature/0 active), and native Settings/trust/cancel/close-guard proof. No production SSH changes or owner agent-service changes were needed. T013 will use actual sudo in an isolated Linux container, retaining the proven protected-session core. See [D022](../discovery/D022-windows-agent-and-fresh-sudo.md).
 

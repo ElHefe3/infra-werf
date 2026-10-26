@@ -36,3 +36,4 @@ Link important discoveries from affected feature packets and the checkpoint. Nev
 - [D020 Desktop release complete; mobile is future development](D020-desktop-release-mobile-future.md)
 - [D021 Transfer publication, cleanup and build-cache boundaries](D021-transfer-publication-and-build-cache.md)
 - [D022 Windows agent proof and fresh sudo semantics](D022-windows-agent-and-fresh-sudo.md)
+- [D023 Windows SSH log sharing and pre-auth gate](D023-windows-ssh-log-sharing.md)

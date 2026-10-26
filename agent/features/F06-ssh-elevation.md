@@ -54,7 +54,7 @@ Stop on unexpected trust changes or unavailable identity; never auto-accept host
 
 ## T013 — Implement protected SSH sessions and per-action sudo
 
-<!-- atlas-ticket: {"id":"T013","feature":"F06","status":"ready","depends_on":["T012","T014"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T013","feature":"F06","status":"blocked","depends_on":["T012","T014"],"evidence":"../evidence/T013-blocker.md"} -->
 
 ### Outcome and included work
 
@@ -84,7 +84,7 @@ Focused expiry/cancel/denial and secret-retention tests with a controlled sudo f
 
 ### Evidence and closure
 
-Use a concise [feature acceptance record](../evidence/README.md), map results to T013, attach its relative path in ticket metadata, then check only proven criteria. Record tested revision/platform/fixtures, failures, limits and rollback as applicable. Current proof: **not run**. Use [the checkpoint](../evidence/CHECKPOINT.md) at handoff.
+Current state: **blocked**. The controlled wrong-password case returns `IoFailure` before the pre-authentication command gate can be released. Windows OpenSSH reports sharing violation 32 when Atlas tries to read its active `-E` log. See [the blocker record](../evidence/T013-blocker.md) and [D023](../discovery/D023-windows-ssh-log-sharing.md). Keep the gate: automatic review rejected a variant that would have removed it. Do not weaken the authentication boundary. Resume only with a log-capture approach that preserves the pre-auth gate, then rerun the focused disposable sudo fixture and obtain review.
 
 ### Stop conditions
 

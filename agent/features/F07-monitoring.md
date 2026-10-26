@@ -18,7 +18,7 @@ Read [SCOPE.md](../SCOPE.md) for access boundaries; use [AGENT.md](../AGENT.md) 
 
 ## T019 — Implement bounded HTTP/TCP health checks
 
-<!-- atlas-ticket: {"id":"T019","feature":"F07","status":"todo","depends_on":["T003","T007","T014"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T019","feature":"F07","status":"ready","depends_on":["T003","T007","T014"],"scope_entry":{"S03":["T014"]},"evidence":null} -->
 
 ### Outcome and included work
 
@@ -33,6 +33,8 @@ Agent deployment, Internet scanning, performance benchmarking or arbitrary netwo
 Use cancellable periodic HTTP/TCP checks with configured endpoints, bounded timeout/concurrency and sensible backoff. Show last check/success and stale/unknown states; only approved baseline results persist. Editing graph edges does not create probes or change networking automatically.
 
 **Ticket dependencies:** [T003](F02-domain-persistence.md), [T007](F03-react-map.md), [T014](F06-ssh-elevation.md).
+
+This bounded health-check ticket uses the completed T014 desktop entry from S03 while T013 is blocked. That entry does not complete S03; T020 and the terminal/service tickets retain their T013 dependency.
 
 ### Acceptance criteria
 

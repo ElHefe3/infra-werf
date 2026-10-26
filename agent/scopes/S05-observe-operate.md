@@ -8,7 +8,7 @@ Truthful health/approved inventory and authenticated terminal/service control on
 
 ## Entry and sequence
 
-S03 is complete. S04 is not a dependency; these features can make progress while a file-specific blocker is resolved. Use approved probe targets and controlled workloads.
+Full S05 entry requires S03 completion. T019 has a narrow ticket-level entry through completed T014 while T013 is blocked; this does not complete S03. T020 and T021–T023 retain their T013 dependencies. S04 is not a dependency; independently ready features can proceed while a blocker is resolved. Use approved probe targets and controlled workloads.
 
 F07 separates host/service observations and SSH inventory. F10 terminal is independent of F11; F11 workload control follows authenticated inventory/inspection.
 
