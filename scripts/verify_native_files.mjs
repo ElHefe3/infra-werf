@@ -5,6 +5,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
 import path from 'node:path';
+import { runMutationJourney } from './proof-native-mutations.mjs';
+const withMutations = process.argv.includes('--mutations');
 const root = process.cwd(), directory = path.join(root, '.tools', `native-files-proof-${randomUUID()}`);
 await mkdir(directory);
 const digest = async file => createHash('sha256').update(await readFile(file)).digest('hex');
@@ -12,7 +14,7 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const server = spawn(path.join(root, '.tools/ssh-fixture-venv/Scripts/python.exe'), ['scripts/ssh_fixture.py', path.join(directory, 'fixture')], { cwd: root, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
 const lines = createInterface({ input: server.stdout });
 let diagnostic = ''; server.stderr.on('data', data => { diagnostic += data.toString().slice(0, 1000); });
-let app, browser, page; const results = [];
+let app, browser, page; const results = [], errors = [];
 try {
   const info = await new Promise((resolve, reject) => { const timer = setTimeout(() => reject(new Error(`Fixture startup failed: ${diagnostic}`)), 30000); lines.once('line', line => { clearTimeout(timer); resolve(JSON.parse(line)); }); server.once('exit', code => { if (code) reject(new Error(`Fixture exited: ${diagnostic}`)); }); });
   const originals = await Promise.all([info.config, info.known_hosts, info.fallback_known_hosts].map(digest));
@@ -21,7 +23,7 @@ try {
   app = spawn(path.join(root, 'target/debug/atlas-native.exe'), [], { cwd: root, windowsHide: true, env: { ...environment, ATLAS_NATIVE_DB: database, ATLAS_SSH_CONFIG: info.config, WEBVIEW2_USER_DATA_FOLDER: path.join(directory, 'webview'), WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: '--remote-debugging-port=9229 --remote-debugging-address=127.0.0.1' }, stdio: 'ignore' });
   for (let i = 0; i < 80; i++) { if (app.exitCode !== null) throw new Error('Native startup failed'); try { if ((await fetch('http://127.0.0.1:9229/json/version')).ok) break; } catch {} await delay(200); }
   browser = await chromium.connectOverCDP('http://127.0.0.1:9229'); page = browser.contexts()[0].pages()[0];
-  await page.waitForLoadState('domcontentloaded'); const errors = []; page.on('pageerror', error => errors.push(error.message));
+  await page.waitForLoadState('domcontentloaded'); page.on('pageerror', error => errors.push(error.message));
   const invoke = (command, args) => page.evaluate(({ command, args }) => window.__TAURI_INTERNALS__.invoke(command, args), { command, args });
   const rejection = (command, args) => page.evaluate(async ({ command, args }) => { try { await window.__TAURI_INTERNALS__.invoke(command, args); return { unexpectedSuccess: true }; } catch (error) { return error; } }, { command, args });
   await expect(page.getByText('A clear place to start.', { exact: true })).toBeVisible();
@@ -120,15 +122,17 @@ try {
   await expect(dialog.locator('.file-list')).toHaveCount(0); await expect(dialog.locator('.file-session')).toHaveCount(0);
   await expect.poll(async () => (await invoke('workspace_status')).pending_operations).toBe(0);
   await page.keyboard.press('Escape'); results.push('actual disconnect invalidates session and clears visible data');
+  if (withMutations) results.push(...await runMutationJourney({ page, invoke, rejection, before, info, directory }));
   const after = await invoke('map_state'); expect(after.servers).toEqual(expectedMap.servers); expect(after.edges).toEqual(expectedMap.edges); expect(after.events).toEqual(expectedMap.events); expect(await digest(database)).toBe(expectedDb);
   expect(await Promise.all([info.config, info.known_hosts, info.fallback_known_hosts].map(digest))).toEqual(originals);
   const finalStats = await stats(); expect(finalStats.unknown.auth_attempts).toBe(0); expect(finalStats.changed.auth_attempts).toBe(0);
-  for (const row of Object.values(finalStats)) { expect(row.commands).toBe(0); expect(row.mutations).toBe(0); }
+  for (const [name, row] of Object.entries(finalStats)) { expect(row.commands).toBe(0); if (!withMutations || name !== 'trusted') expect(row.mutations).toBe(0); }
   expect(errors).toEqual([]);
-  const proof = { result: 'pass', results, readOnlyJourneysPreserveMap: true, explicitSyntheticMapEdits: 2, sshConfigTrustUnchanged: true, noShellOrFileWrites: true, pageErrors: errors, directory };
+  const proof = { result: 'pass', results, readOnlyJourneysPreserveMap: true, explicitSyntheticMapEdits: 2, sshConfigTrustUnchanged: true, noShellCommands: true, confirmedFixtureChanges: withMutations ? 11 : 0, pageErrors: errors, directory };
   await writeFile(path.join(directory, 'result.json'), JSON.stringify(proof, null, 2)); console.log(JSON.stringify(proof, null, 2));
   await page.getByRole('button', { name: 'Quit Atlas', exact: true }).click(); await expect.poll(() => app.exitCode).not.toBe(null);
 } catch (error) {
+  await writeFile(path.join(directory, 'failure-errors.json'), JSON.stringify({ pageErrors: errors }, null, 2));
   await page?.screenshot({ path: path.join(directory, 'failure.png') }).catch(() => {}); console.error(`Native Files proof: ${directory}`); throw error;
 } finally {
   await browser?.close().catch(() => {});

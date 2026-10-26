@@ -1,5 +1,6 @@
 //! Bounded SFTP v3 over a fixed system-OpenSSH subsystem. There is no shell
-//! command, local filesystem bridge, write request or credential serialization.
+//! command, local filesystem bridge or credential serialization. Mutations use
+//! purpose-specific packets behind the session's preview/confirmation boundary.
 #[cfg(windows)]
 use crate::ssh;
 use crate::{
@@ -22,7 +23,7 @@ fn limit() -> AtlasError {
     AtlasError::new(ErrorCode::OutputLimit)
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone, Default, PartialEq, Eq)]
 pub(crate) struct Attrs {
     pub size: Option<u64>,
     pub uid: Option<u32>,
@@ -136,7 +137,9 @@ pub(crate) fn display(bytes: &[u8]) -> String {
             ),
         };
         for character in valid.chars() {
-            if character.is_control()
+            if character == '\\' {
+                value.push_str("\\\\");
+            } else if character.is_control()
                 || matches!(character, '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}')
             {
                 value.extend(character.escape_unicode());
@@ -445,16 +448,20 @@ impl Client {
         Ok(response)
     }
     fn status(packet: &mut Packet<'_>) -> Result<u32, AtlasError> {
-        let status = packet.u32()?;
-        packet.string(16384)?;
-        packet.string(4096)?;
-        packet.finish()?;
+        let status = Self::status_code(packet)?;
         match status {
             0 | 1 => Ok(status),
             2 => Err(AtlasError::new(ErrorCode::NotFound)),
             3 | 8 => Err(AtlasError::new(ErrorCode::Denied)),
             _ => Err(fail()),
         }
+    }
+    fn status_code(packet: &mut Packet<'_>) -> Result<u32, AtlasError> {
+        let status = packet.u32()?;
+        packet.string(16384)?;
+        packet.string(4096)?;
+        packet.finish()?;
+        Ok(status)
     }
     fn names(
         &mut self,
@@ -576,6 +583,57 @@ impl Client {
         packet.finish()?;
         Ok(attrs)
     }
+    /// Outer error means no valid acknowledgement; inner error is a parsed
+    /// server rejection. Never send the overwrite-capable POSIX extension.
+    pub fn mutate(
+        &mut self,
+        change: &WireChange,
+        context: &mut ExecutionContext,
+    ) -> Result<Result<(), AtlasError>, AtlasError> {
+        let (kind, args) = match change {
+            WireChange::Mkdir(path) => {
+                path_valid(path)?;
+                let mut args = string(path);
+                args.extend(0u32.to_be_bytes());
+                (14, args)
+            }
+            WireChange::Rename(source, destination) => {
+                path_valid(source)?;
+                path_valid(destination)?;
+                let mut args = string(source);
+                args.extend(string(destination));
+                (18, args)
+            }
+            WireChange::Remove(path) => {
+                path_valid(path)?;
+                (13, string(path))
+            }
+            WireChange::Rmdir(path) => {
+                path_valid(path)?;
+                (15, string(path))
+            }
+        };
+        let response = self.request(kind, &args, context)?;
+        let mut packet = Packet::new(&response);
+        if packet.byte()? != 101 {
+            return Err(fail());
+        }
+        packet.u32()?;
+        let status = Self::status_code(&mut packet)?;
+        Ok(match status {
+            0 => Ok(()),
+            2 => Err(AtlasError::new(ErrorCode::NotFound)),
+            3 | 8 => Err(AtlasError::new(ErrorCode::Denied)),
+            _ => Err(AtlasError::new(ErrorCode::RemoteRejected)),
+        })
+    }
+}
+
+pub(crate) enum WireChange {
+    Mkdir(Vec<u8>),
+    Rename(Vec<u8>, Vec<u8>),
+    Remove(Vec<u8>),
+    Rmdir(Vec<u8>),
 }
 
 #[cfg(test)]
@@ -651,6 +709,9 @@ mod tests {
     fn names_are_displayed_without_roundtripping_unsafe_bytes() {
         assert_eq!(display(b"a b\n\xff"), "a b\\u{a}\\xff");
         assert_eq!(display("日本語.txt".as_bytes()), "日本語.txt");
+        assert_ne!(display(b"odd-\xff-source"), display(br"odd-\xff-source"));
+        assert_eq!(display(br"odd-\xff-source"), "odd-\\\\xff-source");
+        assert_ne!(display(b"line\nname"), display(br"line\u{a}name"));
         assert!(path_valid(b"a\0b").is_err());
     }
     #[test]

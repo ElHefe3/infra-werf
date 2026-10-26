@@ -34,6 +34,7 @@ pub enum Inspection {
     FileMetadata { path: String },
     ServiceStatus { workload_id: String },
     SftpRead { resource_id: String },
+    SftpMutation { resource_id: String },
 }
 
 #[derive(Clone, Serialize, Deserialize, TS)]
@@ -142,6 +143,7 @@ pub enum InspectionPlan {
     ConnectionCheck,
     SftpOpen,
     SftpRead { resource_id: String },
+    SftpMutation { resource_id: String },
     SystemSummary,
     FileMetadata(ScopedPath),
     ServiceStatus { workload_id: String },
@@ -179,6 +181,12 @@ impl SessionScope {
     }
     fn plan(&self, inspection: Inspection) -> Result<InspectionPlan, AtlasError> {
         Ok(match inspection {
+            Inspection::SftpMutation { resource_id } => {
+                if !self.resources.contains(&resource_id) {
+                    return Err(error(ErrorCode::Denied));
+                }
+                InspectionPlan::SftpMutation { resource_id }
+            }
             Inspection::SftpRead { resource_id } => {
                 if !self.resources.contains(&resource_id) {
                     return Err(error(ErrorCode::Denied));
@@ -608,8 +616,8 @@ impl OperationBroker {
         Ok(())
     }
 
-    /// Each backend-issued ticket runs at most once. Only read-only typed
-    /// plans exist; shell/terminal/sudo/mutations are deliberately unsupported.
+    /// Each backend-issued ticket runs at most once. This dispatcher accepts
+    /// only read-only plans; confirmed mutations use their dedicated dispatcher.
     /// A hard return deadline does not authorise an executor to detach remote
     /// children: actual SSH/SFTP adapters must kill/close them on cancellation.
     pub fn execute<F>(
@@ -631,7 +639,9 @@ impl OperationBroker {
             .ok_or_else(|| error(ErrorCode::Denied))?;
         if matches!(
             job.plan,
-            InspectionPlan::ConnectionCheck | InspectionPlan::SftpOpen
+            InspectionPlan::ConnectionCheck
+                | InspectionPlan::SftpOpen
+                | InspectionPlan::SftpMutation { .. }
         ) {
             return Err(error(ErrorCode::Denied));
         }
@@ -662,6 +672,26 @@ impl OperationBroker {
             return Err(error(ErrorCode::Denied));
         }
         self.execute_job(authority, id, current_target, job, executor)
+    }
+    /// Only the dedicated confirmed-mutation adapter can dispatch this plan.
+    /// Failed delivery is not evidence that a remote write did not happen.
+    pub fn execute_mutation<F>(
+        &self,
+        authority: Option<&Authority>,
+        id: &OperationId,
+        target: &ServerTarget,
+        executor: F,
+    ) -> Result<String, AtlasError>
+    where
+        F: FnOnce(&InspectionPlan, &mut ExecutionContext) -> Result<(), AtlasError>
+            + Send
+            + 'static,
+    {
+        let job = self.job(authority, id)?;
+        if job.session_id.is_none() || !matches!(job.plan, InspectionPlan::SftpMutation { .. }) {
+            return Err(error(ErrorCode::Denied));
+        }
+        self.execute_job(authority, id, target, job, executor)
     }
     pub fn execute_sftp_open<F>(
         &self,

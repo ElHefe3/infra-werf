@@ -709,3 +709,79 @@ fn sftp_resources_are_backend_issued_session_bound_and_revocable() {
         ErrorCode::Denied
     );
 }
+
+#[test]
+fn confirmed_mutation_tickets_cannot_use_read_or_bootstrap_dispatchers() {
+    let (broker, authority, target, session) = fixture(Duration::from_secs(1), 128);
+    let resource = SessionId::generate().as_str().to_owned();
+    broker
+        .set_resources(&authority, &session, &target, vec![resource.clone()])
+        .unwrap();
+    let ticket = broker
+        .prepare(
+            Some(&authority),
+            &target,
+            request(
+                &target,
+                &session,
+                Inspection::SftpMutation {
+                    resource_id: resource,
+                },
+            ),
+        )
+        .unwrap();
+    assert_eq!(
+        code(broker.execute(
+            Some(&authority),
+            &ticket.operation_id,
+            &target,
+            |_, _| panic!("read cannot mutate")
+        )),
+        ErrorCode::Denied
+    );
+    assert_eq!(
+        code(broker.execute_connection_check(
+            Some(&authority),
+            &ticket.operation_id,
+            &target,
+            |_, _| panic!("bootstrap cannot mutate")
+        )),
+        ErrorCode::Denied
+    );
+    assert_eq!(
+        broker
+            .execute_mutation(
+                Some(&authority),
+                &ticket.operation_id,
+                &target,
+                |_, context| context.write("ack")
+            )
+            .unwrap(),
+        "ack"
+    );
+    assert_eq!(
+        code(broker.execute_mutation(
+            Some(&authority),
+            &ticket.operation_id,
+            &target,
+            |_, _| panic!("replay")
+        )),
+        ErrorCode::Conflict
+    );
+    let read = broker
+        .prepare(
+            Some(&authority),
+            &target,
+            request(&target, &session, Inspection::SystemSummary {}),
+        )
+        .unwrap();
+    assert_eq!(
+        code(broker.execute_mutation(
+            Some(&authority),
+            &read.operation_id,
+            &target,
+            |_, _| panic!("wrong type")
+        )),
+        ErrorCode::Denied
+    );
+}

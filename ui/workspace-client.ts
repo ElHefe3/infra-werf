@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { CONTRACT_VERSION, type AddRelationship, type AddServer, type MapState, type UpdateServer, type WorkspaceStatus, type OperationTicket, type SshVerification, type FileSession, type FileAction, type FileResult } from "./contracts.gen.ts";
+import { CONTRACT_VERSION, type AddRelationship, type AddServer, type MapState, type UpdateServer, type WorkspaceStatus, type OperationTicket, type SshVerification, type FileSession, type FileAction, type FileResult, type FileChange, type FileMutationPreview, type FileMutationReceipt } from "./contracts.gen.ts";
 
 export type NativeTransport = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
 export function createWorkspaceClient(transport: NativeTransport = invoke) {
@@ -26,6 +26,9 @@ export function createWorkspaceClient(transport: NativeTransport = invoke) {
     openFiles: (serverId: string, operationId: string) => transport<FileSession>("files_open", { serverId, operationId }),
     readFiles: (serverId: string, sessionId: string, action: FileAction) => transport<FileResult>("files_read", { serverId, sessionId, action }),
     lockFiles: (sessionId: string) => transport<void>("files_lock", { sessionId }),
+    previewChange: (serverId: string, sessionId: string, change: FileChange) => transport<FileMutationPreview>("files_preview", { serverId, sessionId, change }),
+    commitChange: (serverId: string, sessionId: string, operationId: string) => transport<FileMutationReceipt>("files_commit", { serverId, sessionId, operationId }),
+    discardChange: (serverId: string, sessionId: string, operationId: string) => transport<void>("files_discard", { serverId, sessionId, operationId }),
   };
 }
 export type WorkspaceClient = ReturnType<typeof createWorkspaceClient>;

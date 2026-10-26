@@ -1,6 +1,8 @@
 #![cfg(windows)]
 //! Explicit real-system OpenSSH fixture proof: mise run test:files.
 use atlas_core::{files::*, operations::*, ssh::SshOptions, *};
+#[path = "files/mutations.rs"]
+mod mutation_proof;
 use std::{
     io::{BufRead, BufReader, Write},
     path::Path,
@@ -172,7 +174,18 @@ fn actual_sftp_lifetime_handles_revocation_and_cleanup() {
         )),
         ErrorCode::Denied
     );
+    let stale_mutation = mutation_proof::journey(
+        &service,
+        &target,
+        &session.session_id,
+        &second,
+        &directory.path().join("fixture"),
+    );
     service.close(&session.session_id).unwrap();
+    assert_eq!(
+        code(service.commit_change(&target, &session.session_id, &stale_mutation)),
+        ErrorCode::ExpiredSession
+    );
     assert_eq!(
         service.take_closed(),
         vec![Some(session.session_id.clone())]
@@ -217,7 +230,12 @@ fn actual_sftp_lifetime_handles_revocation_and_cleanup() {
     let broker = OperationBroker::new(Duration::from_secs(1), 65536).unwrap();
     let actor = broker.issue_backend_authority().unwrap();
     let slow = ServerTarget::new(ServerId::parse("slow").unwrap(), "atlas-slow").unwrap();
-    let service = FileSessions::new(broker.clone(), actor, options, SessionPolicy::default());
+    let service = FileSessions::new(
+        broker.clone(),
+        actor,
+        options.clone(),
+        SessionPolicy::default(),
+    );
     assert_eq!(
         code(service.open(
             &slow,
@@ -227,6 +245,10 @@ fn actual_sftp_lifetime_handles_revocation_and_cleanup() {
         ErrorCode::TimedOut
     );
     wait_for(|| leases.load(Ordering::SeqCst) == 0 && broker.active_workers() == 0);
+    mutation_proof::unknown_outcome(options, &target, &leases, &directory.path().join("fixture"));
+    println!(
+        "PASS: confirmed mutations, raw names/symlink identity, cancellation, collision/stale target/denial/non-recursion and unknown write outcome without retry"
+    );
     println!(
         "PASS: actual SFTP paging/opaque handles, lock/revoke, independent idle/absolute expiry, bounded timeout and actual child/lease cleanup"
     );

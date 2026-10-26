@@ -4,6 +4,7 @@ import csv
 import hashlib
 import json
 import os
+import posixpath
 from pathlib import Path
 import re
 import socket
@@ -42,6 +43,15 @@ async def serve(directory):
     for _ in range(18): deep = deep / 'next'
     deep.mkdir(parents=True)
     for name in ['denied', 'stall', 'disconnect']: (home / name).mkdir()
+    writable = home / 'write-area'
+    writable.mkdir()
+    for name in ['target', 'denied', 'nonempty']: (writable / name).mkdir()
+    for name in ['source file.txt', 'existing.txt', '日本語.txt']: (writable / name).write_text('fixture preserve ' + name, encoding='utf-8')
+    (writable / 'nonempty' / 'keep.txt').write_text('never recurse', encoding='utf-8')
+    (writable / 'target' / 'keep.txt').write_text('symlink target survives', encoding='utf-8')
+    virtual = {b'/home/fixture/write-area/odd-\xff-source': asyncssh.SFTPAttrs(permissions=0o100640, size=37, uid=1000, gid=1000), b'/home/fixture/write-area/folder-link': asyncssh.SFTPAttrs(permissions=0o120777, size=6, uid=1000, gid=1000)}
+    link_targets = {b'/home/fixture/write-area/folder-link': b'/home/fixture/write-area/target'}
+    virtual[b'/home/fixture/write-area/odd-\\xff-source'] = asyncssh.SFTPAttrs(permissions=0o100640, size=51, uid=1000, gid=1000)
     def save_stats():
         temporary = directory / 'stats-next.json'
         temporary.write_text(json.dumps(stats), encoding='utf-8')
@@ -83,12 +93,16 @@ async def serve(directory):
                 if path in [b'', b'.']: return b'/home/fixture'
                 if path == b'/home/fixture/folder-link': return b'/home/fixture/space folder'
                 if path == b'/home/fixture/broken-link': raise asyncssh.SFTPNoSuchFile('fixture missing')
+                if path in link_targets: return link_targets[path]
                 return super().realpath(path)
             def lstat(self, path):
+                if path in virtual: return virtual[path]
                 if path in [b'/home/fixture/folder-link', b'/home/fixture/broken-link']:
                     return asyncssh.SFTPAttrs(permissions=0o120777, size=12, uid=1000, gid=1000)
                 if path in [b'/home/fixture/odd-\xff-name', b'/home/fixture/;$(echo injected).txt']:
                     return asyncssh.SFTPAttrs(permissions=0o100640, size=9007199254740993, uid=1000, gid=1000)
+                try: path.decode('utf-8')
+                except UnicodeDecodeError: raise asyncssh.SFTPNoSuchFile('fixture virtual path missing')
                 return super().lstat(path)
             async def scandir(self, path):
                 stats[self.fixture_name]['listings'] += 1; save_stats()
@@ -101,12 +115,45 @@ async def serve(directory):
                     yield asyncssh.SFTPName(b'x' * 5000, attrs=asyncssh.SFTPAttrs(permissions=0o100644))
                     return
                 async for entry in super().scandir(path): yield entry
+                for filename, attrs in list(virtual.items()):
+                    if posixpath.dirname(filename) == path: yield asyncssh.SFTPName(posixpath.basename(filename), attrs=attrs)
                 if path == b'/home/fixture':
                     for name in [b'folder-link', b'broken-link', b'odd-\xff-name', b';$(echo injected).txt']:
                         yield asyncssh.SFTPName(name, attrs=self.lstat(path + b'/' + name))
             def open(self, *args):
                 stats[self.fixture_name]['mutations'] += 1; save_stats()
                 raise asyncssh.SFTPPermissionDenied('fixture is read-only')
+            def check_change(self, *paths):
+                for path in paths:
+                    normalized = posixpath.normpath(path)
+                    if not normalized.startswith(b'/home/fixture/write-area/') or b'/denied/' in normalized or normalized.endswith(b'/denied'):
+                        raise asyncssh.SFTPPermissionDenied('fixture write boundary')
+                stats[self.fixture_name]['mutations'] += 1; save_stats()
+            async def mkdir(self, path, attrs):
+                self.check_change(path)
+                super().mkdir(path, attrs)
+                if path.endswith(b'/apply-then-stall'): await asyncio.sleep(60)
+                if path.endswith(b'/slow-confirmed'): await asyncio.sleep(0.8)
+                if path.endswith(b'/apply-then-disconnect'): self.fixture_channel.get_connection().close()
+            def rename(self, oldpath, newpath):
+                self.check_change(oldpath, newpath)
+                if newpath.endswith(b'/race-target.txt'):
+                    Path(os.fsdecode(self.map_path(newpath))).write_text('concurrent target preserved', encoding='utf-8')
+                try: real_destination_exists = os.path.lexists(self.map_path(newpath))
+                except UnicodeDecodeError: real_destination_exists = False
+                if newpath in virtual or real_destination_exists: raise asyncssh.SFTPFileAlreadyExists('fixture collision')
+                if oldpath in virtual:
+                    virtual[newpath] = virtual.pop(oldpath)
+                    if oldpath in link_targets: link_targets[newpath] = link_targets.pop(oldpath)
+                    return
+                super().rename(oldpath, newpath)
+            def remove(self, path):
+                self.check_change(path)
+                if path in virtual:
+                    del virtual[path]; link_targets.pop(path, None); return
+                super().remove(path)
+            def rmdir(self, path):
+                self.check_change(path); super().rmdir(path)
         listener = await asyncssh.create_server(Server, '127.0.0.1', 0, server_host_keys=[changed if name == 'changed' else primary], server_host_certs=[certificate] if name == 'certified' else [], process_factory=process, sftp_factory=Files, encoding='utf-8')
         listeners.append(listener); ports[name] = listener.get_port()
     with socket.socket() as unused:

@@ -52,11 +52,13 @@ Stop a path/encoding ambiguity before normalising away meaningful remote names o
 
 ## T016 — Implement deliberate file mutations
 
-<!-- atlas-ticket: {"id":"T016","feature":"F08","status":"todo","depends_on":["T015"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T016","feature":"F08","status":"done","depends_on":["T015"],"scope_entry":{"S03":["T014"]},"evidence":"../evidence/F08-mutations-acceptance.md"} -->
 
 ### Outcome and included work
 
 Create directories, rename/move entries and explicitly confirm targeted deletion within an authenticated session.
+
+Desktop-first slice authorised by the owner's “next” request. Reuse T014/T015; compact-phone mutation/confirmation/error/clearing proof remains T009/T010 and the S04 release gate. No overwrite or recursive delete is enabled in this slice. Proof: real SFTP fixture plus one native create/rename/move/delete/cancel journey, with stale/collision/denial/uncertain-result negatives and independent review. Stop after this bounded journey is recorded; do not start transfers automatically.
 
 ### Exclusions
 
@@ -70,17 +72,17 @@ Present exact host/source/destination, collision and overwrite choices. Do not f
 
 ### Acceptance criteria
 
-- [ ] mkdir/rename/move and collision/permission failure paths work for unusual filenames on both clients.
-- [ ] Delete identifies the exact affected target and requires explicit confirmation; cancellation changes nothing and recursive deletion is separately explicit.
-- [ ] No expired/wrong-host session can mutate; views reconcile actual outcomes without optimistic false success.
+- [x] Desktop mkdir/rename/move and collision/permission failure paths work for unusual filenames; compact-phone equivalents remain explicitly T009/T010.
+- [x] Delete identifies the exact affected target and requires explicit confirmation; cancellation changes nothing and recursive deletion is separately explicit.
+- [x] No expired/wrong-host session can mutate; views reconcile actual outcomes without optimistic false success.
 
 ### Verification
 
-Small fixture operation tests including cancellation, collisions, symlinks and adversarial names; one controlled edit/delete journey.
+Actual-system SFTP fixture tests plus native Windows create/rename/move/delete/cancel/failure journey. Paired compact-phone equivalents remain T009/T010; recursive deletion is unavailable.
 
 ### Evidence and closure
 
-Use a concise [feature acceptance record](../evidence/README.md), map results to T016, attach its relative path in ticket metadata, then check only proven criteria. Record tested revision/platform/fixtures, failures, limits and rollback as applicable. Current proof: **not run**. Use [the checkpoint](../evidence/CHECKPOINT.md) at handoff.
+Passed the desktop slice in [T016 acceptance](../evidence/F08-mutations-acceptance.md), including actual SFTP/native proof and resolved independent review. S04 retains paired/phone/transfer acceptance. See [D019](../discovery/D019-sftp-mutation-outcomes.md) and [the checkpoint](../evidence/CHECKPOINT.md).
 
 ### Stop conditions
 

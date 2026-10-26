@@ -32,3 +32,4 @@ Link important discoveries from affected feature packets and the checkpoint. Nev
 - [D016 Real OpenSSH trust/identity verification and native cleanup](D016-real-openssh-verification.md)
 - [D017 Explicit desktop-first feature entry](D017-desktop-feature-entry.md)
 - [D018 SFTP transport and transactional page lifecycle](D018-sftp-process-and-page-lifecycle.md)
+- [D019 SFTP mutation outcomes and filename encoding](D019-sftp-mutation-outcomes.md)

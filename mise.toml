@@ -67,6 +67,10 @@ run = "powershell -NoProfile -File scripts/atlas.ps1 test-files"
 description = "Actual native Files browse/stat/lock/error journey on isolated fixture data (build first)"
 run = "powershell -NoProfile -File scripts/atlas.ps1 test-files-native"
 
+[tasks."test:file-changes-native"]
+description = "Actual native confirmed create/rename/move/delete and cancellation/error proof in fixture-only write-area"
+run = "powershell -NoProfile -File scripts/atlas.ps1 test-file-changes-native"
+
 [tasks."smoke:desktop"]
 description = "Compile the thin Windows debug application without an installer"
 run = "powershell -NoProfile -File scripts/atlas.ps1 smoke-desktop"

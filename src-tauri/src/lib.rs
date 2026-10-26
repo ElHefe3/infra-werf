@@ -2,7 +2,9 @@ mod workspace;
 
 use atlas_core::*;
 use atlas_core::{
-    files::{FileAction, FileResult, FileSession},
+    files::{
+        FileAction, FileChange, FileMutationPreview, FileMutationReceipt, FileResult, FileSession,
+    },
     operations::OperationTicket,
     ssh::SshVerification,
 };
@@ -120,6 +122,55 @@ fn foundation_status() -> FoundationStatus {
         platform: std::env::consts::OS.into(),
         phase: "desktop workspace; remote coordinator not yet available".into(),
     }
+}
+
+#[tauri::command]
+async fn files_preview(
+    window: tauri::WebviewWindow,
+    workspace: State<'_, Arc<Workspace>>,
+    server_id: ServerId,
+    session_id: SessionId,
+    change: FileChange,
+) -> Result<FileMutationPreview, AtlasError> {
+    local_desktop(&window)?;
+    let workspace = workspace.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        workspace.preview_change(&server_id, &session_id, change)
+    })
+    .await
+    .map_err(|_| AtlasError::new(ErrorCode::IoFailure))?
+}
+#[tauri::command]
+async fn files_commit(
+    window: tauri::WebviewWindow,
+    workspace: State<'_, Arc<Workspace>>,
+    server_id: ServerId,
+    session_id: SessionId,
+    operation_id: OperationId,
+) -> Result<FileMutationReceipt, AtlasError> {
+    local_desktop(&window)?;
+    let workspace = workspace.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        workspace.commit_change(&server_id, &session_id, &operation_id)
+    })
+    .await
+    .map_err(|_| AtlasError::new(ErrorCode::IoFailure))?
+}
+#[tauri::command]
+async fn files_discard(
+    window: tauri::WebviewWindow,
+    workspace: State<'_, Arc<Workspace>>,
+    server_id: ServerId,
+    session_id: SessionId,
+    operation_id: OperationId,
+) -> Result<(), AtlasError> {
+    local_desktop(&window)?;
+    let workspace = workspace.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        workspace.discard_change(&server_id, &session_id, &operation_id)
+    })
+    .await
+    .map_err(|_| AtlasError::new(ErrorCode::IoFailure))?
 }
 
 #[tauri::command]
@@ -258,7 +309,7 @@ pub fn run() {
             }
         }
     })
-    .invoke_handler(tauri::generate_handler![foundation_status, workspace_status, map_state, retry_workspace, add_server, update_server, remove_server, add_relationship, remove_relationship, import_reports, ssh_prepare, ssh_verify, ssh_cancel, files_prepare, files_open, files_read, files_lock])
+    .invoke_handler(tauri::generate_handler![foundation_status, workspace_status, map_state, retry_workspace, add_server, update_server, remove_server, add_relationship, remove_relationship, import_reports, ssh_prepare, ssh_verify, ssh_cancel, files_prepare, files_open, files_read, files_lock, files_preview, files_commit, files_discard])
     .run(tauri::generate_context!())
     .expect("Atlas native runtime failed");
 }

@@ -23,6 +23,8 @@ pub enum ErrorCode {
     Cancelled,
     TimedOut,
     OutputLimit,
+    RemoteRejected,
+    OutcomeUnknown,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -48,6 +50,12 @@ impl AtlasError {
             ErrorCode::Cancelled => "The operation was cancelled.",
             ErrorCode::TimedOut => "The operation exceeded its time limit.",
             ErrorCode::OutputLimit => "The operation exceeded its output limit.",
+            ErrorCode::RemoteRejected => {
+                "The server rejected this change. Refresh and inspect the target before retrying."
+            }
+            ErrorCode::OutcomeUnknown => {
+                "The server may have applied this change. Open a new session and inspect the target before retrying."
+            }
         };
         Self {
             code,

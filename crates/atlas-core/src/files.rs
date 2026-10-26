@@ -1,4 +1,4 @@
-//! Ephemeral desktop sessions and read-only SFTP resources. One service belongs
+//! Ephemeral desktop sessions and guarded SFTP resources. One service belongs
 //! to one authenticated backend principal; a session/resource DTO grants no
 //! authority. Protected results never enter Store or audit records.
 use crate::{
@@ -21,6 +21,8 @@ use std::{
     time::{Duration, Instant},
 };
 use ts_rs::{Config, TS};
+mod mutations;
+pub use mutations::{FileChange, FileMutationPreview, FileMutationReceipt, MutationKind};
 
 fn error(code: ErrorCode) -> AtlasError {
     AtlasError::new(code)
@@ -86,13 +88,21 @@ pub enum FileAction {
     FollowLink {
         resource_id: String,
     },
+    PinSource {
+        resource_id: String,
+    },
+    ClearSource {
+        resource_id: String,
+    },
 }
 impl FileAction {
     fn resource(&self) -> &str {
         match self {
             Self::List { resource_id, .. }
             | Self::Stat { resource_id }
-            | Self::FollowLink { resource_id } => resource_id,
+            | Self::FollowLink { resource_id }
+            | Self::PinSource { resource_id }
+            | Self::ClearSource { resource_id } => resource_id,
         }
     }
 }
@@ -101,6 +111,7 @@ impl FileAction {
 pub enum FileResult {
     Directory { page: FilePage },
     Metadata { entry: FileEntry },
+    Selection { resource: Option<FileResource> },
 }
 
 #[derive(Clone, Copy)]
@@ -131,6 +142,7 @@ struct Resource {
     path: Vec<u8>,
     kind: FileKind,
     label: String,
+    mutable: bool,
 }
 struct Directory {
     resource: FileResource,
@@ -143,6 +155,8 @@ struct Data {
     client: Client,
     resources: HashMap<String, Resource>,
     directory: Option<Directory>,
+    pinned: Option<(String, Resource)>,
+    pending: Option<mutations::Pending>,
 }
 struct Session {
     id: SessionId,
@@ -246,6 +260,7 @@ impl FileSessions {
                 path: home_path,
                 kind: FileKind::Directory,
                 label: home.label.clone(),
+                mutable: false,
             },
         )]);
         if let Err(error) = self.broker.set_resources(
@@ -269,6 +284,8 @@ impl FileSessions {
                     client,
                     resources,
                     directory: None,
+                    pinned: None,
+                    pending: None,
                 }),
             }),
         );
@@ -378,6 +395,31 @@ impl FileSessions {
             .cloned()
             .ok_or_else(|| error(ErrorCode::Denied))?;
         match action {
+            FileAction::PinSource { .. } => {
+                if !resource.mutable {
+                    return Err(error(ErrorCode::Denied));
+                }
+                if let Some((old, _)) = data.pinned.take() {
+                    data.resources.remove(&old);
+                }
+                data.pending = None;
+                let id = token();
+                data.resources.insert(id.clone(), resource.clone());
+                let label = sftp::display(&resource.path);
+                data.pinned = Some((id.clone(), resource));
+                Ok(FileResult::Selection {
+                    resource: Some(FileResource { id, label }),
+                })
+            }
+            FileAction::ClearSource { resource_id } => {
+                if data.pinned.as_ref().map(|(id, _)| id) != Some(&resource_id) {
+                    return Err(error(ErrorCode::Denied));
+                }
+                data.pinned = None;
+                data.pending = None;
+                data.resources.remove(&resource_id);
+                Ok(FileResult::Selection { resource: None })
+            }
             FileAction::Stat { resource_id } => {
                 let attrs = data.client.stat(&resource.path, context)?;
                 Ok(FileResult::Metadata {
@@ -437,6 +479,7 @@ impl FileSessions {
     ) -> Result<FileResult, AtlasError> {
         // Keep the previous page usable if opening the new directory is denied.
         let handle = data.client.open_dir(&path, context)?;
+        data.pending = None;
         let previous = data.directory.take();
         let resource = FileResource {
             id: token(),
@@ -503,6 +546,7 @@ impl FileSessions {
                     path: path.clone(),
                     kind: FileKind::Directory,
                     label: resource.label.clone(),
+                    mutable: false,
                 },
             );
             breadcrumbs.push(resource);
@@ -513,6 +557,7 @@ impl FileSessions {
                 path: directory.path.clone(),
                 kind: FileKind::Directory,
                 label: directory.resource.label.clone(),
+                mutable: false,
             },
         );
         let mut entries = Vec::new();
@@ -565,11 +610,15 @@ impl FileSessions {
                     path,
                     kind: kind(&name.attrs),
                     label: resource.label.clone(),
+                    mutable: true,
                 },
             );
             entries.push(entry(resource, name.attrs));
         }
         directory.cursor = if eof { None } else { Some(token()) };
+        if let Some((id, resource)) = &data.pinned {
+            resources.insert(id.clone(), resource.clone());
+        }
         data.resources = resources;
         Ok(FileResult::Directory {
             page: FilePage {
@@ -686,4 +735,5 @@ pub fn typescript_contracts() -> String {
     ]
     .map(|declaration| format!("export {declaration}\n"))
     .join("")
+        + &mutations::typescript_contracts()
 }

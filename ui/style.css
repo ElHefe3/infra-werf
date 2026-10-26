@@ -231,4 +231,14 @@ form label { display: grid; gap: 7px; margin-top: 18px; color: #86987a; font-siz
 .file-details dl { display: block; }
 .file-details dt { margin-top: 14px; font-size: 11px; color: #7a8d7a; }
 .file-details dd { margin: 5px 0 0; font-size: 12px; }
+.file-entry-actions, .file-location > div { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.file-change-review, .file-move-choice { padding: 18px; border: 1px solid #d4decf; border-radius: 8px; background: #f7faf4; margin: 18px 0; }
+.file-change-review h4 { margin: 0 0 14px; }
+.file-change-review label { display: grid; gap: 8px; max-width: 420px; }
+.file-change-review dl { display: grid; grid-template-columns: 100px minmax(0, 1fr); gap: 12px; font-size: 12px; }
+.file-change-review dd { margin: 0; overflow-wrap: anywhere; }
+.file-change-review button { margin-right: 10px; }
+.file-change-review button.danger { background: #a9352a; border-color: #a9352a; color: #fff; }
+.file-change-review button.danger:hover:not(:disabled) { background: #85271f; border-color: #85271f; color: #fff; }
+.file-move-choice code { display: block; margin: 10px 0; overflow-wrap: anywhere; }
 @media (max-width: 720px) { .file-layout { grid-template-columns: minmax(0, 1fr); } .file-details { border-left: 0; border-top: 1px solid #dce5d9; } }

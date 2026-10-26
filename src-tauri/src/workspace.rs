@@ -1,6 +1,9 @@
 use atlas_core::*;
 use atlas_core::{
-    files::{FileAction, FileResult, FileSession, FileSessions, SessionPolicy},
+    files::{
+        FileAction, FileChange, FileMutationPreview, FileMutationReceipt, FileResult, FileSession,
+        FileSessions, SessionPolicy,
+    },
     operations::{Authority, OperationBroker, OperationTicket, ServerTarget},
     ssh::{SshOptions, SshVerification},
 };
@@ -234,6 +237,45 @@ impl Workspace {
     }
     pub fn lock_files(&self, session: &SessionId) -> Result<(), AtlasError> {
         self.files.close(session)
+    }
+    pub fn preview_change(
+        self: &Arc<Self>,
+        id: &ServerId,
+        session: &SessionId,
+        change: FileChange,
+    ) -> Result<FileMutationPreview, AtlasError> {
+        let _admission = self.begin()?;
+        let target = self.ssh_target(id)?;
+        let result = self.files.preview_change(&target, session, change)?;
+        if !self.ssh_target(id).is_ok_and(|current| current == target) {
+            self.files.close(session)?;
+            return Err(AtlasError::new(ErrorCode::Denied));
+        }
+        Ok(result)
+    }
+    pub fn commit_change(
+        self: &Arc<Self>,
+        id: &ServerId,
+        session: &SessionId,
+        operation: &OperationId,
+    ) -> Result<FileMutationReceipt, AtlasError> {
+        let _admission = self.begin()?;
+        let target = self.ssh_target(id)?;
+        let result = self.files.commit_change(&target, session, operation)?;
+        if !self.ssh_target(id).is_ok_and(|current| current == target) {
+            let _ = self.files.close(session);
+            return Err(AtlasError::new(ErrorCode::OutcomeUnknown));
+        }
+        Ok(result)
+    }
+    pub fn discard_change(
+        &self,
+        id: &ServerId,
+        session: &SessionId,
+        operation: &OperationId,
+    ) -> Result<(), AtlasError> {
+        self.files
+            .discard_change(&self.ssh_target(id)?, session, operation)
     }
     pub fn invalidate_server(&self, id: &ServerId) {
         self.files.close_server(id);

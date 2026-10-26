@@ -65,7 +65,7 @@ switch ($Action) {
             Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-core', '--test', 'operations', '--locked')
             Run-AtlasCommand 'cargo' @('run', '-p', 'atlas-core', '--bin', 'export-contracts', '--locked', '--', '--check')
             Run-AtlasCommand 'pnpm' @('check')
-        } elseif ($Feature -in @('T033', 'T014', 'T015')) {
+        } elseif ($Feature -in @('T033', 'T014', 'T015', 'T016')) {
             Run-AtlasCommand 'cargo' @('test', '--workspace', '--locked')
             Run-AtlasCommand 'cargo' @('run', '-p', 'atlas-core', '--bin', 'export-contracts', '--locked', '--', '--check')
             Run-AtlasCommand 'pnpm' @('check')
@@ -103,6 +103,7 @@ switch ($Action) {
     'test-ssh-native' { Run-AtlasCommand 'node' @('scripts/verify_native_ssh.mjs') }
     'test-files' { Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-core', '--test', 'files', '--locked', '--', '--ignored', '--nocapture') }
     'test-files-native' { Run-AtlasCommand 'node' @('scripts/verify_native_files.mjs') }
+    'test-file-changes-native' { Run-AtlasCommand 'node' @('scripts/verify_native_files.mjs', '--mutations') }
     'dev-android' { Run-AtlasCommand 'pnpm' @('tauri', 'android', 'dev') }
     'smoke-desktop' { Run-AtlasCommand 'pnpm' @('tauri', 'build', '--debug', '--no-bundle', '--', '--locked') }
     'smoke-android' { Run-AtlasCommand 'pnpm' @('tauri', 'android', 'build', '--debug', '--target', 'aarch64', '--apk', '--', '--locked') }
