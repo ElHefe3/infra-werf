@@ -103,6 +103,10 @@ run = "powershell -NoProfile -File scripts/atlas.ps1 smoke-android"
 description = "Build the Windows NSIS installer"
 run = "powershell -NoProfile -File scripts/atlas.ps1 build-desktop"
 
+[tasks."brand:icons"]
+description = "Generate desktop icons from the InfraWerf SVG logo"
+run = "powershell -NoProfile -File scripts/atlas.ps1 exec -- node scripts/generate-brand-icons.mjs"
+
 [tasks."build:android"]
 description = "Build the Android ARM64 APK; release signing must be configured"
 run = "powershell -NoProfile -File scripts/atlas.ps1 build-android"

@@ -5,7 +5,7 @@ export type NativeTransport = <T>(command: string, args?: Record<string, unknown
 export function createWorkspaceClient(transport: NativeTransport = invoke) {
   async function request<T extends { contract_version: number }>(command: string, args?: Record<string, unknown>): Promise<T> {
     const value = await transport<T>(command, args);
-    if (value.contract_version !== CONTRACT_VERSION) throw new Error("Atlas contract version is incompatible.");
+    if (value.contract_version !== CONTRACT_VERSION) throw new Error("InfraWerf contract version is incompatible.");
     return value;
   }
   const map = (command: string, args?: Record<string, unknown>) => request<MapState>(command, args);

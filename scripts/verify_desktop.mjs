@@ -49,7 +49,7 @@ async function launch(db = database, legacy = config.source) {
 async function stop() {
   if (page && !page.isClosed()) {
     try {
-      const quit = page.getByRole('button', { name: 'Quit Atlas', exact: true });
+      const quit = page.getByRole('button', { name: 'Quit InfraWerf', exact: true });
       if (await quit.count()) {
         await quit.click({ timeout: 2000 });
         await waitForCdpState(false, 7000);
@@ -175,7 +175,7 @@ try {
   const second = spawn(binary, [], { cwd: root, windowsHide: true, stdio: 'ignore' });
   await new Promise((resolve, reject) => { const timeout = setTimeout(() => reject(new Error('Second instance did not exit')), 8000); second.once('exit', code => { clearTimeout(timeout); expect(code).toBe(0); resolve(); }); });
   expect(child.pid).toBe(pid);
-  await page.getByRole('button', { name: 'Quit Atlas', exact: true }).click();
+  await page.getByRole('button', { name: 'Quit InfraWerf', exact: true }).click();
   await waitForCdpState(false, 10000);
   await stop();
   await launch();

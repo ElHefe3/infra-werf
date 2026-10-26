@@ -16,7 +16,7 @@ export function useProtectedSession(server: MapServer, onBusy: (busy: boolean) =
     generation.current++; active.current = null; operation.current = null; starting.current = false;
     clearTimeout(timer.current); setSession(null); setBusy(false); onBusy(false); setError(""); setNotice(message);
     if (pending) void client.cancelSsh(pending).catch(() => {});
-    if (value) void client.lockFiles(value.session_id).catch(() => setError("Session cleanup could not be confirmed. Wait for expiry before closing Atlas."));
+    if (value) void client.lockFiles(value.session_id).catch(() => setError("Session cleanup could not be confirmed. Wait for expiry before closing InfraWerf."));
   }
   function arm(value: FileSession) {
     clearTimeout(timer.current);
@@ -41,7 +41,7 @@ export function useProtectedSession(server: MapServer, onBusy: (busy: boolean) =
     const keep = (fn: () => void) => { if (disposed) fn(); else listeners.push(fn); };
     void listen<string | null>("atlas-session-closed", event => { if (active.current && (event.payload === null || event.payload === active.current.session_id)) lock("Session closed. Protected results have been cleared."); }).then(keep).catch(() => {});
     void listen<string>("atlas-close-blocked", event => setError(event.payload)).then(keep).catch(() => {});
-    const hide = () => { if (document.visibilityState === "hidden") lock("Session locked while Atlas was hidden."); };
+    const hide = () => { if (document.visibilityState === "hidden") lock("Session locked while InfraWerf was hidden."); };
     document.addEventListener("visibilitychange", hide);
     return () => {
       generation.current++; clearTimeout(timer.current); const value = active.current, pending = operation.current;

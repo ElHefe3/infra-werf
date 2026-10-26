@@ -57,3 +57,5 @@ Link important discoveries from affected feature packets and the checkpoint. Nev
 - [D041 Tauri NSIS app-data lifecycle](D041-tauri-nsis-user-data-lifecycle.md)
 - [D042 Existing native store and recovery snapshot](D042-existing-native-store-and-recovery.md)
 - [D043 Current Windows SSH agent has no loaded identities](D043-current-ssh-agent-has-no-loaded-identities.md)
+- [D044 Installed-app review distinguishes the release from the development window](D044-installed-app-review-and-ssh.md)
+- [D045 Product branding and storage identity are separate](D045-product-name-and-storage-identity.md)

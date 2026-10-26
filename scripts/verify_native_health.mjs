@@ -147,7 +147,7 @@ try {
   await writeFile(path.join(directory, 'result.json'), JSON.stringify(proof, null, 2));
   console.log(JSON.stringify(proof, null, 2));
   await workspace.getByRole('button', { name: 'Close dialog', exact: true }).click();
-  await page.getByRole('button', { name: 'Quit Atlas', exact: true }).click();
+  await page.getByRole('button', { name: 'Quit InfraWerf', exact: true }).click();
   await expect.poll(() => app.exitCode).not.toBe(null);
 } catch (failure) {
   console.error(`Native Health proof artifacts: ${directory}`);

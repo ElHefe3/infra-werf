@@ -1,4 +1,6 @@
-# Atlas
+# InfraWerf
+
+Your homelab, connected.
 
 A native infrastructure map and server workspace, with a Windows desktop as the release target. A separate compact Android interface and phone pairing are future S09 work.
 
@@ -14,13 +16,13 @@ The current release target is the Windows desktop. Phone controls over LAN or VP
 
 Build a debug version with `mise run smoke:desktop`, then open **Atlas Desktop.cmd** or run `mise run start:desktop`. Build the release installer with `mise run build:desktop`; [the release guide](agent/RELEASE.md) explains install, saved-data location, update and uninstall. The app runs without Python or a development server. `mise run dev:desktop` starts the native development window.
 
-The debug launcher (`Atlas Desktop.cmd` or `mise run start:desktop`) supplies the reference database for a **one-time read-only copy** into Atlas's own application-data folder. The installed release does not import it automatically. T026 verified the existing native store and recovery copy against the allowlisted reference data; owner review of the displayed map remains before cutover. The original `data/atlas.sqlite3` stays available to the Python reference, and a configured migration retains a private legacy recovery copy beside the new native database. Existing native data wins on subsequent launches. This is separate storage, not cross-application sync.
+The debug launcher (`Atlas Desktop.cmd` or `mise run start:desktop`) supplies the reference database for a **one-time read-only copy** into InfraWerf's own application-data folder. The installed release does not import it automatically. T026 verified the existing native store and recovery copy against the allowlisted reference data, and the owner accepted the installed desktop as primary. The 0.1.1 release applies the InfraWerf identity while retaining the existing app identifier and data location. The original `data/atlas.sqlite3` stays available to the Python reference, and a configured migration retains a private legacy recovery copy beside the new native database. Existing native data wins on subsequent launches. This is separate storage, not cross-application sync.
 
 Desktop capabilities include editable map entries and relationships, saved inventory and search, strict-trust SSH verification, protected SFTP Files and Transfers, interactive Terminal, health, workload inspection/logs and scoped service/container control. Saved observations do not imply current reachability. Protected operations require an authenticated SSH session; no phone coordinator is active.
 
 `mise run test:desktop` exercises the **actual Tauri WebView2/Rust IPC** against synthetic data, including restart and failure paths. Build first. Private test databases/screenshots/results remain under ignored `.tools/`.
 
-Open a server → **Settings → Verify SSH access** to check its concrete alias using the PC's system OpenSSH configuration and existing public-key identities/agent. Atlas requires strict host trust and shows the resolved endpoint/fingerprint; it never copies private keys or changes known-host files. Unknown/changed fingerprints must be verified independently and resolved through your existing SSH trust workflow. A completed verification is a short check, not an open protected session. Direct aliases are supported; jump/proxy/known-host helper configurations are explicitly unavailable. Files, terminal, transfers and scoped workload actions require a separately authenticated session.
+Open a server → **Settings → Verify SSH access** to check its concrete alias using the PC's system OpenSSH configuration and existing public-key identities/agent. InfraWerf requires strict host trust and shows the resolved endpoint/fingerprint; it never copies private keys or changes known-host files. Unknown/changed fingerprints must be verified independently and resolved through your existing SSH trust workflow. A completed verification is a short check, not an open protected session. Direct aliases are supported; jump/proxy/known-host helper configurations are explicitly unavailable. Files, terminal, transfers and scoped workload actions require a separately authenticated session.
 
 Controlled SSH proof: `mise run ssh:fixture` prepares a private pinned test runtime; `mise run test:ssh` tests real OpenSSH against loopback servers; `mise run test:ssh-native` exercises the actual Settings UI (build first). Test-only keys/data stay ignored; no real hosts or trust files are changed.
 

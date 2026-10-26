@@ -130,7 +130,7 @@ try {
   expect(errors).toEqual([]);
   const proof = { result: 'pass', results, readOnlyJourneysPreserveMap: true, explicitSyntheticMapEdits: 2, sshConfigTrustUnchanged: true, noShellCommands: true, confirmedFixtureChanges: withMutations ? 11 : 0, pageErrors: errors, directory };
   await writeFile(path.join(directory, 'result.json'), JSON.stringify(proof, null, 2)); console.log(JSON.stringify(proof, null, 2));
-  await page.getByRole('button', { name: 'Quit Atlas', exact: true }).click(); await expect.poll(() => app.exitCode).not.toBe(null);
+  await page.getByRole('button', { name: 'Quit InfraWerf', exact: true }).click(); await expect.poll(() => app.exitCode).not.toBe(null);
 } catch (error) {
   await writeFile(path.join(directory, 'failure-errors.json'), JSON.stringify({ pageErrors: errors }, null, 2));
   await page?.screenshot({ path: path.join(directory, 'failure.png') }).catch(() => {}); console.error(`Native Files proof: ${directory}`); throw error;

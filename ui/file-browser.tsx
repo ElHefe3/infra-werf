@@ -111,7 +111,7 @@ export function FileBrowser({ server, onBusy }: { server: MapServer; onBusy: (va
       }
       if (!cleanupUnconfirmed) {
         try { await client.lockFiles(id); }
-        catch { setFailure("Session cleanup could not be confirmed. Wait for its idle expiry before closing Atlas."); }
+        catch { setFailure("Session cleanup could not be confirmed. Wait for its idle expiry before closing InfraWerf."); }
       }
       if (pendingStage && !cleanupUnconfirmed) setNotice("Session locked. In-flight private staging was stopped and removed.");
     })();
@@ -134,7 +134,7 @@ export function FileBrowser({ server, onBusy }: { server: MapServer; onBusy: (va
       if (active.current && (event.payload === null || event.payload === active.current.session_id)) clear("Session closed or expired. Protected file data has been cleared.");
     }).then(keep).catch(() => {});
     void listen<string>("atlas-close-blocked", event => setFailure(event.payload)).then(keep).catch(() => {});
-    const hide = () => { if (document.visibilityState === "hidden") clear("Session locked while Atlas was hidden."); };
+    const hide = () => { if (document.visibilityState === "hidden") clear("Session locked while InfraWerf was hidden."); };
     document.addEventListener("visibilitychange", hide);
     return () => {
       const id = active.current?.session_id, pending = operation.current, staged = placementRef.current, pendingStage = stagingTask.current;

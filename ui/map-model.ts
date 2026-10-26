@@ -28,20 +28,20 @@ export function inventoryRows(state: MapState, query: string): { server: MapServ
 export function errorMessage(error: unknown): string {
   if (typeof error === "object" && error && "code" in error) {
     const messages: Record<string, string> = {
-      conflict: "That host or relationship already exists, or another Atlas window owns this database. Check the details and try again.",
+      conflict: "That host or relationship already exists, or another InfraWerf window owns this database. Check the details and try again.",
       invalid_input: "Check the name, host and relationship details. A host must be a hostname or IP address, without a URL or SSH options.",
       not_found: "That item no longer exists. Reload the workspace and try again.",
-      migration_failed: "Atlas could not import the reference database. Your original was preserved. Check the configured source before retrying.",
-      incompatible_version: "This workspace uses an incompatible data version. Use the matching Atlas build; do not replace the database.",
-      io_failure: "Atlas could not open or save its workspace. Check disk access and whether another process is using the database, then retry.",
+      migration_failed: "InfraWerf could not import the reference database. Your original was preserved. Check the configured source before retrying.",
+      incompatible_version: "This workspace uses an incompatible data version. Use the matching InfraWerf build; do not replace the database.",
+      io_failure: "InfraWerf could not open or save its workspace. Check disk access and whether another process is using the database, then retry.",
       denied: "This operation is unavailable in the current workspace.",
       cancelled: "The SSH check was cancelled. No authenticated session is open.",
       timed_out: "The SSH check exceeded its time limit and was stopped. Check the host/VPN connection before retrying.",
       output_limit: "The SSH check produced more output than allowed and was stopped. No partial result was retained.",
     };
-    return messages[String(error.code)] ?? "Atlas could not complete the operation. Try again.";
+    return messages[String(error.code)] ?? "InfraWerf could not complete the operation. Try again.";
   }
-  return error instanceof Error ? error.message : "Atlas could not complete the operation. Try again.";
+  return error instanceof Error ? error.message : "InfraWerf could not complete the operation. Try again.";
 }
 
 export function observedLabel(server: MapServer): string {

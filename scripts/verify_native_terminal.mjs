@@ -243,7 +243,7 @@ try {
   }, null, 2));
   console.log(JSON.stringify({ result: 'pass', results, targets: 'disposable loopback OpenSSH fixture only', noSudo: true, noRealHost: true, sshConfigAndTrustUnchanged: true, terminalContentAbsentFromDatabase: true, pageErrors: errors, directory }, null, 2));
   await expect.poll(async () => (await invoke('workspace_status')).pending_operations, { timeout: 15000 }).toBe(0);
-  await page.getByRole('button', { name: 'Quit Atlas', exact: true }).click();
+  await page.getByRole('button', { name: 'Quit InfraWerf', exact: true }).click();
   await expect.poll(() => app.exitCode, { timeout: 15000 }).not.toBe(null);
 } catch (failure) {
   console.error(`Native terminal proof artifacts: ${directory}`);

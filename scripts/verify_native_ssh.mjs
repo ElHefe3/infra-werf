@@ -97,7 +97,7 @@ try {
   const proof = { result: 'pass', results, agent, configTrustDatabaseUnchanged: true, stoppedBeforeUnknownChangedAuth: true, pageErrors: errors, directory };
   await writeFile(path.join(directory, 'result.json'), JSON.stringify(proof, null, 2));
   console.log(JSON.stringify(proof, null, 2));
-  await page.getByRole('button', { name: 'Quit Atlas', exact: true }).click();
+  await page.getByRole('button', { name: 'Quit InfraWerf', exact: true }).click();
   await expect.poll(() => app.exitCode).not.toBe(null);
 } catch (failure) {
   await page?.screenshot({ path: path.join(directory, 'failure.png') }).catch(() => {});

@@ -8,7 +8,7 @@ function client(transport: StatusTransport): FoundationClient {
   return { async status() {
     const response = await transport();
     if (response.contract_version !== CONTRACT_VERSION) {
-      throw new Error("Atlas contract version is incompatible.");
+      throw new Error("InfraWerf contract version is incompatible.");
     }
     return response;
   } };

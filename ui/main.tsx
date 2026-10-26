@@ -11,6 +11,7 @@ import { TransferQueue, useTransfers } from "./transfer-queue";
 import { WorkloadInspectionPanel } from "./workload-inspection";
 import { ElevationCheck } from "./elevation-check";
 import { HealthMonitor } from "./health-monitor";
+import { BrandMark } from "./brand";
 import type { MapServer, MapState, Relationship, WorkspaceStatus } from "./contracts.gen";
 import { errorMessage, inventoryRows, matches, observedLabel, reachabilityLabel, workloads } from "./map-model";
 import "@xyflow/react/dist/style.css";
@@ -88,7 +89,7 @@ function Dialog({ title, children, close, busy = false, wide = false }: { title:
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => { const dialog = ref.current!; dialog.showModal(); return () => dialog.close(); }, []);
   return <dialog ref={ref} className={wide ? "workspace-dialog" : "form-dialog"} aria-label={title} onCancel={event => { event.preventDefault(); if (!busy) close(); }}>
-    <div className="dialog-title"><div><p className="eyebrow">ATLAS WORKSPACE</p><h2>{title}</h2></div><button className="icon-button" aria-label="Close dialog" disabled={busy} onClick={close}>×</button></div>
+    <div className="dialog-title"><div><p className="eyebrow">INFRAWERF WORKSPACE</p><h2>{title}</h2></div><button className="icon-button" aria-label="Close dialog" disabled={busy} onClick={close}>×</button></div>
     {children}
   </dialog>;
 }
@@ -120,7 +121,7 @@ function ServerWorkspace({ server, state, close, edit, reload, initialTab = "Ser
       const result = await client.refreshInventory(server.id);
       await reload();
       const status = result.status === "updated" ? "Approved inventory updated" : result.status === "unchanged" ? "No newer source inventory was found; the saved snapshot is unchanged" : "Collection was partial; the saved snapshot is unchanged";
-      setRefreshMessage(`${status}. Source collection: ${date(result.source_collected_at)} · Atlas received: ${date(result.refreshed_at)}.`);
+      setRefreshMessage(`${status}. Source collection: ${date(result.source_collected_at)} · InfraWerf received: ${date(result.refreshed_at)}.`);
     } catch (failure) {
       setRefreshFailure(true);
       setRefreshMessage(`Inventory refresh failed. The last saved observation was retained. ${errorMessage(failure)}`);
@@ -166,7 +167,7 @@ function App() {
   }, []);
   useEffect(() => {
     if (isTauri()) void refresh();
-    else setError("Open Atlas in its native Windows window to use the Rust workspace. This browser has no local data connection.");
+    else setError("Open InfraWerf in its native Windows window to use the Rust workspace. This browser has no local data connection.");
     let disposed = false;
     let unlisten: (() => void) | undefined;
     if (isTauri()) void listen<string>("atlas-close-blocked", e => setError(e.payload)).then(fn => { if (disposed) fn(); else unlisten = fn; }).catch(() => {});
@@ -198,14 +199,14 @@ function App() {
     if (modal?.kind === "relationship") void mutate(() => client.connect({ source: value("source"), target: value("target"), label: value("label") }), "Relationship documented. No server configuration changed.", true);
   }
   return <div className="app-shell">
-    <aside className="rail"><div className="brand" aria-label="Atlas">a<span>·</span></div><nav aria-label="Main navigation">{([["topology", "⬡", "Topology"], ["inventory", "▤", "Inventory"], ["transfers", "⇅", "Transfers"], ["activity", "◷", "Activity"]] as const).map(([name, icon, label]) => <button key={name} className={view === name ? "active" : ""} aria-label={label} title={label} aria-current={view === name ? "page" : undefined} onClick={() => setView(name)}>{icon}</button>)}</nav><div className="rail-bottom"><button className="icon-button quit-button" aria-label="Quit Atlas" title="Quit Atlas" onClick={() => { if (isTauri()) void getCurrentWindow().close().catch(e => setError(errorMessage(e))); }}>⏻</button><span className="local-avatar" title="Local workspace">L</span></div></aside>
-    <div className="app-main"><header className="topbar"><div>Personal workspace <span>/</span> <strong>Homelab</strong></div><span className="local-badge"><i /> LOCAL WORKSPACE</span></header>
+    <aside className="rail"><BrandMark /><nav aria-label="Main navigation">{([["topology", "⬡", "Topology"], ["inventory", "▤", "Inventory"], ["transfers", "⇅", "Transfers"], ["activity", "◷", "Activity"]] as const).map(([name, icon, label]) => <button key={name} className={view === name ? "active" : ""} aria-label={label} title={label} aria-current={view === name ? "page" : undefined} onClick={() => setView(name)}>{icon}</button>)}</nav><div className="rail-bottom"><button className="icon-button quit-button" aria-label="Quit InfraWerf" title="Quit InfraWerf" onClick={() => { if (isTauri()) void getCurrentWindow().close().catch(e => setError(errorMessage(e))); }}>⏻</button><span className="local-avatar" title="Local workspace">L</span></div></aside>
+    <div className="app-main"><header className="topbar"><div><strong className="wordmark">InfraWerf</strong><span>/</span> Homelab</div><span className="local-badge"><i /> LOCAL WORKSPACE</span></header>
       <main className="desktop-main"><section className="intro"><div><p className="eyebrow">YOUR INFRASTRUCTURE, CONNECTED</p><h1>A little clarity. <span>Across every server.</span></h1><p>Your infrastructure, thoughtfully mapped. One place to see how it all connects.</p></div><button className="primary" disabled={!available} onClick={() => setModal({ kind: "add" })}><span>＋</span> Add server</button></section>
         <section className="metrics" aria-label="Workspace summary"><div><span>Servers</span><strong>{state ? state.servers.length : "—"}</strong><small>In your workspace</small></div><div><span>Observed workloads</span><strong>{state ? countWorkloads.toLocaleString() : "—"}</strong><small>Services & containers</small></div><div><span>Needs an observation</span><strong>{state ? state.servers.filter(s => s.freshness !== "saved").length : "—"}</strong><small>Stale or not yet observed</small></div><div><span>Saved inventories</span><strong>{state ? state.servers.filter(s => s.inventory).length : "—"}</strong><small>Reachability not checked</small></div></section>
         <div className="feedback" aria-live="polite">{error ? <div role="alert" className="error-banner"><span>{error}</span><button disabled={busy || !isTauri()} onClick={() => void refresh()}>Retry load</button><button aria-label="Dismiss error" onClick={() => setError("")}>×</button></div> : <span className="save-message">{busy ? "Saving to this PC…" : notice}</span>}</div>
         <section className={`workspace-grid ${inspector && view === "topology" ? "with-inspector" : ""}`}>
           <div className="map-panel"><div className="map-toolbar"><div className="view-tabs" aria-label="Map view"><button className={view === "topology" ? "active" : ""} onClick={() => setView("topology")}>Topology</button><button className={view === "inventory" ? "active" : ""} onClick={() => setView("inventory")}>Inventory</button></div><div className="search-box"><span aria-hidden>⌕</span><input ref={search} aria-label="Find a server or workload" placeholder="Find a server or workload…" value={query} onChange={e => setQuery(e.target.value)} />{query ? <button aria-label="Clear search" onClick={() => setQuery("")}>×</button> : <kbd>/</kbd>}</div>{view === "topology" && <button className="icon-button" aria-label="Toggle inspector" aria-pressed={inspector} onClick={() => setInspector(v => !v)}>◧</button>}</div>
-            {!state ? <div className="loading-state"><span className="brand">a<span>·</span></span><h2>{error ? "Your workspace couldn’t be opened." : "Opening your workspace…"}</h2><p>{error ? "Resolve the message above, then retry. Your saved data has not been replaced." : "Reading the native Rust store on this PC."}</p></div> : <>
+            {!state ? <div className="loading-state"><BrandMark /><h2>{error ? "Your workspace couldn’t be opened." : "Opening your workspace…"}</h2><p>{error ? "Resolve the message above, then retry. Your saved data has not been replaced." : "Reading the native Rust store on this PC."}</p></div> : <>
               {view === "topology" && <ReactFlowProvider><MapCanvas state={state} selected={selected} query={query} busy={busy} select={setSelected} open={open} move={(id, x, y) => mutate(() => client.update(id, { x, y }), "Map position saved.")} connect={c => relationship(c.source, c.target)} /></ReactFlowProvider>}
               {view === "inventory" && <SavedInventory state={state} query={query} open={open} />}
               {view === "activity" && <div className="activity-view"><h2>Workspace activity</h2><p>Local map and inventory changes.</p><ActivityList state={state} /></div>}
@@ -221,7 +222,7 @@ function App() {
           </> : <p className="empty-copy">Select a server to inspect its saved details.</p>}</div>{server && <footer className="inspector-footer"><button className="primary" onClick={() => open(server.id)}>Open workspace <span>↗</span></button></footer>}</aside>}
         </section>
         <section className="access-strip"><span className="access-icon">⌁</span><div><strong>Your map is visible. Your access is deliberate.</strong><p>Saved inventory on this PC. Protected operations require an authenticated connection.</p></div><span className="access-status">Phone coordinator · unavailable</span></section>
-        <footer className="app-footer"><b>Atlas<span>·</span></b><span>Built for the things you run.</span></footer>
+        <footer className="app-footer"><b>InfraWerf</b><span>Your homelab, connected.</span></footer>
       </main>
     </div>
     {workspaceServer && state && <ServerWorkspace key={workspaceServer.id} server={workspaceServer} state={state} reload={async () => { setState(await client.retry()); }} initialTab={workspaceTab} close={() => setWorkspace(null)} edit={() => { setWorkspace(null); setModal({ kind: "edit", id: workspaceServer.id }); }} />}
@@ -229,7 +230,7 @@ function App() {
       {error && <p role="alert" className="form-error">{error}</p>}
       {modal.kind === "add" || modal.kind === "edit" ? <form onSubmit={formSubmit}><p className="muted">A map entry stores a name and address. It does not connect to the server.</p><label>Server name<input name="name" required maxLength={80} autoFocus defaultValue={editServer?.name} placeholder="e.g. Forgejo" /></label><label>Host or IP address<input name="host" required maxLength={253} defaultValue={editServer?.host} placeholder="server.example or 192.168.1.10" spellCheck={false} /></label><div className="form-actions">{modal.kind === "edit" && <button type="button" className="danger text-button" disabled={busy} onClick={() => setModal({ kind: "remove-server", id: modal.id })}>Remove from map</button>}<button type="button" disabled={busy} onClick={() => setModal(null)}>Cancel</button><button className="primary" disabled={busy}>{busy ? "Saving…" : "Save server"}</button></div></form>
         : modal.kind === "relationship" ? <form onSubmit={formSubmit}><p className="muted">Describe a directed connection between servers. This only updates the map.</p><label>From<select aria-label="From" name="source" defaultValue={modal.source} required>{state.servers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label><label>To<select aria-label="To" name="target" defaultValue={modal.target} required>{state.servers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label><label>Relationship label<input name="label" maxLength={80} placeholder="e.g. Deploys to" autoFocus /></label><div className="form-actions"><button type="button" disabled={busy} onClick={() => setModal(null)}>Cancel</button><button className="primary" disabled={busy}>{busy ? "Saving…" : "Save relationship"}</button></div></form>
-          : <><p>{modal.kind === "remove-server" ? `Remove ${editServer?.name} and its diagram relationships from Atlas? No server or workload will be changed.` : `Remove the “${modal.edge.label || "unlabelled"}” diagram relationship? Server configuration will be unchanged.`}</p><div className="form-actions"><button disabled={busy} onClick={() => setModal(null)}>Cancel</button><button className="danger-button" disabled={busy} onClick={() => void mutate(() => modal.kind === "remove-server" ? client.remove(modal.id) : client.disconnect(modal.edge.id), "Map entry removed.", true)}>{busy ? "Removing…" : "Remove"}</button></div></>}
+          : <><p>{modal.kind === "remove-server" ? `Remove ${editServer?.name} and its diagram relationships from InfraWerf? No server or workload will be changed.` : `Remove the “${modal.edge.label || "unlabelled"}” diagram relationship? Server configuration will be unchanged.`}</p><div className="form-actions"><button disabled={busy} onClick={() => setModal(null)}>Cancel</button><button className="danger-button" disabled={busy} onClick={() => void mutate(() => modal.kind === "remove-server" ? client.remove(modal.id) : client.disconnect(modal.edge.id), "Map entry removed.", true)}>{busy ? "Removing…" : "Remove"}</button></div></>}
     </Dialog>}
   </div>;
 }

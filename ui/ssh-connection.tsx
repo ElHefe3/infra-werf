@@ -7,12 +7,12 @@ import { errorMessage } from "./map-model";
 const client = createWorkspaceClient();
 const labels: Record<SshVerification["state"], [string, string]> = {
   verified: ["SSH access verified", "OpenSSH verified this host and authenticated an existing identity. This check has finished; no persistent SSH session is open."],
-  unknown_host: ["Host identity needs verification", "This host key is unknown. Verify the fingerprint independently, resolve trust in your existing SSH client, then retry. Atlas will not accept it automatically."],
+  unknown_host: ["Host identity needs verification", "This host key is unknown. Verify the fingerprint independently, resolve trust in your existing SSH client, then retry. InfraWerf will not accept it automatically."],
   changed_host: ["Host identity has changed", "Stop and verify this fingerprint independently. Resolve the changed key through your existing SSH trust workflow before retrying."],
   authentication_failed: ["SSH authentication failed", "No configured public-key identity authenticated. Check your existing identity configuration or unlock/load your existing SSH agent, then retry."],
   unreachable: ["SSH server could not be reached", "Check the configured hostname, port and LAN/VPN connection. This does not establish the state of services on that host."],
   unsupported_configuration: ["SSH configuration needs attention", "Use a direct, concrete alias with a valid hostname, username and port. Jump/proxy/known-host helper configurations are unavailable in this build."],
-  client_unavailable: ["System OpenSSH is unavailable", "Atlas could not find the Windows OpenSSH client. Install or restore the system client before retrying."],
+  client_unavailable: ["System OpenSSH is unavailable", "InfraWerf could not find the Windows OpenSSH client. Install or restore the system client before retrying."],
   failed: ["SSH verification did not complete", "The SSH check did not produce a verified response. Review your existing SSH configuration and retry."],
 };
 

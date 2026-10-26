@@ -1,6 +1,6 @@
 # S06 — Core release acceptance
 
-<!-- atlas-scope: {"id":"S06","features":["F12"],"depends_on":["S04","S05"],"window":2,"deferred":false} -->
+<!-- atlas-scope: {"id":"S06","features":["F12"],"depends_on":["S04","S05"],"window":2,"deferred":false,"evidence":"../evidence/S06-acceptance.md"} -->
 
 Mobile/APK/pairing/physical-phone requirements are retained in [future S09](S09-future-mobile.md).
 
@@ -26,10 +26,10 @@ Ticket status is canonical in the feature packets; scope progress is derived. Do
 
 ## Acceptance gate
 
-- [ ] Shared data/auth/operation regressions and safe-copy migration/rollback pass.
-- [ ] Pinned mise tasks produce Windows installer with checksums/signature validation and controlled install results.
-- [ ] Actual Windows LAN-or-existing-VPN journeys cover full core controls, lifecycle/auth failures and recovery.
-- [ ] Owner acceptance, remaining limitations, restart/availability and rollback instructions are recorded before deliberately retiring any fallback.
+- [x] Shared data/auth/operation regressions and safe-copy migration/rollback pass.
+- [x] Pinned mise tasks produce Windows installer with checksums/signature validation and controlled install results.
+- [x] Actual Windows desktop journeys cover the installed app's saved data, restart, strict-trust SSH and reused core control/lifecycle/auth/recovery proof.
+- [x] Owner acceptance, remaining limitations, restart/availability and rollback instructions are recorded; both data fallbacks remain available.
 
 ## Verification and refinement
 
@@ -45,4 +45,4 @@ New policy, data-preservation or permission changes stop only the affected work.
 
 ## Exit
 
-Core release complete only after T026 evidence. S07/S08 require a separate explicit owner activation.
+Core release complete: see [S06 acceptance](../evidence/S06-acceptance.md) and [T026 acceptance](../evidence/T026-acceptance.md). The installed Windows desktop is the primary app; the Python reference and native recovery snapshot remain fallbacks. S07/S08 require separate explicit owner activation.

@@ -34,7 +34,7 @@ export function TransferQueue({ rows, failure = "", retry }: { rows: TransferVie
   return <section className="transfer-queue" aria-label="Transfer queue">
     <div className="section-heading"><div><h3>Transfers</h3><p>Queued work continues when you leave Files. Lock stops its session. Retry starts a new reviewed attempt.</p></div></div>
     {(failure || error) && <p role="alert" className="form-error">{failure || error}</p>}
-    {!rows.length && <p className="empty-copy">No transfers in this Atlas session. Open a server’s Files tab to upload or download.</p>}
+    {!rows.length && <p className="empty-copy">No transfers in this InfraWerf session. Open a server’s Files tab to upload or download.</p>}
     {rows.map(row => <article className="transfer-row" key={row.id} aria-label={`${row.direction} ${row.local_name ?? "protected file"}`}>
       <div><strong>{row.direction === "upload" ? "Upload" : "Download"} · {row.local_name ?? "Protected file details cleared"}</strong><span className="state-pill">{row.state.replaceAll("_", " ")}</span></div>
       {row.remote && <code>{row.remote}</code>}

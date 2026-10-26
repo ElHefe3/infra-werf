@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="176" viewBox="0 0 360 88">
+  <title>InfraWerf — Your homelab, connected.</title>
+  <rect x="4" y="12" width="64" height="64" rx="18" fill="#255947"/>
+  <path d="m20 32 7 23 9-16 9 16 7-23" fill="none" stroke="#f5f3e8" stroke-width="7.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="87" y="47" font-family="Segoe UI, sans-serif" font-size="32" font-weight="650" letter-spacing="-1" fill="#255947">InfraWerf</text>
+  <text x="89" y="67" font-family="Segoe UI, sans-serif" font-size="12" fill="#76877a">Your homelab, connected.</text>
+</svg>

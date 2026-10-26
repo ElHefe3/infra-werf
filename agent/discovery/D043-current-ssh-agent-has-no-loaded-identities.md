@@ -14,8 +14,8 @@ One read-only remote command attempt per host used `BatchMode=yes`, `StrictHostK
 
 ## Consequence
 
-T026 live-host verification remains unproven in this shell context. Do not repeatedly retry or attempt to unlock credentials. The owner must provide an already-authorized session/loaded identity, or report the live checks unavailable. Continue to skip server 1, which is corrupted, disconnected and powered off.
+This result describes the shell context only. It is not a device-wide conclusion about the installed Atlas app. On 2026-10-27, the installed app successfully authenticated its configured existing identity to hosts 02–04; see [D044](D044-installed-app-review-and-ssh.md). Do not load or unlock credentials based on this shell result. Continue to skip server 1, which is corrupted, disconnected and powered off.
 
 ## Follow-up
 
-If the existing OpenSSH agent is populated for the owner, re-run the strict read-only check through Atlas on hosts 02–04 as part of owner acceptance. Otherwise preserve accepted loopback-fixture proof and leave live-host verification open.
+The follow-up strict read-only check was completed through the installed Atlas app on hosts 02–04; see [D044](D044-installed-app-review-and-ssh.md). Preserve the shell result as context-specific evidence and do not repeat credential prompts.

@@ -1,4 +1,4 @@
-# Atlas project instructions
+# InfraWerf project instructions
 
 Start at [agent/AGENT.md](agent/AGENT.md), also referenced by [.agent.md](.agent.md). Read the active scope and feature packet before changing behavior; do not load the whole tracker by default.
 

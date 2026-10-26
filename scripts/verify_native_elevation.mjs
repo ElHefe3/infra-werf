@@ -141,7 +141,7 @@ try {
   const proof = { result: 'pass', results, fixtureOnly: true, noRealHost: true, mapDatabaseUnchangedDuringActions: true, sshConfigAndTrustUnchanged: true, pageErrors: errors, directory };
   await writeFile(path.join(directory, 'result.json'), JSON.stringify(proof, null, 2));
   console.log(JSON.stringify(proof, null, 2));
-  await page.getByRole('button', { name: 'Quit Atlas', exact: true }).click();
+  await page.getByRole('button', { name: 'Quit InfraWerf', exact: true }).click();
   await expect.poll(() => app.exitCode).not.toBe(null);
 } catch (failure) {
   // Never persist a screenshot while the synthetic password may still be in

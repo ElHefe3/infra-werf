@@ -48,7 +48,7 @@ One targeted integrated regression and recovery run, linked to prior feature pro
 
 ### Evidence and closure
 
-See [T024 acceptance](../evidence/T024-acceptance.md) for the tested revision, synthetic migration and rollback, native Windows restart journey, shared regression results, reused cross-feature evidence, limitations and recovery state. Continue with T025 packaging; T026 owner acceptance remains a separate release gate.
+See [T024 acceptance](../evidence/T024-acceptance.md) for the tested revision, synthetic migration and rollback, native Windows restart journey, shared regression results, reused cross-feature evidence, limitations and recovery state. T024, T025 and T026 now complete F12; see the [T026 acceptance](../evidence/T026-acceptance.md) and [S06 acceptance](../evidence/S06-acceptance.md) for final owner cutover.
 
 ### Stop conditions
 
@@ -84,7 +84,7 @@ One Windows release build and controlled installation smoke; reuse caches, do no
 
 ### Evidence and closure
 
-See [T025 acceptance](../evidence/T025-acceptance.md) for the release build, checksum/signature status, installed-binary journey, same-version update, uninstall/reinstall, data-preservation boundary and remaining distribution limitations. T026 owner acceptance remains open; see [the checkpoint](../evidence/CHECKPOINT.md).
+See [T025 acceptance](../evidence/T025-acceptance.md) for the release build, checksum/signature status, installed-binary journey, same-version update, uninstall/reinstall, data-preservation boundary and remaining distribution limitations. T026 owner acceptance is recorded in [T026 acceptance](../evidence/T026-acceptance.md); see [the checkpoint](../evidence/CHECKPOINT.md).
 
 ### Stop conditions
 
@@ -92,7 +92,7 @@ Record signing/installer/device approval blocks explicitly; never embed keys or 
 
 ## T026 — Complete Windows desktop acceptance and cutover
 
-<!-- atlas-ticket: {"id":"T026","feature":"F12","status":"in_progress","depends_on":["T025"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T026","feature":"F12","status":"done","depends_on":["T025"],"evidence":"../evidence/T026-acceptance.md"} -->
 
 ### Outcome and included work
 
@@ -110,7 +110,7 @@ Use the actual Windows app on the selected LAN/existing VPN. Verify the existing
 
 ### Acceptance criteria
 
-- [ ] Owner evidence on the actual Windows PC covers the full desktop core, including session/host-trust failures and application lifecycle.
+- [x] Owner evidence on the actual Windows PC covers the full desktop core, including session/host-trust failures and application lifecycle.
 - [x] Cutover preserves data with verified recovery; reference/original backups are retained until acceptance and retirement is separately deliberate.
 - [x] Roadmap/tickets/evidence/release instructions accurately state what shipped, what is deferred and any unresolved blocker.
 
@@ -120,7 +120,7 @@ One concise owner-facing acceptance checklist/journey set; reuse valid technical
 
 ### Evidence and closure
 
-The prepared [T026 owner checklist](../evidence/T026-owner-checklist.md) records the verified recovery and documentation criteria. The actual Windows-PC owner observation remains pending; live SSH authentication to hosts 02–04 was inconclusive because the current agent had no loaded identities ([D043](../discovery/D043-current-ssh-agent-has-no-loaded-identities.md)). Add owner observations and cutover decision before linking a passing acceptance record or closing T026; use [the checkpoint](../evidence/CHECKPOINT.md) at handoff.
+See [T026 acceptance](../evidence/T026-acceptance.md) and the [owner checklist](../evidence/T026-owner-checklist.md) for the installed-app map/inventory review, close/reopen persistence, strict-trust SSH success for hosts 02–04, reused fixture proof and owner decision. The owner accepted the installed desktop as primary while retaining the Python reference and native recovery snapshot. [D044](../discovery/D044-installed-app-review-and-ssh.md) distinguishes the empty development window from the functioning installed app; [D043](../discovery/D043-current-ssh-agent-has-no-loaded-identities.md) remains scoped to its shell context. T026 is done. Use [the checkpoint](../evidence/CHECKPOINT.md) at handoff.
 
 ### Stop conditions
 

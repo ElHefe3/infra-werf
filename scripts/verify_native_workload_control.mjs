@@ -304,7 +304,7 @@ try {
     expect(proofBytes.includes(Buffer.from(marker))).toBe(false);
   }
   console.log(JSON.stringify(proof, null, 2));
-  await page.getByRole('button', { name: 'Quit Atlas' }).click();
+  await page.getByRole('button', { name: 'Quit InfraWerf' }).click();
   await expect.poll(() => app.exitCode).not.toBe(null);
 } catch (failure) {
   console.error(`Native workload-control proof failed in ${directory}; credentials and protected output were not written to the evidence file.`);

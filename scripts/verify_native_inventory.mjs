@@ -72,7 +72,7 @@ try {
   await refresh.click();
   await expect(workspace.getByRole('status')).toContainText('Approved inventory updated');
   await expect(workspace).toContainText('Source collection:');
-  await expect(workspace).toContainText('Atlas received:');
+  await expect(workspace).toContainText('InfraWerf received:');
   await expect(workspace).toContainText('atlas-fixture.service');
   await expect(workspace).toContainText('fixture-worker.service');
   await expect(workspace).toContainText('atlas-fixture-api');
@@ -128,7 +128,7 @@ try {
   expect(errors).toEqual([]);
   await writeFile(path.join(directory, 'result.json'), JSON.stringify({ result: 'pass', results, targets: 'disposable loopback SSH fixture only', noSudo: true, noRealHost: true, sshConfigAndTrustUnchanged: true, pageErrors: errors, directory }, null, 2));
   console.log(JSON.stringify({ result: 'pass', results, targets: 'disposable loopback SSH fixture only', noSudo: true, noRealHost: true, sshConfigAndTrustUnchanged: true, pageErrors: errors, directory }, null, 2));
-  await page.getByRole('button', { name: 'Quit Atlas', exact: true }).click();
+  await page.getByRole('button', { name: 'Quit InfraWerf', exact: true }).click();
   await expect.poll(() => app.exitCode).not.toBe(null);
 } catch (failure) {
   console.error(`Native inventory proof artifacts: ${directory}`);

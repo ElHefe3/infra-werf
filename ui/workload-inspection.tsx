@@ -184,7 +184,7 @@ export function WorkloadInspectionPanel({ server, onBusy }: { server: MapServer;
       } else if (code === "unauthenticated") {
         setControlFailure("The fresh sudo check failed. No action was authorized; review again and enter the password for this action.");
       } else if (code === "denied") {
-        setControlFailure("The server did not authorize this control action. Atlas did not dispatch the workload command.");
+        setControlFailure("The server did not authorize this control action. InfraWerf did not dispatch the workload command.");
       } else {
         setControlFailure(errorMessage(failure));
       }
@@ -247,13 +247,13 @@ export function WorkloadInspectionPanel({ server, onBusy }: { server: MapServer;
         <div className="workload-result-heading"><div><h4>Control {controlWorkload.name}</h4><span className="muted">{controlWorkload.kind} · {controlWorkload.scope} · {controlWorkload.runtime}</span></div><button disabled={controlBusy} onClick={() => void cancelControl()}>Close</button></div>
         {!controlPreview && !controlReceipt && <div className="workload-control-review">
           <label>Action<select aria-label="Workload action" value={controlAction} disabled={controlBusy} onChange={event => setControlAction(event.target.value as WorkloadAction)}><option value="start">Start</option><option value="stop">Stop</option><option value="restart">Restart</option></select></label>
-          <p>Review the exact host, runtime scope, workload and action before Atlas executes it.</p>
+          <p>Review the exact host, runtime scope, workload and action before InfraWerf executes it.</p>
           <button className="primary" disabled={controlBusy} onClick={() => reviewControl(controlWorkload)}>{controlBusy ? "Preparing review…" : "Review action"}</button>
         </div>}
         {controlPreview && <form className="file-change-review" aria-label="Confirm workload action" onSubmit={event => void confirmControl(event)}>
           <dl><dt>Server</dt><dd>{server.name} · {controlPreview.server}</dd><dt>SSH account</dt><dd>{controlPreview.endpoint}</dd><dt>Workload</dt><dd>{controlPreview.workload.name} · {controlPreview.workload.kind}</dd><dt>Scope / runtime</dt><dd>{controlPreview.workload.scope} · {controlPreview.workload.runtime}</dd><dt>Action</dt><dd>{actionLabel(controlPreview.action)}</dd><dt>Elevation</dt><dd>{controlPreview.requires_sudo ? "Fresh sudo password required for this action" : "Runs as the authenticated SSH account"}</dd></dl>
           {controlPreview.requires_sudo && <label>Password for this action<input ref={password} type="password" aria-label="Password for this action" autoComplete="off" maxLength={1024} required disabled={controlBusy} /></label>}
-          <p>Atlas will run only this reviewed action, then observe the workload again. If the result is unknown, inspect the workload before retrying.</p>
+          <p>InfraWerf will run only this reviewed action, then observe the workload again. If the result is unknown, inspect the workload before retrying.</p>
           <button className="primary" type="submit" disabled={controlBusy}>{controlBusy ? "Executing and observing…" : controlPreview.requires_sudo ? "Confirm with fresh sudo" : "Confirm action"}</button>
           <button type="button" onClick={() => void cancelControl()}>{controlBusy ? "Cancel action" : "Cancel review"}</button>
         </form>}

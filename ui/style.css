@@ -21,8 +21,9 @@ small { display: block; color: var(--muted); font-size: 11px; margin-top: 3px; }
 .eyebrow { color: #7e957b; font-size: 9px; letter-spacing: 1.6px; font-weight: 600; }
 .app-shell { height: 100dvh; min-height: 580px; display: flex; overflow: hidden; }
 .rail { width: 72px; flex-shrink: 0; display: flex; align-items: center; flex-direction: column; border-right: 1px solid var(--border); background: #fcfdfa; padding: 12px 0 18px; }
-.brand { font-size: 45px; line-height: 1; letter-spacing: -6px; font-weight: 750; color: var(--green); padding-right: 6px; }
-.brand span { color: #acbd9b; }
+.brand { display: block; width: 40px; height: 40px; flex-shrink: 0; }
+.topbar .wordmark { color: #255947; font-size: 17px; font-weight: 650; letter-spacing: -.6px; }
+.loading-state .brand { width: 56px; height: 56px; margin-inline: auto; }
 .rail nav { margin-top: 36px; display: grid; gap: 13px; }
 .rail nav button { width: 40px; height: 40px; padding: 0; font-size: 24px; color: #8e9c90; border: none; background: transparent; }
 .rail nav button.active { color: var(--green); background: #e9f1e6; }

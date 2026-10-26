@@ -164,7 +164,7 @@ try {
   const proofBytes = await readFile(proofPath);
   for (const marker of ['ATLAS_TEST_SYSTEM_SERVICE_LOG', 'ATLAS_TEST_DOCKER_CONTAINER_LOG']) expect(proofBytes.includes(Buffer.from(marker))).toBe(false);
   console.log(JSON.stringify(proof, null, 2));
-  await page.getByRole('button', { name: 'Quit Atlas' }).click();
+  await page.getByRole('button', { name: 'Quit InfraWerf' }).click();
   await expect.poll(() => app.exitCode).not.toBe(null);
 } catch (failure) {
   console.error(`Native workload proof failed in ${directory}; protected log contents were not captured as artifacts.`);
