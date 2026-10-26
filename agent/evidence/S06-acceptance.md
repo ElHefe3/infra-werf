@@ -1,8 +1,8 @@
 # S06 acceptance — Core desktop release
 
-Date: 2026-10-27  
-Scope: S06  
-Revision: Application release built from `7f9ba84`; owner review on 2026-10-27; documentation closure follows checkpoint `ae6f186` and the current working tree.  
+Date: 2026-10-27<br>
+Scope: S06<br>
+Revision: Application release built from `7f9ba84`; owner review on 2026-10-27; documentation closure follows checkpoint `ae6f186` and the current working tree.<br>
 Result: pass
 
 ## Acceptance gate

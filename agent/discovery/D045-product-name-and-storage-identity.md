@@ -1,7 +1,7 @@
 # D045 — Product branding and storage identity are separate
 
-Date: 2026-10-27  
-State: verified  
+Date: 2026-10-27<br>
+State: verified<br>
 Affected: post-release InfraWerf branding
 
 ## Finding

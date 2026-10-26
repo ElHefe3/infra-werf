@@ -1,8 +1,8 @@
 # InfraWerf branding acceptance
 
-Date: 2026-10-27  
-Revision: Current working tree after `ae6f186`; release version 0.1.1. Core acceptance retains its original per-ticket revisions.  
-Platform: Windows x64, Tauri 2 / WebView2, current-user installation.  
+Date: 2026-10-27<br>
+Revision: Current working tree after `ae6f186`; release version 0.1.1. Core acceptance retains its original per-ticket revisions.<br>
+Platform: Windows x64, Tauri 2 / WebView2, current-user installation.<br>
 Result: pass
 
 ## Delivered

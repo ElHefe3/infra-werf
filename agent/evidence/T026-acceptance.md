@@ -1,9 +1,9 @@
 # T026 acceptance — Windows desktop owner review and cutover
 
-Date: 2026-10-27  
-Ticket: T026  
-Revision: Application release built from `7f9ba84`; owner review and installed-app journey performed 2026-10-27; documentation closure follows checkpoint `ae6f186` and the current working tree.  
-Platform: Windows x64, installed current-user Atlas release.  
+Date: 2026-10-27<br>
+Ticket: T026<br>
+Revision: Application release built from `7f9ba84`; owner review and installed-app journey performed 2026-10-27; documentation closure follows checkpoint `ae6f186` and the current working tree.<br>
+Platform: Windows x64, installed current-user Atlas release.<br>
 Result: pass
 
 ## Acceptance mapping
