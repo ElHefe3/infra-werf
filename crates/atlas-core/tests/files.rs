@@ -109,6 +109,7 @@ fn actual_sftp_lifetime_handles_revocation_and_cleanup() {
                 &target,
                 &service.prepare(&target).unwrap().operation_id,
                 Lease::new(&leases),
+                None,
             )
             .unwrap()
     };
@@ -219,6 +220,7 @@ fn actual_sftp_lifetime_handles_revocation_and_cleanup() {
                 &target,
                 &service.prepare(&target).unwrap().operation_id,
                 Lease::new(&leases),
+                None,
             )
             .unwrap();
         std::thread::sleep(Duration::from_millis(120));
@@ -242,7 +244,8 @@ fn actual_sftp_lifetime_handles_revocation_and_cleanup() {
         code(service.open(
             &slow,
             &service.prepare(&slow).unwrap().operation_id,
-            Lease::new(&leases)
+            Lease::new(&leases),
+            None,
         )),
         ErrorCode::TimedOut
     );

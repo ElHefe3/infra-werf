@@ -2,7 +2,7 @@
 
 ## Active checkpoint
 
-- **Current identity:** InfraWerf 0.1.1, implemented by the owner's 2026-10-27 request. See [brand guide](BRAND.md), [branding acceptance](evidence/BRANDING-acceptance.md) and [D045](discovery/D045-product-name-and-storage-identity.md). The installed InfraWerf shortcut opens the existing workspace; the former Atlas program remains installed. Both share one native store. Core acceptance below retains its original revisions.
+- **Current identity:** InfraWerf 0.1.2. The owner's reported inventory/Terminal errors are repaired and the old Atlas program/shortcuts removed. See [desktop retest](evidence/DESKTOP-RETEST-acceptance.md), [D046](discovery/D046-desktop-retest-and-ssh-compatibility.md) and the [brand guide](BRAND.md). All ten native suites, 72 Rust tests, nine UI checks, 14 SSH cases and the real protected-operation fixtures pass; live inventory and Terminal pass on 02–04. The owner data remains unchanged. The ordinary launcher opens the registered release. Core acceptance below retains its original revisions.
 
 - **State:** S01 complete on 2026-10-25: T001–T005 passed with native-build, safe-copy data and review evidence.
 - **Active:** Desktop scopes S01–S06 are complete. T026 owner acceptance is recorded in [T026 acceptance](evidence/T026-acceptance.md); [S06 acceptance](evidence/S06-acceptance.md) closes the core release. The installed Windows desktop is primary; the Python reference and native recovery snapshot remain fallbacks. Mobile is future S09; S07/S08 remain deferred.

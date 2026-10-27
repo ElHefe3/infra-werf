@@ -4,6 +4,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import type { MapServer } from "./contracts.gen";
 import { createWorkspaceClient } from "./workspace-client";
+import { errorMessage } from "./map-model";
 import "@xterm/xterm/css/xterm.css";
 
 const client = createWorkspaceClient();
@@ -80,7 +81,7 @@ export function TerminalPanel({ server, onBusy }: { server: MapServer; onBusy: (
     } catch (error) {
       input.current = [];
       queuedBytes.current = 0;
-      setFailure(error instanceof Error ? error.message : "Terminal input could not be sent.");
+      setFailure(errorMessage(error));
       await stop("The protected terminal session ended. Reconnect to continue.");
     } finally {
       draining.current = false;
@@ -137,7 +138,7 @@ export function TerminalPanel({ server, onBusy }: { server: MapServer; onBusy: (
         const rows = Math.max(2, Math.min(300, terminalInstance.rows));
         const id = session.current;
         if (id && connected.current) void client.resizeTerminal(server.id, id, cols, rows).catch(error => {
-          setFailure(error instanceof Error ? error.message : "Terminal resize failed.");
+          setFailure(errorMessage(error));
           void stop("The protected terminal session ended. Reconnect to continue.");
         });
       }, 120);
@@ -154,7 +155,7 @@ export function TerminalPanel({ server, onBusy }: { server: MapServer; onBusy: (
       if (disposed) unlisten();
       else { unlisteners.push(unlisten); setListenerReady(true); }
     }).catch(error => {
-      if (!disposed) setFailure(error instanceof Error ? error.message : "Terminal event stream is unavailable.");
+      if (!disposed) setFailure(errorMessage(error));
     });
     requestAnimationFrame(resize);
     return () => {
@@ -198,7 +199,7 @@ export function TerminalPanel({ server, onBusy }: { server: MapServer; onBusy: (
         }
       } catch (error) {
         if (!disposed && session.current === id) {
-          setFailure(error instanceof Error ? error.message : "Terminal output could not be read.");
+          setFailure(errorMessage(error));
           await stop("The protected terminal session ended. Reconnect to continue.");
         }
       } finally {
@@ -235,7 +236,7 @@ export function TerminalPanel({ server, onBusy }: { server: MapServer; onBusy: (
       terminal.current?.focus();
       busyCallback.current(false);
     } catch (error) {
-      setFailure(error instanceof Error ? error.message : "Terminal connection failed.");
+      setFailure(errorMessage(error));
       await stop("Connection failed. Review the error and reconnect.");
     }
   }

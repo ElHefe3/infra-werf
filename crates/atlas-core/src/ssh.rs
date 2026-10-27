@@ -96,11 +96,11 @@ impl SshOptions {
             "NoHostAuthenticationForLocalhost=no",
             "FingerprintHash=sha256",
             // Quiet mode suppresses server-controlled SSH_MSG_USERAUTH_BANNER
-            // text. Restore only the three local functions that emit evidence
+            // text. Restore only local functions that emit evidence/errors
             // Atlas consumes; enabling an entire source file also exposes
             // server-controlled identification diagnostics.
             "LogLevel=QUIET",
-            "LogVerbose=*sshconnect.c:verify_host_key():*,*sshconnect.c:check_host_key():*,*sshconnect2.c:ssh_userauth2():*",
+            "LogVerbose=*sshconnect.c:verify_host_key():*,*sshconnect.c:check_host_key():*,*sshconnect.c:warn_changed_key():*,*sshconnect.c:ssh_connect_direct():*,*sshconnect2.c:ssh_userauth2():*,*sshconnect2.c:userauth():*",
             "UpdateHostKeys=no",
             "CheckHostIP=no",
             "VerifyHostKeyDNS=no",
@@ -407,10 +407,55 @@ pub(crate) fn classify(stderr: &str) -> SshCheckState {
     ]
     .iter()
     .any(|message| stderr.contains(message))
+        // A peer can accept TCP and then fail before SSH key exchange. Quiet
+        // logging intentionally hides untrusted identification/banner text;
+        // use only the local connect call-site and absence of a verified key.
+        || (fingerprint(stderr).is_none()
+            && stderr.lines().any(|line| {
+                local_diagnostic_message(
+                    line,
+                    "sshconnect.c",
+                    "ssh_connect_direct",
+                    "Connection established.",
+                ) == Some("")
+            }))
     {
         SshCheckState::Unreachable
     } else {
         SshCheckState::Failed
+    }
+}
+
+#[cfg(test)]
+mod connection_classification_tests {
+    use super::*;
+
+    #[test]
+    fn closed_pre_key_exchange_connection_uses_only_local_connect_evidence() {
+        let trace =
+            "debug1: sshconnect.c:ssh_connect_direct():598 (pid=42): Connection established.";
+        assert!(matches!(classify(trace), SshCheckState::Unreachable));
+        assert!(matches!(
+            classify("debug1: Connection established."),
+            SshCheckState::Failed
+        ));
+        assert!(matches!(
+            classify(&trace.replace("sshconnect.c", "remote.c")),
+            SshCheckState::Failed
+        ));
+        let keyed = format!(
+            "{trace}\ndebug1: sshconnect.c:verify_host_key():42 (pid=42): Server host key: ssh-ed25519 SHA256:{}",
+            "A".repeat(43)
+        );
+        assert!(matches!(classify(&keyed), SshCheckState::Failed));
+        assert!(matches!(
+            classify(&format!("{trace}\nREMOTE HOST IDENTIFICATION HAS CHANGED")),
+            SshCheckState::ChangedHost
+        ));
+        assert!(matches!(
+            classify(&format!("{trace}\nPermission denied")),
+            SshCheckState::AuthenticationFailed
+        ));
     }
 }
 

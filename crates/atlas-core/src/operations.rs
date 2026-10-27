@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     sync::{
-        atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc, Mutex,
+        atomic::{AtomicBool, AtomicUsize, Ordering},
     },
     time::{Duration, Instant},
 };
@@ -1127,16 +1127,23 @@ mod tests {
             )
             .unwrap();
         assert_eq!(receipt, "observed");
-        assert!(broker
-            .execute_workload_control(Some(&caller), &ticket.operation_id, &target, |_, _| panic!(
-                "an action ticket must be one-shot"
-            ),)
-            .is_err());
-        assert!(broker
-            .audit()
-            .unwrap()
-            .iter()
-            .any(|item| { item.operation_id == ticket.operation_id && item.failure.is_none() }));
+        assert!(
+            broker
+                .execute_workload_control(
+                    Some(&caller),
+                    &ticket.operation_id,
+                    &target,
+                    |_, _| panic!("an action ticket must be one-shot"),
+                )
+                .is_err()
+        );
+        assert!(
+            broker
+                .audit()
+                .unwrap()
+                .iter()
+                .any(|item| { item.operation_id == ticket.operation_id && item.failure.is_none() })
+        );
     }
 
     #[test]
@@ -1298,11 +1305,16 @@ mod tests {
             .unwrap();
         assert_eq!(error.code, ErrorCode::TimedOut);
         assert_eq!(starts.load(Ordering::Acquire), 1);
-        assert!(broker
-            .execute_workload_control(Some(&caller), &ticket.operation_id, &target, |_, _| panic!(
-                "timed out action ticket must not be replayed"
-            ),)
-            .is_err());
+        assert!(
+            broker
+                .execute_workload_control(
+                    Some(&caller),
+                    &ticket.operation_id,
+                    &target,
+                    |_, _| panic!("timed out action ticket must not be replayed"),
+                )
+                .is_err()
+        );
         assert_eq!(starts.load(Ordering::Acquire), 1);
     }
 }

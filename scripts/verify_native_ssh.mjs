@@ -23,7 +23,7 @@ try {
   const beforeFallback = await digest(info.fallback_known_hosts);
   const database = path.join(directory, 'native.sqlite3');
   const { ATLAS_LEGACY_DB, ...environment } = process.env;
-  app = spawn(path.join(root, 'target/debug/atlas-native.exe'), [], { cwd: root, windowsHide: true, env: { ...environment, ATLAS_NATIVE_DB: database, ATLAS_SSH_CONFIG: info.config, WEBVIEW2_USER_DATA_FOLDER: path.join(directory, 'webview'), WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: '--remote-debugging-port=9227 --remote-debugging-address=127.0.0.1' }, stdio: 'ignore' });
+  app = spawn(process.env.ATLAS_DESKTOP_BINARY ? path.resolve(process.env.ATLAS_DESKTOP_BINARY) : path.join(root, 'target/debug/atlas-native.exe'), [], { cwd: root, windowsHide: true, env: { ...environment, ATLAS_NATIVE_DB: database, ATLAS_SSH_CONFIG: info.config, WEBVIEW2_USER_DATA_FOLDER: path.join(directory, 'webview'), WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: '--remote-debugging-port=9227 --remote-debugging-address=127.0.0.1' }, stdio: 'ignore' });
   for (let i = 0; i < 60; i++) { if (app.exitCode !== null) throw new Error('Native app exited during startup'); try { if ((await fetch('http://127.0.0.1:9227/json/version')).ok) break; } catch {} await delay(200); }
   browser = await chromium.connectOverCDP('http://127.0.0.1:9227');
   page = browser.contexts()[0].pages()[0];
@@ -60,17 +60,17 @@ try {
   }
   let dialog = await settings('overflow');
   await dialog.getByRole('button', { name: 'Verify SSH access', exact: true }).click();
-  await expect(dialog.getByRole('alert')).toContainText('more output than allowed');
+  await expect(dialog.getByRole('region', { name: 'SSH connection verification', exact: true }).getByRole('alert')).toContainText('more output than allowed');
   await page.keyboard.press('Escape'); await expect(dialog).not.toBeVisible(); results.push('overflow: bounded error without partial payload');
   dialog = await settings('slow');
   await dialog.getByRole('button', { name: 'Verify SSH access', exact: true }).click();
   await expect(dialog.getByRole('button', { name: 'Cancel check', exact: true })).toBeEnabled();
   await expect.poll(async () => JSON.parse(await readFile(info.stats, 'utf8')).slow.commands).toBe(1);
   await invoke('plugin:window|close', { label: 'main' });
-  await expect(dialog.getByRole('alert')).toContainText('finishing a local operation');
+  await expect(dialog.getByRole('region', { name: 'SSH connection verification', exact: true }).getByRole('alert')).toContainText('finishing a local operation');
   expect(app.exitCode).toBe(null);
   await dialog.getByRole('button', { name: 'Cancel check', exact: true }).click();
-  await expect(dialog.getByRole('alert')).toContainText('cancelled');
+  await expect(dialog.getByRole('region', { name: 'SSH connection verification', exact: true }).getByRole('alert')).toContainText('cancelled');
   await expect.poll(async () => (await invoke('workspace_status')).pending_operations).toBe(0);
   await expect.poll(async () => JSON.parse(await readFile(info.stats, 'utf8')).slow.active).toBe(0);
   await page.screenshot({ path: path.join(directory, 'native-ssh-cancelled.png') });

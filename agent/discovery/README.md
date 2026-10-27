@@ -59,3 +59,4 @@ Link important discoveries from affected feature packets and the checkpoint. Nev
 - [D043 Current Windows SSH agent has no loaded identities](D043-current-ssh-agent-has-no-loaded-identities.md)
 - [D044 Installed-app review distinguishes the release from the development window](D044-installed-app-review-and-ssh.md)
 - [D045 Product branding and storage identity are separate](D045-product-name-and-storage-identity.md)
+- [D046 Desktop retest and SSH compatibility](D046-desktop-retest-and-ssh-compatibility.md)

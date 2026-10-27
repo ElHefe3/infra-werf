@@ -20,4 +20,4 @@ Keep the established application identifier, data/schema and compatibility names
 
 ## Follow-up
 
-Use InfraWerf as the current desktop program. Retain the original Python database and native recovery snapshot; retirement of the old program remains a separate maintenance action if requested.
+Use InfraWerf as the current desktop program. The owner subsequently requested old-program removal; it was completed with unchanged data hashes in [D046](D046-desktop-retest-and-ssh-compatibility.md) and [desktop retest](../evidence/DESKTOP-RETEST-acceptance.md). Retain the original Python database and native recovery snapshot.

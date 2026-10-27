@@ -70,7 +70,7 @@ try {
   await mkdir(terminalTemp);
   const debugPort = await reservePort();
   const { ATLAS_LEGACY_DB, ATLAS_REPORTS_DIR, ...environment } = process.env;
-  app = spawn(path.join(root, 'target/debug/atlas-native.exe'), [], {
+  app = spawn(process.env.ATLAS_DESKTOP_BINARY ? path.resolve(process.env.ATLAS_DESKTOP_BINARY) : path.join(root, 'target/debug/atlas-native.exe'), [], {
     cwd: root,
     windowsHide: true,
     env: {
@@ -181,8 +181,9 @@ try {
     element.style.width = '520px';
     element.style.height = '300px';
   });
-  const afterResize = await currentSize('ATLAS_UI_SIZE_B_', "stty size | sed 's/^/ATLAS_UI_SIZE_B_/'");
-  expect(afterResize.cols).toBeLessThan(beforeResize.cols);
+  // ResizeObserver fits xterm on a frame, then IPC resize is debounced. Poll
+  // the real remote dimensions instead of racing the first post-layout input.
+  await expect.poll(async () => (await currentSize('ATLAS_UI_SIZE_B_', "stty size | sed 's/^/ATLAS_UI_SIZE_B_/'")).cols).toBeLessThan(beforeResize.cols);
   results.push('xterm keyboard entry passed the actual native SSH channel and the resize observer changed the remote terminal width');
 
   await sendUi('sleep 20');

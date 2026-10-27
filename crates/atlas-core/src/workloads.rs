@@ -1,8 +1,8 @@
 //! Typed identities and bounded transient inspection for discovered workloads.
 //! The fixed remote program accepts only identities issued from saved inventory.
 use crate::{
-    AtlasError, BaselineInventory, ContainerSummary, ErrorCode, ServerId, ServiceSummary,
-    CONTRACT_VERSION,
+    AtlasError, BaselineInventory, CONTRACT_VERSION, ContainerSummary, ErrorCode, ServerId,
+    ServiceSummary,
 };
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -751,9 +751,11 @@ mod tests {
         assert!(values[2].supported); // user Podman
         assert!(values[3].supported); // system Docker
         assert!(!values[4].supported); // no runtime/scope fallback
-        assert!(values
-            .iter()
-            .all(|workload| workload.id.starts_with("wl1_")));
+        assert!(
+            values
+                .iter()
+                .all(|workload| workload.id.starts_with("wl1_"))
+        );
     }
 
     #[test]
@@ -810,13 +812,15 @@ mod tests {
             assert_eq!(receipt.observed_state, WorkloadState::Stopped);
             assert!(receipt.message.contains("one-shot service is inactive"));
         }
-        assert!(parse_workload_control(
-            "ATLAS_CONTROL_V1\nACTION_EXIT\t0\nSTATE\toneshot_completed\n",
-            &operation,
-            &one_shot,
-            WorkloadAction::Stop,
-        )
-        .is_err());
+        assert!(
+            parse_workload_control(
+                "ATLAS_CONTROL_V1\nACTION_EXIT\t0\nSTATE\toneshot_completed\n",
+                &operation,
+                &one_shot,
+                WorkloadAction::Stop,
+            )
+            .is_err()
+        );
 
         let failed = parse_workload_control(
             "ATLAS_CONTROL_V1\nACTION_EXIT\t1\nSTATE\tstopped\n",
@@ -836,13 +840,15 @@ mod tests {
         )
         .unwrap();
         assert_eq!(unknown.outcome, WorkloadActionOutcome::Unknown);
-        assert!(parse_workload_control(
-            "ATLAS_CONTROL_V1\nACTION_EXIT\t0\nSTATE\tother\n",
-            &operation,
-            &identity,
-            WorkloadAction::Start,
-        )
-        .is_err());
+        assert!(
+            parse_workload_control(
+                "ATLAS_CONTROL_V1\nACTION_EXIT\t0\nSTATE\tother\n",
+                &operation,
+                &identity,
+                WorkloadAction::Start,
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -852,8 +858,11 @@ mod tests {
             REMOTE_WORKLOAD_INSPECTION,
             REMOTE_WORKLOAD_CONTROL,
         ] {
-            assert!(program
-                .contains("unset DOCKER_HOST DOCKER_CONTEXT DOCKER_TLS_VERIFY DOCKER_CERT_PATH"));
+            assert!(
+                program.contains(
+                    "unset DOCKER_HOST DOCKER_CONTEXT DOCKER_TLS_VERIFY DOCKER_CERT_PATH"
+                )
+            );
             assert!(program.contains("docker --host unix:///var/run/docker.sock"));
         }
         assert!(REMOTE_WORKLOAD_INSPECTION.contains("capture_logs system_docker logs"));
@@ -941,23 +950,27 @@ mod tests {
         for changed in changed_profiles {
             let changed_binding =
                 crate::inventory::authenticated_source_binding(&changed, fingerprint);
-            assert!(WorkloadIdentity::for_authenticated_session(
-                &server,
-                &changed.alias,
-                &changed_binding,
-                Some(&saved),
-            )
-            .is_empty());
+            assert!(
+                WorkloadIdentity::for_authenticated_session(
+                    &server,
+                    &changed.alias,
+                    &changed_binding,
+                    Some(&saved),
+                )
+                .is_empty()
+            );
         }
         let changed_key =
             crate::inventory::authenticated_source_binding(&profile, "SHA256:other-key");
-        assert!(WorkloadIdentity::for_authenticated_session(
-            &server,
-            &profile.alias,
-            &changed_key,
-            Some(&saved),
-        )
-        .is_empty());
+        assert!(
+            WorkloadIdentity::for_authenticated_session(
+                &server,
+                &profile.alias,
+                &changed_key,
+                Some(&saved),
+            )
+            .is_empty()
+        );
     }
 
     #[test]

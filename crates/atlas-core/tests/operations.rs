@@ -371,7 +371,9 @@ fn output_limits_are_sticky_and_raw_executor_failures_are_redacted() {
 
 #[test]
 fn timeout_returns_without_waiting_for_an_uncooperative_read_only_executor() {
-    let (broker, authority, target, session) = fixture(Duration::from_millis(40), 128);
+    // Leave enough time for a Windows worker to start under build load. The
+    // channel gate, rather than scheduler speed, proves non-blocking timeout.
+    let (broker, authority, target, session) = fixture(Duration::from_secs(1), 128);
     let ticket = broker
         .prepare(
             Some(&authority),
@@ -391,16 +393,16 @@ fn timeout_returns_without_waiting_for_an_uncooperative_read_only_executor() {
             &other_target,
             move |_, context| {
                 started.send(()).unwrap();
-                let _ = released.recv_timeout(Duration::from_secs(1));
+                let _ = released.recv_timeout(Duration::from_secs(10));
                 context.write("late secret must not escape")
             },
         )
     });
-    worker_started.recv_timeout(Duration::from_secs(1)).unwrap();
+    worker_started.recv_timeout(Duration::from_secs(5)).unwrap();
     assert_eq!(code(execute.join().unwrap()), ErrorCode::TimedOut);
     assert_eq!(broker.active_workers(), 1); // Still counted until actually gone.
     release.send(()).unwrap();
-    let limit = std::time::Instant::now() + Duration::from_secs(1);
+    let limit = std::time::Instant::now() + Duration::from_secs(3);
     while broker.active_workers() != 0 && std::time::Instant::now() < limit {
         std::thread::yield_now();
     }

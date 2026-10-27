@@ -790,6 +790,22 @@ impl FileSessions {
                     &valid,
                 )?;
                 let probe = if reply.success {
+                    if let Some(delay) =
+                        crate::inventory::remote_clock_delay(&reply.stdout, Utc::now())
+                    {
+                        let until = Instant::now() + delay;
+                        while Instant::now() < until {
+                            context.checkpoint()?;
+                            valid()?;
+                            std::thread::sleep(
+                                until
+                                    .saturating_duration_since(Instant::now())
+                                    .min(Duration::from_millis(25)),
+                            );
+                        }
+                    }
+                    context.checkpoint()?;
+                    valid()?;
                     crate::inventory::parse_remote_baseline(&reply.stdout, Utc::now())
                 } else {
                     crate::inventory::InventoryProbe {

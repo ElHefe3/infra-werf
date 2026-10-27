@@ -33,6 +33,15 @@ fn normalize(value: &str) -> String {
         value
     }
 }
+// OpenSSH's local diagnostic formatter escapes Windows backslashes. Decode
+// that representation only after the diagnostic's trusted call site is checked.
+fn diagnostic_path(value: &str) -> String {
+    if cfg!(windows) {
+        value.replace("\\\\", "\\")
+    } else {
+        value.to_owned()
+    }
+}
 fn public_key(line: &str, expected: &str) -> Option<HostKey> {
     let fields: Vec<_> = line.split_whitespace().collect();
     if fields.len() < 3
@@ -77,18 +86,21 @@ pub(crate) fn authenticated_host_key(
             if path.len() > 4096 || index == 0 || index > 100000 {
                 return None;
             }
-            let normalized = normalize(path);
-            let allowed = sources.iter().any(|source| {
-                source.match_indices(&normalized).any(|(start, _)| {
-                    let end = start + normalized.len();
-                    (start == 0 || source[..start].ends_with([' ', '\t', '\"', '\'']))
-                        && (end == source.len()
-                            || source[end..].starts_with([' ', '\t', '\"', '\'']))
-                })
-            });
-            if !allowed {
-                return None;
-            }
+            // Accept both literal diagnostic paths and OpenSSH's escaped form.
+            // Neither form can select a file outside the configured trust list.
+            let path = [path.to_owned(), diagnostic_path(path)]
+                .into_iter()
+                .find(|candidate| {
+                    let normalized = normalize(candidate);
+                    sources.iter().any(|source| {
+                        source.match_indices(&normalized).any(|(start, _)| {
+                            let end = start + normalized.len();
+                            (start == 0 || source[..start].ends_with([' ', '\t', '\"', '\'']))
+                                && (end == source.len()
+                                    || source[end..].starts_with([' ', '\t', '\"', '\'']))
+                        })
+                    })
+                })?;
             let file = File::open(path).ok()?;
             let line = BufReader::new(file.take(1024 * 1024))
                 .lines()
@@ -96,6 +108,72 @@ pub(crate) fn authenticated_host_key(
                 .ok()?;
             public_key(&line, expected)
         })
+}
+
+#[cfg(test)]
+mod trust_path_tests {
+    use super::*;
+
+    #[test]
+    fn configured_public_key_is_recovered_from_literal_and_escaped_diagnostics() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("known hosts");
+        let bytes = b"synthetic public host key";
+        let public = STANDARD.encode(bytes);
+        let fingerprint = format!("SHA256:{}", STANDARD_NO_PAD.encode(Sha256::digest(bytes)));
+        std::fs::write(&path, format!("fixture ssh-ed25519 {public}\n")).unwrap();
+        let sources = known_host_sources(&format!("userknownhostsfile {}\n", path.display()));
+        let diagnostic = |value: &str| {
+            format!("debug1: sshconnect.c:check_host_key():123 (pid=456): Found key in {value}:1")
+        };
+        let literal = path.to_string_lossy();
+        let escaped = literal.replace('\\', "\\\\");
+        for spelling in [literal.as_ref(), escaped.as_str()] {
+            assert!(
+                authenticated_host_key(&sources, &diagnostic(spelling), &fingerprint).is_some()
+            );
+        }
+        assert!(authenticated_host_key(&sources, &diagnostic(&literal), "SHA256:wrong").is_none());
+        assert!(authenticated_host_key(&[], &diagnostic(&literal), &fingerprint).is_none());
+        let sibling = directory.path().join("private-key");
+        std::fs::copy(&path, &sibling).unwrap();
+        assert!(
+            authenticated_host_key(
+                &sources,
+                &diagnostic(&sibling.to_string_lossy()),
+                &fingerprint
+            )
+            .is_none()
+        );
+        let suffix_sources =
+            known_host_sources(&format!("userknownhostsfile {}.other\n", path.display()));
+        assert!(
+            authenticated_host_key(&suffix_sources, &diagnostic(&literal), &fingerprint).is_none()
+        );
+        let spoof = diagnostic(&literal).replace("sshconnect.c", "remote.c");
+        assert!(authenticated_host_key(&sources, &spoof, &fingerprint).is_none());
+        assert!(
+            authenticated_host_key(
+                &sources,
+                &diagnostic(&literal).replace(":1", ":0"),
+                &fingerprint
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn decoding_preserves_unc_prefix_and_mixed_separators() {
+        assert_eq!(
+            diagnostic_path(r"C:\\Users\\Example User/.ssh/known_hosts"),
+            r"C:\Users\Example User/.ssh/known_hosts"
+        );
+        assert_eq!(
+            diagnostic_path(r"\\\\server\\share\\known_hosts"),
+            r"\\server\share\known_hosts"
+        );
+    }
 }
 
 fn fail(code: ErrorCode) -> AtlasError {

@@ -27,7 +27,7 @@ try {
   const beforeConfig = await digest(info.config), beforeTrust = await digest(info.known_hosts);
   const database = path.join(directory, 'native.sqlite3');
   const { ATLAS_LEGACY_DB, ATLAS_REPORTS_DIR, ...environment } = process.env;
-  app = spawn(path.join(root, 'target/debug/atlas-native.exe'), [], {
+  app = spawn(process.env.ATLAS_DESKTOP_BINARY ? path.resolve(process.env.ATLAS_DESKTOP_BINARY) : path.join(root, 'target/debug/atlas-native.exe'), [], {
     cwd: root,
     windowsHide: true,
     env: {

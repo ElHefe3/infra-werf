@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { inventoryRows, matches, reachabilityLabel, workloads } from "./map-model.ts";
+import { errorMessage, inventoryRows, matches, reachabilityLabel, workloads } from "./map-model.ts";
 import { createWorkspaceClient, type NativeTransport } from "./workspace-client.ts";
 import { CONTRACT_VERSION, type HealthProbeConfig, type HealthSnapshot, type MapServer, type MapState } from "./contracts.gen.ts";
 
@@ -59,4 +59,10 @@ test("health client uses the versioned desktop commands and exact configured end
     { command: "health_cancel", args: { serverId: server.id } },
   ]);
   await assert.rejects(createWorkspaceClient(async <T>() => ({ ...snapshot, contract_version: CONTRACT_VERSION + 1 }) as T).healthStatus(server.id), /incompatible/);
+});
+
+test("structured SSH errors explain trust, authentication and session failures", () => {
+  assert.match(errorMessage({code: "host_trust_failure"}), /host key.*trust files/);
+  assert.match(errorMessage({code: "unauthenticated"}), /SSH identity/);
+  assert.match(errorMessage({code: "expired_session"}), /Reconnect/);
 });

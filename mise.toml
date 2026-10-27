@@ -37,12 +37,16 @@ run = "powershell -NoProfile -File scripts/atlas.ps1 test-integration"
 run = "powershell -NoProfile -File scripts/atlas.ps1 dev-desktop"
 
 [tasks."start:desktop"]
-description = "Open the built Windows map; imports a separate copy of the reference on first launch"
+description = "Open the installed primary InfraWerf release with its normal saved workspace"
 run = "powershell -NoProfile -File scripts/atlas.ps1 start-desktop"
 
 [tasks."test:desktop"]
 description = "Actual Windows WebView2/Rust IPC save, restart and error proof on synthetic data (build first)"
 run = "powershell -NoProfile -File scripts/atlas.ps1 test-desktop"
+
+[tasks."test:desktop:full"]
+description = "Run all native desktop fixture journeys sequentially against an explicit release binary"
+run = "powershell -NoProfile -File scripts/atlas.ps1 exec -- powershell -NoProfile -File scripts/verify_native_suite.ps1"
 
 [tasks."ssh:fixture"]
 description = "Prepare the pinned isolated loopback SSH test runtime; no services or real identities"

@@ -1,6 +1,6 @@
 # InfraWerf Windows desktop install, update and recovery
 
-Current release: InfraWerf 0.1.1. See [branding acceptance](evidence/BRANDING-acceptance.md) for its artifact hashes and installed review. The former Atlas program remains installed, and the new InfraWerf Start menu shortcut opens the current release. Both use the established `dev.atlas.workspace` data location; the old executable is not an independent data backup.
+Current release: InfraWerf 0.1.2. See [desktop retest](evidence/DESKTOP-RETEST-acceptance.md) for artifact hashes, full regression and live inventory/Terminal verification. The former Atlas program and obsolete shortcuts have been removed. The InfraWerf Start menu entry, **InfraWerf Desktop.cmd** and `mise run start:desktop` open the registered release using the established `dev.atlas.workspace` data location.
 
 ## Build and artifact
 
@@ -12,7 +12,7 @@ target/release/bundle/nsis/InfraWerf_<version>_x64-setup.exe
 
 `mise run smoke:desktop` produces a debug executable only; do not distribute it as a release installer. Tauri's Windows installer uses the current user by default, installs below `%LOCALAPPDATA%\InfraWerf`, and records uninstall information under the current user's registry hive. The NSIS package uses WebView2's download bootstrapper when a suitable runtime is missing; machines without WebView2 need internet access during installation. The release artifact does not embed the offline runtime.
 
-The current InfraWerf 0.1.1 package is unsigned. Its SHA-256 is recorded in [branding acceptance](evidence/BRANDING-acceptance.md); this detects accidental file changes but does not prove publisher identity. Obtain and configure an approved code-signing certificate before wider distribution. Do not bypass Windows publisher or SmartScreen warnings.
+The current InfraWerf 0.1.2 package is unsigned. Its SHA-256 is recorded in [desktop retest](evidence/DESKTOP-RETEST-acceptance.md); this detects accidental file changes but does not prove publisher identity. Obtain and configure an approved code-signing certificate before wider distribution. Do not bypass Windows publisher or SmartScreen warnings.
 
 ## Saved data and first launch
 

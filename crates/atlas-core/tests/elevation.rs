@@ -41,6 +41,7 @@ fn open(service: &FileSessions, target: &ServerTarget, leases: &Arc<AtomicUsize>
             target,
             &service.prepare(target).unwrap().operation_id,
             lease(leases),
+            None,
         )
         .unwrap()
 }
@@ -129,6 +130,74 @@ fn actual_fresh_sudo_and_protected_channel_lifetime() {
     service.close(&none_session.session_id).unwrap();
 
     let session = open(&service, &target, &leases);
+    // Minimal utilities and podman-docker compatibility both occur on owner
+    // hosts. Reproduce them only inside this disposable fixture container.
+    let minimal_tools = r#"
+for utility in hostname getconf; do
+  printf '#!/bin/sh\nexit 127\n' > /usr/local/bin/$utility
+  chmod 755 /usr/local/bin/$utility
+done
+cp /usr/local/bin/docker /tmp/atlas-docker-before-compat
+cat > /usr/local/bin/docker <<'ATLAS_COMPAT'
+#!/bin/sh
+if [ "$1" = --version ]; then printf 'podman version 99.0.0\n'; exit 0; fi
+exit 125
+ATLAS_COMPAT
+chmod 755 /usr/local/bin/docker
+"#;
+    assert!(
+        linux
+            .exec(&["sh", "-c", minimal_tools], None)
+            .status
+            .success()
+    );
+    let minimal_inventory = service
+        .collect_inventory(&target, &session.session_id)
+        .unwrap()
+        .inventory
+        .expect("procfs fallback collection must be complete");
+    assert!(!minimal_inventory.hostname.is_empty());
+    assert!(minimal_inventory.cpus > 0);
+    assert!(
+        minimal_inventory
+            .containers
+            .iter()
+            .any(|row| row.engine == "podman")
+    );
+    assert!(
+        minimal_inventory
+            .containers
+            .iter()
+            .all(|row| row.engine != "docker")
+    );
+    assert!(
+        linux
+            .exec(
+                &[
+                    "mv",
+                    "--",
+                    "/tmp/atlas-docker-before-compat",
+                    "/usr/local/bin/docker"
+                ],
+                None
+            )
+            .status
+            .success()
+    );
+    assert!(
+        linux
+            .exec(
+                &[
+                    "rm",
+                    "--",
+                    "/usr/local/bin/hostname",
+                    "/usr/local/bin/getconf"
+                ],
+                None
+            )
+            .status
+            .success()
+    );
     let trust = std::fs::read(linux.info["known_hosts"].as_str().unwrap()).unwrap();
     let original_config = std::fs::read(linux.info["config"].as_str().unwrap()).unwrap();
     assert_eq!(

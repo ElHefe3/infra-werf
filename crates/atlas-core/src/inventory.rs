@@ -1,19 +1,48 @@
 use crate::ssh::SshProfile;
 use crate::{
-    store::{event, sql_error},
-    ServerId, Store,
+    AtlasError, BaselineInventory, ContainerSummary, ErrorCode, ServiceSummary, validation,
 };
 use crate::{
-    validation, AtlasError, BaselineInventory, ContainerSummary, ErrorCode, ServiceSummary,
+    ServerId, Store,
+    store::{event, sql_error},
 };
 use chrono::{DateTime, Utc};
-use rusqlite::{params, OptionalExtension};
+use rusqlite::{OptionalExtension, params};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::{collections::HashSet, fs::File, io::Read, path::Path};
 
 pub const MAX_REPORT_BYTES: usize = 1024 * 1024;
 const MAX_REFRESH_OUTPUT_BYTES: usize = 64 * 1024;
+
+/// Wait out only a small remote clock lead, rather than accepting future data.
+/// The caller keeps cancellation/session checks active during this bounded wait.
+pub(crate) fn remote_clock_delay(output: &str, now: DateTime<Utc>) -> Option<std::time::Duration> {
+    if output.len() > MAX_REFRESH_OUTPUT_BYTES || !output.starts_with("ATLAS_BASELINE_V1\nTIME\t") {
+        return None;
+    }
+    if output
+        .lines()
+        .filter(|line| line.starts_with("TIME\t"))
+        .count()
+        != 1
+    {
+        return None;
+    }
+    let value = output.lines().nth(1)?.strip_prefix("TIME\t")?;
+    if value.len() > 64 {
+        return None;
+    }
+    let source = DateTime::parse_from_rfc3339(value)
+        .ok()?
+        .with_timezone(&Utc);
+    let ahead = source.signed_duration_since(now);
+    if ahead > chrono::Duration::zero() && ahead <= chrono::Duration::seconds(5) {
+        ahead.to_std().ok()
+    } else {
+        None
+    }
+}
 
 /// Fixed read-only Linux inventory allowlist. Only selected fields are emitted;
 /// the remote command's descriptions, logs, process list and configuration are
@@ -29,8 +58,12 @@ system_docker() {
 }
 printf 'ATLAS_BASELINE_V1\n'
 printf 'TIME\t'; date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || true
-printf 'HOST\t'; hostname 2>/dev/null || true
-printf 'CPUS\t'; getconf _NPROCESSORS_ONLN 2>/dev/null || true
+if ! inventory_host=$(hostname 2>/dev/null); then
+  IFS= read -r inventory_host < /proc/sys/kernel/hostname || inventory_host=''
+fi
+inventory_cpus=$(getconf _NPROCESSORS_ONLN 2>/dev/null) || inventory_cpus=$(awk '/^processor[[:space:]]*:/ {count++} END {if (count) print count; else exit 1}' /proc/cpuinfo 2>/dev/null) || inventory_cpus=''
+printf 'HOST\t%s\n' "$inventory_host"
+printf 'CPUS\t%s\n' "$inventory_cpus"
 printf 'MEMORY_KIB\t'; awk '/^MemTotal:/ {print $2; found=1; exit} END {if (!found) exit 1}' /proc/meminfo 2>/dev/null || true
 if command -v systemctl >/dev/null 2>&1; then
   if systemctl --system list-units --all --type=service --no-legend --no-pager --plain --full 2>/dev/null | awk -v scope=system 'NF >= 4 {printf "SERVICE\t%s\t%s\t%s\t%s\n", scope, $1, $3, $4; next} {bad=1} END {if (bad) exit 1}'; then
@@ -50,6 +83,12 @@ engines=0
 containers_ok=1
 for engine in podman docker; do
   if command -v "$engine" >/dev/null 2>&1; then
+    if [ "$engine" = docker ] && command -v podman >/dev/null 2>&1; then
+      docker_version=$(docker --version 2>/dev/null) || docker_version=''
+      case "$docker_version" in
+        'podman version '*) continue ;;
+      esac
+    fi
     engines=$((engines + 1))
     scope=user
     [ "$engine" = docker ] && scope=system
@@ -535,6 +574,44 @@ mod refresh_tests {
         format!(
             "ATLAS_BASELINE_V1\nTIME\t{at}\nHOST\tfixture-node.home\nCPUS\t4\nMEMORY_KIB\t4000000\nSERVICE\tsystem\tssh.service\tactive\trunning\nSERVICE\tuser\tworker.service\tinactive\tdead\nSYSTEM_SERVICES_OK\nUSER_SERVICES_OK\nCONTAINER\tuser\tpodman\tapi\tlocalhost/api:v1\trunning\nCONTAINERS_OK\nEND\n"
         )
+    }
+
+    #[test]
+    fn a_small_source_clock_lead_is_waited_out_without_accepting_future_data() {
+        let now = Utc::now();
+        let future = complete_output(&timestamp(now + chrono::Duration::seconds(2)));
+        let delay = remote_clock_delay(&future, now).unwrap();
+        assert!(delay <= std::time::Duration::from_secs(2));
+        assert!(parse_remote_baseline(&future, now).inventory.is_none());
+        assert!(
+            parse_remote_baseline(&future, now + chrono::Duration::seconds(3))
+                .inventory
+                .is_some()
+        );
+        assert!(
+            remote_clock_delay(
+                &complete_output(&timestamp(now - chrono::Duration::seconds(2))),
+                now
+            )
+            .is_none()
+        );
+        assert!(
+            remote_clock_delay(
+                &complete_output(&timestamp(now + chrono::Duration::hours(1))),
+                now
+            )
+            .is_none()
+        );
+        assert!(
+            remote_clock_delay("untrusted preamble\nTIME\t2026-01-01T00:00:00Z", now).is_none()
+        );
+        assert!(
+            remote_clock_delay(
+                &future.replace("HOST\t", &format!("TIME\t{}\nHOST\t", timestamp(now))),
+                now
+            )
+            .is_none()
+        );
     }
 
     #[test]

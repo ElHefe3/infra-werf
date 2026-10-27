@@ -1,6 +1,6 @@
 # InfraWerf identity
 
-Owner-authorized implementation: 2026-10-27. Release: 0.1.1.
+Owner-authorized implementation: 2026-10-27. Current release: 0.1.2.
 
 **Name:** InfraWerf. “Infra” describes the infrastructure; “werf” evokes the yard or homestead where it belongs. The existing project name Atlas remains in internal compatibility identifiers and historical records.
 
@@ -24,6 +24,6 @@ The same SVG supplies the sidebar, loading state, favicon and native desktop ico
 
 The native application identifier remains `dev.atlas.workspace`, and the SQLite data location, schema, contract/event names, environment variables and Rust executable names remain stable. This preserves the existing map, recovery files and system access boundaries.
 
-InfraWerf 0.1.1 is installed in its own program directory and has a new **InfraWerf** Start menu shortcut. Automatic approval review rejected removing the prior Atlas program because of possible app-data deletion. The prior program therefore remains installed. Both use the same native store; the prior program is not a separate data backup. Use the InfraWerf shortcut for the current application.
+InfraWerf 0.1.2 is the installed primary program and has an **InfraWerf** Start menu shortcut. At the owner's subsequent explicit request, the prior Atlas program, registration and obsolete shortcuts were removed with data hashes verified. The repository's **InfraWerf Desktop.cmd** and `mise run start:desktop` open the registered release. See [desktop retest](evidence/DESKTOP-RETEST-acceptance.md).
 
 The Python reference database and native recovery snapshot remain independent data fallbacks. [Branding acceptance](evidence/BRANDING-acceptance.md) records the build, installed-app review, restart and unchanged data hashes.
