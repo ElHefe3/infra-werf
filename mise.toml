@@ -79,6 +79,10 @@ run = "powershell -NoProfile -File scripts/atlas.ps1 test-elevation-native"
 description = "Actual Windows Health tab loopback healthy/stale/failure UI journey"
 run = "powershell -NoProfile -File scripts/atlas.ps1 test-health-native"
 
+[tasks."test:monitoring-native"]
+description = "Native dynamic monitoring failure/recovery and server lifecycle on synthetic loopback data"
+run = "powershell -NoProfile -File scripts/atlas.ps1 exec -- node scripts/verify_native_monitoring.mjs"
+
 [tasks."test:inventory-native"]
 description = "Actual Windows approved inventory refresh over disposable authenticated SSH"
 run = "powershell -NoProfile -File scripts/atlas.ps1 test-inventory-native"

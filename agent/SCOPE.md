@@ -8,6 +8,8 @@ Owner decisions, 25 October 2026: **core release first; native Android; Windows 
 
 ## Current desktop release
 
+The owner authorised the dynamic desktop extension on 2026-10-27: [S10](scopes/S10-live-desktop.md) / [F16](features/F16-live-desktop.md). InfraWerf checks opted-in servers and refreshes approved inventories while the desktop app is open, records bounded change history, discovers candidates from literal primary OpenSSH aliases, and supports archive/ignore/restore/local deletion. Owner-reported offline excludes contact. Always-on collectors and mobile remain future development.
+
 Owner decision, 2026-10-26: **get desktop 100%; mobile is future development**. All remaining desktop batches are authorised. Preserve mobile requirements in [S09](scopes/S09-future-mobile.md); do not treat them as desktop release gates.
 
 ## Desktop capabilities

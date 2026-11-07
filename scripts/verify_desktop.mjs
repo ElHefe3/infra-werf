@@ -14,6 +14,8 @@ if (fixture.status !== 0) throw new Error(fixture.stderr || 'Fixture creation fa
 const config = JSON.parse(fixture.stdout);
 const original = createHash('sha256').update(await readFile(config.source)).digest('hex');
 const database = path.join(directory, 'native.sqlite3');
+const sshConfig = path.join(directory, 'ssh_config');
+await writeFile(sshConfig, 'Host *\n  BatchMode yes\n');
 const binary = process.env.ATLAS_DESKTOP_BINARY
   ? path.resolve(process.env.ATLAS_DESKTOP_BINARY)
   : path.join(root, 'target', 'debug', 'atlas-native.exe');
@@ -34,7 +36,7 @@ async function waitForCdpState(available, timeout = 15000) {
   throw new Error(`WebView CDP endpoint did not become ${available ? 'available' : 'unavailable'} within ${timeout}ms`);
 }
 async function launch(db = database, legacy = config.source) {
-  child = spawn(binary, [], { cwd: root, windowsHide: true, env: { ...process.env, ATLAS_NATIVE_DB: db, ATLAS_LEGACY_DB: legacy, ATLAS_REPORTS_DIR: config.reports, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: '--remote-debugging-port=9225 --remote-debugging-address=127.0.0.1', WEBVIEW2_USER_DATA_FOLDER: path.join(directory, 'webview-profile') }, stdio: ['ignore', 'pipe', 'pipe'] });
+  child = spawn(binary, [], { cwd: root, windowsHide: true, env: { ...process.env, ATLAS_SSH_CONFIG:sshConfig, ATLAS_NATIVE_DB: db, ATLAS_LEGACY_DB: legacy, ATLAS_REPORTS_DIR: config.reports, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: '--remote-debugging-port=9225 --remote-debugging-address=127.0.0.1', WEBVIEW2_USER_DATA_FOLDER: path.join(directory, 'webview-profile') }, stdio: ['ignore', 'pipe', 'pipe'] });
   child.stdout.on('data', () => {}); child.stderr.on('data', () => {});
   // Tauri's Windows process may return success after handing startup to the
   // GUI process. The WebView endpoint, not the short-lived launcher handle,

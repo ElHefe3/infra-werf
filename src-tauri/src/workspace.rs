@@ -4,6 +4,7 @@ use atlas_core::files::{
     TransferDirection, TransferView,
 };
 use atlas_core::*;
+mod monitoring;
 use atlas_core::{
     files::{
         FileAction, FileChange, FileMutationPreview, FileMutationReceipt, FileResult, FileSession,
@@ -104,6 +105,8 @@ pub struct Workspace {
     files: FileSessions,
     local_grants: Mutex<HashMap<String, LocalGrant>>,
     health: Arc<Mutex<HealthMonitor>>,
+    live: Mutex<monitoring::LiveScheduler>,
+    live_contact: Mutex<()>,
 }
 
 impl Workspace {
@@ -130,9 +133,14 @@ impl Workspace {
             files,
             local_grants: Mutex::new(HashMap::new()),
             health: Arc::new(Mutex::new(HealthMonitor::default())),
+            live: Mutex::new(monitoring::LiveScheduler::default()),
+            live_contact: Mutex::new(()),
         })
     }
 
+    pub fn live_contact_guard(&self) -> Result<std::sync::MutexGuard<'_, ()>, AtlasError> {
+        self.live_contact.lock().map_err(|_| failure())
+    }
     pub fn status(&self) -> Result<WorkspaceStatus, AtlasError> {
         Ok(WorkspaceStatus {
             contract_version: CONTRACT_VERSION,
@@ -186,14 +194,24 @@ impl Workspace {
             Ok(store) => store.snapshot(),
             Err(error) => Err(error.clone()),
         }?;
+        drop(lock);
         self.apply_health(snapshot)
     }
 
     pub fn apply_health(&self, mut state: MapState) -> Result<MapState, AtlasError> {
+        let records = self.with_store(|store| store.monitoring())?.records;
         let monitor = self.health.lock().map_err(|_| failure())?;
         for server in &mut state.servers {
             if let Some(task) = monitor.tasks.get(&server.id) {
                 server.reachability = task.snapshot.get()?.host_reachability;
+            }
+            if let Some(record) = records
+                .iter()
+                .find(|r| r.server_id == server.id && r.host == server.host)
+            {
+                if record.policy.permits_contact() {
+                    server.reachability = record.reachability.clone();
+                }
             }
         }
         Ok(state)
@@ -204,7 +222,20 @@ impl Workspace {
         id: &ServerId,
         config: HealthProbeConfig,
     ) -> Result<HealthSnapshot, AtlasError> {
+        let _contact = self.live_contact_guard()?;
         config.validate()?;
+        if self
+            .with_store(|s| s.monitoring())?
+            .records
+            .iter()
+            .any(|r| {
+                r.server_id == *id
+                    && (r.policy.owner_offline
+                        || r.policy.lifecycle != atlas_core::monitoring::ServerLifecycle::Active)
+            })
+        {
+            return Err(AtlasError::new(ErrorCode::Denied));
+        }
         if config.server_id != *id || self.ssh_target(id)?.host() != config.host {
             return Err(AtlasError::new(ErrorCode::Denied));
         }
@@ -299,7 +330,17 @@ impl Workspace {
             .name("atlas-health-probe".into())
             .spawn(move || {
                 let _operation = operation;
-                let result = probe_once(&selected.1, &selected.3);
+                let contact = workspace.live_contact_guard();
+                let allowed = contact.is_ok()
+                    && workspace
+                        .ssh_target(&selected.0)
+                        .is_ok_and(|target| target.host() == selected.1.host)
+                    && !selected.3.load(std::sync::atomic::Ordering::Acquire);
+                let result = if allowed {
+                    probe_once(&selected.1, &selected.3)
+                } else {
+                    Err(AtlasError::new(ErrorCode::Cancelled))
+                };
                 let Ok(mut monitor) = workspace.health.lock() else {
                     return;
                 };
@@ -389,6 +430,13 @@ impl Workspace {
         self.apply_health(state)
     }
     fn ssh_target(&self, id: &ServerId) -> Result<ServerTarget, AtlasError> {
+        if self.monitoring_state()?.records.iter().any(|r| {
+            r.server_id == *id
+                && (r.policy.owner_offline
+                    || r.policy.lifecycle != atlas_core::monitoring::ServerLifecycle::Active)
+        }) {
+            return Err(AtlasError::new(ErrorCode::Denied));
+        }
         let state = self.with_store(|store| store.snapshot())?;
         let server = state
             .servers
@@ -403,6 +451,14 @@ impl Workspace {
             .prepare_connection_check(Some(&self.authority), &self.ssh_target(id)?)
     }
     pub fn verify_ssh(
+        self: &Arc<Self>,
+        id: &ServerId,
+        operation: &OperationId,
+    ) -> Result<SshVerification, AtlasError> {
+        let _contact = self.live_contact_guard()?;
+        self.verify_ssh_inner(id, operation)
+    }
+    fn verify_ssh_inner(
         self: &Arc<Self>,
         id: &ServerId,
         operation: &OperationId,
@@ -440,6 +496,7 @@ impl Workspace {
         id: &ServerId,
         operation: &OperationId,
     ) -> Result<FileSession, AtlasError> {
+        let _contact = self.live_contact_guard()?;
         let admission = self.begin()?;
         let target = self.ssh_target(id)?;
         let inventory = self.with_store(|store| {
@@ -476,6 +533,15 @@ impl Workspace {
         self: &Arc<Self>,
         id: &ServerId,
     ) -> Result<InventoryRefreshResult, AtlasError> {
+        let _contact = self.live_contact_guard()?;
+        self.refresh_inventory_guarded(id, None, None)
+    }
+    fn refresh_inventory_guarded(
+        self: &Arc<Self>,
+        id: &ServerId,
+        revision: Option<&str>,
+        source_binding: Option<&str>,
+    ) -> Result<InventoryRefreshResult, AtlasError> {
         let _refresh_admission = self.begin()?;
         let target = self.ssh_target(id)?;
         let ticket = self.files.prepare(&target)?;
@@ -494,9 +560,22 @@ impl Workspace {
             (Ok(probe), Ok(())) => probe,
         };
         // Keep target validation and the write under the same Store mutex.
+        if let Some(expected) = source_binding {
+            if probe.inventory.is_some() && probe.source_binding.as_deref() != Some(expected) {
+                return Err(AtlasError::new(ErrorCode::HostTrustFailure));
+            }
+        }
         // Otherwise update_server could change the connection host after the
         // check but before refresh_inventory writes by stable ServerId.
         let (status, refreshed_at) = self.with_store(|store| {
+            if let Some(revision) = revision {
+                let allowed = store.monitoring()?.records.iter().any(|r| {
+                    r.server_id == *id && r.revision == revision && r.policy.permits_contact()
+                });
+                if !allowed {
+                    return Err(AtlasError::new(ErrorCode::Cancelled));
+                }
+            }
             let current = store.snapshot()?;
             let server = current
                 .servers
@@ -933,6 +1012,66 @@ impl Drop for Operation {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn offline_policy_drains_contact_then_blocks_manual_and_background_admission() {
+        use atlas_core::monitoring::MonitoringPolicy;
+        let directory =
+            std::env::temp_dir().join(format!("infra-policy-{}", ServerId::generate().as_str()));
+        let workspace = Workspace::new(Paths {
+            database: directory.join("native.sqlite3"),
+            legacy: None,
+            reports: None,
+        });
+        let id = workspace
+            .with_store(|s| {
+                s.add_server(AddServer {
+                    name: "Offline fixture".into(),
+                    host: "127.0.0.1".into(),
+                })
+            })
+            .unwrap();
+        let contact = workspace.live_contact_guard().unwrap();
+        let (started_tx, started_rx) = std::sync::mpsc::channel();
+        let (done_tx, done_rx) = std::sync::mpsc::channel();
+        let worker = workspace.clone();
+        let worker_id = id.clone();
+        let thread = std::thread::spawn(move || {
+            started_tx.send(()).unwrap();
+            let result = worker.set_monitoring(
+                &worker_id,
+                MonitoringPolicy {
+                    enabled: true,
+                    owner_offline: true,
+                    ..Default::default()
+                },
+            );
+            done_tx.send(result.is_ok()).unwrap();
+        });
+        started_rx.recv().unwrap();
+        assert!(done_rx.recv_timeout(Duration::from_millis(50)).is_err());
+        drop(contact);
+        assert!(done_rx.recv_timeout(Duration::from_secs(2)).unwrap());
+        thread.join().unwrap();
+        assert!(workspace.prepare_ssh(&id).is_err());
+        assert!(workspace.refresh_inventory(&id).is_err());
+        workspace.tick_live();
+        assert!(workspace.live.lock().unwrap().running.is_empty());
+        assert!(
+            workspace.monitoring_state().unwrap().records[0]
+                .reachability
+                .last_checked_at
+                .is_none()
+        );
+        // Allow the independent config-discovery thread to finish before cleanup.
+        for _ in 0..100 {
+            if !workspace.live.lock().unwrap().discovery_running {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        drop(workspace);
+        std::fs::remove_dir_all(directory).unwrap();
+    }
 
     #[test]
     fn persistence_and_close_admission_share_one_boundary() {
@@ -944,6 +1083,7 @@ mod tests {
             reports: None,
         };
         let workspace = Workspace::new(paths.clone());
+        assert!(workspace.retry().is_ok());
         let operation = workspace.begin().unwrap();
         assert!(!workspace.request_close());
         let id = workspace

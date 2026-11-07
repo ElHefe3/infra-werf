@@ -388,6 +388,7 @@ impl Store {
         }
         inventory.source_host = Some(source_host.clone());
         inventory.source_binding = Some(source_binding.to_owned());
+        let change_message = inventory_changes(previous_report.as_deref(), &inventory);
         if let Some(previous_report) = previous_report {
             let mut previous: BaselineInventory = serde_json::from_str(&previous_report)
                 .map_err(|_| AtlasError::new(ErrorCode::IoFailure))?;
@@ -436,11 +437,9 @@ impl Store {
         {
             return Err(AtlasError::new(ErrorCode::NotFound));
         }
-        event(
-            &tx,
-            &format!("Approved inventory refreshed ({})", inventory.collected_at),
-            Some(id.as_str()),
-        )?;
+        if let Some(message) = change_message {
+            event(&tx, &message, Some(id.as_str()))?;
+        }
         tx.commit().map_err(sql_error)?;
         Ok(true)
     }
@@ -549,6 +548,67 @@ impl Store {
     }
 }
 
+fn inventory_changes(previous: Option<&str>, current: &BaselineInventory) -> Option<String> {
+    let Some(previous) = previous.and_then(|p| serde_json::from_str::<BaselineInventory>(p).ok())
+    else {
+        return Some("Initial approved inventory collected".into());
+    };
+    fn items(inventory: &BaselineInventory) -> std::collections::BTreeMap<String, String> {
+        inventory
+            .services
+            .iter()
+            .map(|s| {
+                (
+                    format!("service {}/{}", s.scope, s.name),
+                    format!("{}/{}", s.state, s.substate),
+                )
+            })
+            .chain(inventory.containers.iter().map(|c| {
+                (
+                    format!("container {}/{}/{}", c.scope, c.engine, c.name),
+                    format!("{} {}", c.state, c.image),
+                )
+            }))
+            .collect()
+    }
+    let old = items(&previous);
+    let new = items(current);
+    let mut changes = Vec::new();
+    for (key, value) in &new {
+        match old.get(key) {
+            None => changes.push(format!("added {key}")),
+            Some(old) if old != value => changes.push(format!("{key}: {old} → {value}")),
+            _ => {}
+        }
+    }
+    for key in old.keys() {
+        if !new.contains_key(key) {
+            changes.push(format!("removed {key}"));
+        }
+    }
+    if previous.cpus != current.cpus
+        || previous.memory_total_kib != current.memory_total_kib
+        || previous.hostname != current.hostname
+    {
+        changes.push("host details changed".into());
+    }
+    if changes.is_empty() {
+        None
+    } else {
+        Some(format!(
+            "Inventory: {} change(s) · {}{}",
+            changes.len(),
+            changes
+                .iter()
+                .take(5)
+                .map(|s| s.chars().take(160).collect::<String>())
+                .collect::<Vec<_>>()
+                .join("; "),
+            if changes.len() > 5 { "; …" } else { "" }
+        ))
+    }
+}
+
 fn invalid() -> AtlasError {
     AtlasError::new(ErrorCode::InvalidInput)
 }
@@ -564,6 +624,29 @@ fn field(row: &Value, name: &str, required: bool) -> Result<String, AtlasError> 
 #[cfg(test)]
 mod refresh_tests {
     use super::*;
+    #[test]
+    fn inventory_history_ignores_clock_only_refreshes_and_describes_changes() {
+        let now = Utc::now();
+        let probe = parse_remote_baseline(
+            &complete_output(&timestamp(now - chrono::Duration::seconds(5))),
+            now,
+        );
+        let old = probe.inventory.unwrap();
+        let mut next = old.clone();
+        next.collected_at = timestamp(now - chrono::Duration::seconds(1));
+        let encoded = serde_json::to_string(&old).unwrap();
+        assert!(inventory_changes(Some(&encoded), &next).is_none());
+        next.services[0].state = "failed".into();
+        let message = inventory_changes(Some(&encoded), &next).unwrap();
+        assert!(message.contains("ssh.service"));
+        assert!(message.contains("failed"));
+        next.services.remove(0);
+        assert!(
+            inventory_changes(Some(&encoded), &next)
+                .unwrap()
+                .contains("removed")
+        );
+    }
     use chrono::SecondsFormat;
 
     fn timestamp(at: DateTime<Utc>) -> String {

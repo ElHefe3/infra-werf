@@ -60,3 +60,4 @@ Link important discoveries from affected feature packets and the checkpoint. Nev
 - [D044 Installed-app review distinguishes the release from the development window](D044-installed-app-review-and-ssh.md)
 - [D045 Product branding and storage identity are separate](D045-product-name-and-storage-identity.md)
 - [D046 Desktop retest and SSH compatibility](D046-desktop-retest-and-ssh-compatibility.md)
+- [D049 draw.io embedding and document integration](D049-drawio-embedding-is-a-document-integration.md)

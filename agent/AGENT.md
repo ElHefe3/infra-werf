@@ -2,6 +2,8 @@
 
 ## Active checkpoint
 
+- **Requested next increment:** dynamic live monitoring and server lifecycle; see [LIVE-MONITORING.md](LIVE-MONITORING.md). Servers may appear, disappear, return or be retired. Plan prominent current health, meaningful bounded history, identity reconciliation and archive/ignore/delete actions. Runtime while the PC is off and specific collector deployments remain undecided; no server installation or server 1 contact is presumed.
+
 - **Current identity:** InfraWerf 0.1.2. The owner's reported inventory/Terminal errors are repaired and the old Atlas program/shortcuts removed. See [desktop retest](evidence/DESKTOP-RETEST-acceptance.md), [D046](discovery/D046-desktop-retest-and-ssh-compatibility.md) and the [brand guide](BRAND.md). All ten native suites, 72 Rust tests, nine UI checks, 14 SSH cases and the real protected-operation fixtures pass; live inventory and Terminal pass on 02–04. The owner data remains unchanged. The ordinary launcher opens the registered release. Core acceptance below retains its original revisions.
 
 - **State:** S01 complete on 2026-10-25: T001–T005 passed with native-build, safe-copy data and review evidence.
@@ -12,7 +14,7 @@
 - **Core target:** Windows desktop 100% by the owner’s explicit 2026-10-26 decision. Mobile/coordinator is future S09; agents/rsync stay deferred. Run all remaining desktop batches sequentially without asking between batches; retain proportional proof/review and actual permission boundaries.
 - **Budget target:** two five-hour usage windows; a prioritisation target, not a quota or elapsed-time guarantee.
 - **Baseline:** A01 Python/SQLite/browser work is historical, with evidence in [IMPLEMENTATION.md](../IMPLEMENTATION.md). It does not complete new Rust/React/native tickets.
-- **Tracker:** 33 tickets / 15 features / 9 scopes: 25 core and 8 deferred tickets. Done=25, in progress=0, todo=0, deferred=8. Feature-packet ticket metadata is the sole status authority. Desktop scoped entry changes scheduling only; product scope is unchanged.
+- **Tracker:** 34 tickets / 16 features / 10 scopes: 26 core and 8 deferred tickets. Done=25, in progress=1, todo=0, deferred=8. Feature-packet ticket metadata is the sole status authority. S10/F16/T034 is the authorised dynamic desktop extension; mobile and server-agent deployment remain deferred.
 
 ## Read protocol
 
@@ -33,6 +35,7 @@
 | 6 | [S06 Release](scopes/S06-core-release.md) | [F12 acceptance](features/F12-release-acceptance.md) | T024–T026 | Windows installer, recovery, desktop owner acceptance. Window 2 |
 | 7 | [S07 Agents](scopes/S07-discovery-agents.md) | [F13 discovery](features/F13-discovery-agents.md) | T027–T029 | Deferred; separate owner authorisation |
 | 8 | [S08 Sync](scopes/S08-synchronisation.md) | [F14 rsync](features/F14-rsync.md) | T030–T031 | Deferred; separate owner authorisation |
+| 10 | [S10 Live desktop](scopes/S10-live-desktop.md) | [F16 monitoring and lifecycle](features/F16-live-desktop.md) | T034 | Authorised desktop extension after S06 |
 
 [S09 Future mobile](scopes/S09-future-mobile.md) retains T009–T011, Android adapters, pairing and phone acceptance for separate activation after desktop completion.
 

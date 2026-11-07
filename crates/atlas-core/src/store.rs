@@ -9,7 +9,7 @@ use serde::Serialize;
 use std::{fs::File, io, path::Path, time::Duration};
 
 pub const APPLICATION_ID: i32 = 0x41544c53;
-pub const SCHEMA_VERSION: i32 = 2;
+pub const SCHEMA_VERSION: i32 = 3;
 const MAX_MIGRATION_BYTES: u64 = 64 * 1024 * 1024;
 const SCHEMA: &str = "
 CREATE TABLE servers (
@@ -73,6 +73,8 @@ fn publish(path: tempfile::TempPath, target: &Path) -> Result<(), AtlasError> {
 }
 fn initialise(db: &Connection) -> Result<(), AtlasError> {
     db.execute_batch(SCHEMA).map_err(sql_error)?;
+    db.execute_batch(crate::monitoring::SCHEMA)
+        .map_err(sql_error)?;
     db.pragma_update(None, "application_id", APPLICATION_ID)
         .map_err(sql_error)?;
     db.pragma_update(None, "user_version", SCHEMA_VERSION)
@@ -93,7 +95,7 @@ pub(crate) fn event(db: &Connection, message: &str, sid: Option<&str>) -> Result
     )
     .map_err(sql_error)?;
     db.execute(
-        "DELETE FROM events WHERE id NOT IN (SELECT id FROM events ORDER BY id DESC LIMIT 200)",
+        "DELETE FROM events WHERE id NOT IN (SELECT id FROM events ORDER BY id DESC LIMIT (SELECT history_limit FROM monitoring_settings WHERE id=1))",
         [],
     )
     .map_err(sql_error)?;
@@ -123,10 +125,34 @@ impl Store {
         db.busy_timeout(Duration::from_millis(150))
             .map_err(sql_error)?;
         db.execute_batch("PRAGMA foreign_keys=ON; PRAGMA trusted_schema=OFF; PRAGMA locking_mode=EXCLUSIVE; BEGIN EXCLUSIVE;").map_err(sql_error)?;
-        if marker(&db)? != (APPLICATION_ID, SCHEMA_VERSION) {
+        let version = marker(&db)?;
+        if version != (APPLICATION_ID, SCHEMA_VERSION) && version != (APPLICATION_ID, 2) {
             return Err(AtlasError::new(ErrorCode::IncompatibleVersion));
         }
         db.execute_batch("COMMIT;").map_err(sql_error)?;
+        if version == (APPLICATION_ID, 2) {
+            // Hold the exclusive connection lock throughout snapshot and upgrade.
+            // Publish a complete recovery copy before changing any schema.
+            let recovery = path.with_file_name(format!(
+                "pre-monitoring-{}.sqlite3",
+                ServerId::generate().as_str()
+            ));
+            let stage = staging(&recovery)?;
+            {
+                let mut destination = Connection::open(&stage).map_err(sql_error)?;
+                let backup = Backup::new(&db, &mut destination).map_err(sql_error)?;
+                backup
+                    .run_to_completion(128, Duration::from_millis(5), None)
+                    .map_err(sql_error)?;
+            }
+            publish(stage, &recovery)?;
+            db.execute_batch("BEGIN EXCLUSIVE;").map_err(sql_error)?;
+            db.execute_batch(crate::monitoring::SCHEMA)
+                .map_err(sql_error)?;
+            db.pragma_update(None, "user_version", SCHEMA_VERSION)
+                .map_err(sql_error)?;
+            db.execute_batch("COMMIT;").map_err(sql_error)?;
+        }
         Ok(Self { db })
     }
 
@@ -215,6 +241,8 @@ impl Store {
 
     pub fn remove_server(&mut self, id: &ServerId) -> Result<(), AtlasError> {
         let tx = self.db.transaction().map_err(sql_error)?;
+        tx.execute("DELETE FROM events WHERE server_id=?", [id.as_str()])
+            .map_err(sql_error)?;
         tx.execute(
             "DELETE FROM edges WHERE source=?1 OR target=?1",
             [id.as_str()],
@@ -338,7 +366,7 @@ fn read_edges(db: &Connection) -> Result<Vec<Relationship>, AtlasError> {
 }
 fn read_events(db: &Connection, limit: bool) -> Result<Vec<Activity>, AtlasError> {
     let sql = if limit {
-        "SELECT id,at,message,server_id FROM events ORDER BY id DESC LIMIT 50"
+        "SELECT id,at,message,server_id FROM events ORDER BY id DESC LIMIT (SELECT history_limit FROM monitoring_settings WHERE id=1)"
     } else {
         "SELECT id,at,message,server_id FROM events ORDER BY id"
     };

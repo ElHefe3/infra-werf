@@ -76,6 +76,11 @@ switch ($Action) {
             Run-AtlasCommand 'cargo' @('run', '-p', 'atlas-core', '--bin', 'export-contracts', '--locked', '--', '--check')
             Run-AtlasCommand 'pnpm' @('check')
             Run-AtlasCommand 'node' @('--test', 'ui/client.test.ts', 'ui/map-model.test.ts')
+        } elseif ($Feature -in @('F16', 'T034')) {
+            Run-AtlasCommand 'cargo' @('test', '--workspace', '--locked', '--', '--test-threads=1')
+            Run-AtlasCommand 'cargo' @('run', '-p', 'atlas-core', '--bin', 'export-contracts', '--locked', '--', '--check')
+            Run-AtlasCommand 'pnpm' @('check')
+            Run-AtlasCommand 'node' @('--test', 'ui/client.test.ts', 'ui/map-model.test.ts', 'ui/live-model.test.ts')
         } elseif ($Feature -eq 'T022') {
             Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-core', '--lib', 'workloads::', '--locked')
             Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-core', '--test', 'inventory', '--locked')

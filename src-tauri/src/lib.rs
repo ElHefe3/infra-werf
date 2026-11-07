@@ -4,6 +4,25 @@ use atlas_core::files::{
     ActionPassword, ElevationPreview, ElevationReceipt, LocalSelection, ProtectedPlacementReceipt,
     ProtectedPlacementRequest, ProtectedPlacementStage, TransferDirection, TransferView,
 };
+use atlas_core::monitoring::{MonitoringPolicy, MonitoringState};
+
+#[tauri::command]
+async fn monitoring_accept_identity(
+    window: tauri::WebviewWindow,
+    workspace: State<'_, Arc<Workspace>>,
+    server_id: ServerId,
+    previous: String,
+    accepted: String,
+) -> Result<MonitoringState, AtlasError> {
+    local_desktop(&window)?;
+    let workspace = workspace.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let _operation = workspace.begin()?;
+        workspace.accept_live_identity(&server_id, &previous, &accepted)
+    })
+    .await
+    .map_err(|_| AtlasError::new(ErrorCode::IoFailure))?
+}
 use atlas_core::*;
 use atlas_core::{
     files::{
@@ -18,6 +37,55 @@ use tauri::{Emitter, Manager, State};
 #[cfg(desktop)]
 use tauri_plugin_dialog::DialogExt;
 use workspace::{Paths, Workspace};
+
+#[tauri::command]
+fn monitoring_state(
+    window: tauri::WebviewWindow,
+    workspace: State<'_, Arc<Workspace>>,
+) -> Result<MonitoringState, AtlasError> {
+    local_desktop(&window)?;
+    workspace.monitoring_state()
+}
+#[tauri::command]
+async fn monitoring_configure(
+    window: tauri::WebviewWindow,
+    workspace: State<'_, Arc<Workspace>>,
+    server_id: ServerId,
+    policy: MonitoringPolicy,
+) -> Result<MonitoringState, AtlasError> {
+    local_desktop(&window)?;
+    let workspace = workspace.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let _operation = workspace.begin()?;
+        workspace.set_monitoring(&server_id, policy)
+    })
+    .await
+    .map_err(|_| AtlasError::new(ErrorCode::IoFailure))?
+}
+#[tauri::command]
+fn monitoring_history_limit(
+    window: tauri::WebviewWindow,
+    workspace: State<'_, Arc<Workspace>>,
+    limit: u32,
+) -> Result<MonitoringState, AtlasError> {
+    local_desktop(&window)?;
+    let _operation = workspace.inner().begin()?;
+    workspace.history_limit(limit)
+}
+#[tauri::command]
+async fn monitoring_discover(
+    window: tauri::WebviewWindow,
+    workspace: State<'_, Arc<Workspace>>,
+) -> Result<MonitoringState, AtlasError> {
+    local_desktop(&window)?;
+    let workspace = workspace.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let _operation = workspace.begin()?;
+        workspace.discover_configured()
+    })
+    .await
+    .map_err(|_| AtlasError::new(ErrorCode::IoFailure))?
+}
 
 fn local_desktop(window: &tauri::WebviewWindow) -> Result<(), AtlasError> {
     if !cfg!(desktop) || window.label() != "main" {
@@ -71,14 +139,17 @@ fn ssh_cancel(
 }
 
 #[tauri::command]
-fn health_configure(
+async fn health_configure(
     window: tauri::WebviewWindow,
     workspace: State<'_, Arc<Workspace>>,
     server_id: ServerId,
     config: HealthProbeConfig,
 ) -> Result<HealthSnapshot, AtlasError> {
     local_desktop(&window)?;
-    workspace.inner().configure_health(&server_id, config)
+    let workspace = workspace.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || workspace.configure_health(&server_id, config))
+        .await
+        .map_err(|_| AtlasError::new(ErrorCode::IoFailure))?
 }
 #[tauri::command]
 fn health_status(
@@ -650,6 +721,7 @@ async fn update_server(
 ) -> Result<MapState, AtlasError> {
     run_store(workspace.inner().clone(), move |w| {
         let host_changed = input.host.is_some();
+        let _contact = host_changed.then(|| w.live_contact_guard()).transpose()?;
         let state = w.with_store(|s| {
             s.update_server(&id, input)?;
             s.snapshot()
@@ -668,6 +740,7 @@ async fn remove_server(
     id: ServerId,
 ) -> Result<MapState, AtlasError> {
     run_store(workspace.inner().clone(), move |w| {
+        let _contact = w.live_contact_guard()?;
         let state = w.with_store(|s| {
             s.remove_server(&id)?;
             s.snapshot()
@@ -733,6 +806,7 @@ pub fn run() {
                 let Some(workspace) = weak.upgrade() else { break; };
                 if workspace.is_closing() { break; }
                 workspace.tick_health();
+                workspace.tick_live();
                 for session in workspace.reap_files() { let _ = handle.emit("atlas-session-closed", session); }
             }
         });
@@ -747,7 +821,7 @@ pub fn run() {
             }
         }
     })
-    .invoke_handler(tauri::generate_handler![foundation_status, workspace_status, map_state, retry_workspace, add_server, update_server, remove_server, add_relationship, remove_relationship, import_reports, ssh_prepare, ssh_verify, ssh_cancel, health_configure, health_status, health_cancel, inventory_refresh, files_prepare, files_open, files_read, workload_inspect, workload_control_preview, workload_control_confirm, files_lock, files_terminal_start, files_terminal_poll, files_terminal_write, files_terminal_resize, files_preview, files_commit, files_discard, files_release, files_pick_upload, files_pick_download, files_selection_discard, files_transfer, files_stage_protected, transfer_list, transfer_cancel, elevation_preview, elevation_confirm, elevation_cancel, protected_placement_preview, protected_placement_confirm, protected_placement_cancel])
+    .invoke_handler(tauri::generate_handler![monitoring_accept_identity, monitoring_state, monitoring_configure, monitoring_history_limit, monitoring_discover, foundation_status, workspace_status, map_state, retry_workspace, add_server, update_server, remove_server, add_relationship, remove_relationship, import_reports, ssh_prepare, ssh_verify, ssh_cancel, health_configure, health_status, health_cancel, inventory_refresh, files_prepare, files_open, files_read, workload_inspect, workload_control_preview, workload_control_confirm, files_lock, files_terminal_start, files_terminal_poll, files_terminal_write, files_terminal_resize, files_preview, files_commit, files_discard, files_release, files_pick_upload, files_pick_download, files_selection_discard, files_transfer, files_stage_protected, transfer_list, transfer_cancel, elevation_preview, elevation_confirm, elevation_cancel, protected_placement_preview, protected_placement_confirm, protected_placement_cancel])
     .run(tauri::generate_context!())
     .expect("InfraWerf native runtime failed");
 }

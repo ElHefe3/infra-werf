@@ -50,6 +50,30 @@ pub struct SshOptions {
     config: Option<PathBuf>,
 }
 impl SshOptions {
+    /// Discover only literal aliases in the user's primary config. No helper,
+    /// Include expansion, network scan or authentication occurs here.
+    pub fn configured_aliases(&self) -> Result<Vec<String>, AtlasError> {
+        let path = self.config.clone().or_else(|| {
+            std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
+                .map(|p| PathBuf::from(p).join(".ssh/config"))
+        });
+        let Some(path) = path else {
+            return Ok(Vec::new());
+        };
+        if !path.exists() {
+            return Ok(Vec::new());
+        }
+        if std::fs::metadata(&path)
+            .map_err(|_| AtlasError::new(ErrorCode::IoFailure))?
+            .len()
+            > 256 * 1024
+        {
+            return Err(AtlasError::new(ErrorCode::OutputLimit));
+        }
+        let text =
+            std::fs::read_to_string(path).map_err(|_| AtlasError::new(ErrorCode::IoFailure))?;
+        Ok(literal_aliases(&text))
+    }
     pub fn system() -> Self {
         #[cfg(windows)]
         let executable =
@@ -253,6 +277,27 @@ impl SshOptions {
             conversation::known_host_sources(&resolved.stdout),
         ))
     }
+}
+
+fn literal_aliases(text: &str) -> Vec<String> {
+    let mut result = std::collections::BTreeSet::new();
+    for line in text.lines() {
+        let line = line.split('#').next().unwrap_or("").trim();
+        let mut words = line.split_whitespace();
+        if words
+            .next()
+            .is_some_and(|key| key.eq_ignore_ascii_case("host"))
+        {
+            for alias in words {
+                if !alias.contains(['*', '?', '!', '=', '"', '\''])
+                    && hostname(alias).is_ok_and(|h| h == alias)
+                {
+                    result.insert(alias.to_owned());
+                }
+            }
+        }
+    }
+    result.into_iter().take(128).collect()
 }
 
 fn profile(alias: &str, data: &str) -> Option<(SshProfile, Option<String>)> {

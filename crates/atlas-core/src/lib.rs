@@ -4,6 +4,7 @@ pub mod contracts;
 pub mod files;
 pub mod health;
 pub mod inventory;
+pub mod monitoring;
 pub mod operations;
 mod sftp;
 pub mod ssh;

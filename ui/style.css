@@ -302,3 +302,23 @@ form label { display: grid; gap: 7px; margin-top: 18px; color: #86987a; font-siz
 .transfer-row progress { width: 100%; accent-color: #337e58; }
 .transfer-row small { color: #6f826d; }
 @media (max-width: 720px) { .file-layout { grid-template-columns: minmax(0, 1fr); } .file-details { border-left: 0; border-top: 1px solid #dce5d9; } }
+/* Current network observations stay visually distinct from saved inventory. */
+.live-status{display:inline-block;border-radius:5px;padding:4px 8px;font-size:12px;font-weight:650;background:#eef0ed;color:#58665b;text-transform:none}
+.live-status.reachable{background:#e1f2e7;color:#236b44}
+.live-status.unreachable,.live-status.offline{background:#fbe6e2;color:#a33526}
+.live-status.stale{background:#fff1d3;color:#886014}
+.server-card.status-unreachable,.server-card.status-offline{border:2px solid #c45b4b;background:#fff8f5}
+.server-card.status-stale{border-color:#bf963e}
+.server-card .live-status{margin:0 0 12px}
+.monitoring-hub{padding:24px;overflow:auto;height:100%;box-sizing:border-box}
+.managed-server{border:1px solid #d6dfd3;border-radius:8px;margin:14px 0;padding:16px}
+.managed-server summary{display:flex;align-items:center;gap:16px;cursor:pointer}
+.managed-server summary strong{min-width:130px}
+.managed-server summary .live-status{margin-left:auto}
+.monitoring-form{max-width:680px;margin:16px 0}
+.monitoring-form .check-label{display:flex;align-items:center;gap:10px;margin:12px 0}
+.monitoring-form .check-label input{width:auto;margin:0}
+.monitoring-intervals{display:flex;gap:20px}
+.monitoring-intervals label{flex:1}
+.history-retention{display:flex;gap:12px;align-items:center;max-width:380px}
+.history-retention select{width:auto}
