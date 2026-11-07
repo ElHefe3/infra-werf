@@ -1,7 +1,7 @@
 param([int]$Port = 8770, [string]$InventoryDirectory = '', [switch]$Background)
 $ErrorActionPreference = 'Stop'
 $atlasRoot = $PSScriptRoot
-if (-not $InventoryDirectory) { $InventoryDirectory = Join-Path (Split-Path $atlasRoot) 'server map\dashboard\data' }
+if (-not $InventoryDirectory) { $InventoryDirectory = Join-Path (Split-Path $atlasRoot) 'ops\dashboard\data' }
 $atlasPython = Join-Path $env:USERPROFILE '.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe'
 if (-not (Test-Path -LiteralPath $atlasPython)) { $atlasPython = (Get-Command python -ErrorAction Stop).Source }
 if ($Background) {

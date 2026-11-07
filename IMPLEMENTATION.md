@@ -6,7 +6,7 @@ Delivered 25 October 2026. Runs on Windows PC, loopback port 8770. This implemen
 
 Desktop `/` and phone `/mobile` use the same API and SQLite database. Host registration, renaming, connection-hostname changes, desktop node layout and directional relationship creation/removal persist on the coordinator. Mobile arrangement remains compact and independent of desktop coordinates.
 
-Four sanitized existing records were imported from `../server map/dashboard/data`: Core & data, Infrastructure, Compute & apps, Communications. The imported snapshots contain 540 service/container records, including inactive/stopped workloads. That total is not a count of distinct applications or healthy services. Original collection times and per-report warnings remain visible. All four current records are stale; this does not establish whether any host is currently online. No fabricated dependency edges were imported from the prototypes.
+Four sanitized existing records were imported from `../ops/dashboard/data`: Core & data, Infrastructure, Compute & apps, Communications. The imported snapshots contain 540 service/container records, including inactive/stopped workloads. That total is not a count of distinct applications or healthy services. Original collection times and per-report warnings remain visible. All four current records are stale; this does not establish whether any host is currently online. No fabricated dependency edges were imported from the prototypes.
 
 Importing again with unchanged source reports returns zero updates. New reports preserve owner map data. Source reports are read only and are not added to this Git repository. Passwords, private keys, raw configurations and protected files are not ingested.
 

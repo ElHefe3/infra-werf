@@ -31,7 +31,7 @@ Controlled SSH proof: `mise run ssh:fixture` prepares a private pinned test runt
 Python 3.11 or newer; no third-party packages required.
 
 ```powershell
-python atlas.py --inventory-dir '..\server map\dashboard\data'
+python atlas.py --inventory-dir '..\ops\dashboard\data'
 ```
 
 - Desktop: http://127.0.0.1:8770/

@@ -1,6 +1,6 @@
 # Atlas technology stack and requirements
 
-Recovered 25 October 2026 from the owner-supplied [full conversation dump](../atlas-chat-dump.md), under **What would be the tech stack?** and the subsequent file-transfer discussion. This records the original stack; it supersedes the provisional implementation choices in A01.
+Recovered 25 October 2026 from the owner-supplied [full conversation dump](../archive/infrawerf-origin-chat.md), under **What would be the tech stack?** and the subsequent file-transfer discussion. This records the original stack; it supersedes the provisional implementation choices in A01.
 
 ## Original desktop stack
 

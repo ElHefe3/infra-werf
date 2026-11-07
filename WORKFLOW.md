@@ -4,7 +4,7 @@ Use **Atlas implementation** as the active working chat on both Android Remote a
 
 The earlier **Build Infrastructure Map** conversation is a ChatGPT Work conversation, ID `6add26e2-c1e8-83ea-8e53-361dec360bcc`, in the linked ChatGPT Random GPT project. The desktop inventory lists both histories. Equal project names do not make the two conversations or history stores identical. Official documentation: https://learn.chatgpt.com/docs/projects and https://learn.chatgpt.com/docs/remote-connections.
 
-The supported chat reader exposed only five recent exchanges from the earlier conversation, including after following its pagination cursor. The owner then supplied the complete available conversation as `../atlas-chat-dump.md`, which has now been read. Its earlier stack discussion is recorded in STACK.md. The owner also confirmed the original chat opens on the phone using its direct ChatGPT link; the missing sidebar listing itself has not been repaired.
+The supported chat reader exposed only five recent exchanges from the earlier conversation, including after following its pagination cursor. The owner then supplied the complete available conversation as `../archive/infrawerf-origin-chat.md`, which has now been read. Its earlier stack discussion is recorded in STACK.md. The owner also confirmed the original chat opens on the phone using its direct ChatGPT link; the missing sidebar listing itself has not been repaired.
 
 ## Decisions to preserve
 
@@ -21,7 +21,7 @@ The supported chat reader exposed only five recent exchanges from the earlier co
 - Persistent data: ignored `data/atlas.sqlite3`. Preserve it during any migration.
 - Four saved host reports, 540 workload records. These are historical observations, not live monitoring.
 - Host process can be started with `Start-Atlas.ps1 -Background`; local port 8770. Authenticated phone network access, SSH, Files, Terminal and agents are pending.
-- Existing infrastructure-maintenance project is `../server map`; its reports are read-only inputs for this app.
+- Existing infrastructure-maintenance project is `../ops`; its reports are read-only inputs for this app.
 
 ## Continuity
 
