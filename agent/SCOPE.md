@@ -50,6 +50,7 @@ Owner decision, 2026-10-26: **get desktop 100%; mobile is future development**. 
 
 - S07: custom agents, enrolment/modules, always-on server deployment and privileged-collection exceptions.
 - S08: rsync and its Windows runtime; later copy/update default, dry-run and explicit destination deletion.
+- S11: remote applications — loopback-only SSH local forwards to a server's `localhost` web interfaces in an isolated in-app browser window, then optionally reviewed graphical applications. Widens the current no-forwarding SSH boundary only on explicit owner activation.
 - No iOS/macOS/Linux packages, public endpoint, new VPN, multi-user roles, app-store publication or cloud sync.
 - No automatic network/proxy/deployment rewiring from diagram edges, infrastructure migrations, broad root/container grants, floating-window desktop, remote-desktop streaming or visual redesign.
 

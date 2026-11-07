@@ -14,7 +14,7 @@
 - **Core target:** Windows desktop 100% by the owner’s explicit 2026-10-26 decision. Mobile/coordinator is future S09; agents/rsync stay deferred. Run all remaining desktop batches sequentially without asking between batches; retain proportional proof/review and actual permission boundaries.
 - **Budget target:** two five-hour usage windows; a prioritisation target, not a quota or elapsed-time guarantee.
 - **Baseline:** A01 Python/SQLite/browser work is historical, with evidence in [IMPLEMENTATION.md](../IMPLEMENTATION.md). It does not complete new Rust/React/native tickets.
-- **Tracker:** 34 tickets / 16 features / 10 scopes: 26 core and 8 deferred tickets. Done=25, in progress=1, todo=0, deferred=8. Feature-packet ticket metadata is the sole status authority. S10/F16/T034 is the authorised dynamic desktop extension; mobile and server-agent deployment remain deferred.
+- **Tracker:** 36 tickets / 17 features / 11 scopes: 26 core and 10 deferred tickets. Done=25, in progress=1, todo=0, deferred=10. Feature-packet ticket metadata is the sole status authority. S10/F16/T034 is the authorised dynamic desktop extension; mobile and server-agent deployment remain deferred.
 
 ## Read protocol
 
@@ -36,6 +36,7 @@
 | 7 | [S07 Agents](scopes/S07-discovery-agents.md) | [F13 discovery](features/F13-discovery-agents.md) | T027–T029 | Deferred; separate owner authorisation |
 | 8 | [S08 Sync](scopes/S08-synchronisation.md) | [F14 rsync](features/F14-rsync.md) | T030–T031 | Deferred; separate owner authorisation |
 | 10 | [S10 Live desktop](scopes/S10-live-desktop.md) | [F16 monitoring and lifecycle](features/F16-live-desktop.md) | T034 | Authorised desktop extension after S06 |
+| 11 | [S11 Remote applications](scopes/S11-remote-applications.md) | [F17 remote applications](features/F17-remote-applications.md) | T035–T036 | Deferred; owner activation and forwarding-boundary decision |
 
 [S09 Future mobile](scopes/S09-future-mobile.md) retains T009–T011, Android adapters, pairing and phone acceptance for separate activation after desktop completion.
 
