@@ -1,3 +1,4 @@
+mod apps;
 mod workspace;
 
 use atlas_core::files::{
@@ -808,12 +809,21 @@ pub fn run() {
                 workspace.tick_health();
                 workspace.tick_live();
                 for session in workspace.reap_files() { let _ = handle.emit("atlas-session-closed", session); }
+                apps::reap(&handle, &workspace);
             }
         });
         app.manage(workspace);
         Ok(())
     })
     .on_window_event(|window, event| {
+        if let tauri::WindowEvent::Destroyed = event {
+            apps::window_destroyed(window);
+        }
+        // Only the main window closes the workspace; remote application
+        // windows close freely and end just their own tunnel.
+        if window.label() != "main" {
+            return;
+        }
         if let tauri::WindowEvent::CloseRequested { api, .. } = event {
             if !window.state::<Arc<Workspace>>().request_close() {
                 api.prevent_close();
@@ -821,7 +831,7 @@ pub fn run() {
             }
         }
     })
-    .invoke_handler(tauri::generate_handler![monitoring_accept_identity, monitoring_state, monitoring_configure, monitoring_history_limit, monitoring_discover, foundation_status, workspace_status, map_state, retry_workspace, add_server, update_server, remove_server, add_relationship, remove_relationship, import_reports, ssh_prepare, ssh_verify, ssh_cancel, health_configure, health_status, health_cancel, inventory_refresh, files_prepare, files_open, files_read, workload_inspect, workload_control_preview, workload_control_confirm, files_lock, files_terminal_start, files_terminal_poll, files_terminal_write, files_terminal_resize, files_preview, files_commit, files_discard, files_release, files_pick_upload, files_pick_download, files_selection_discard, files_transfer, files_stage_protected, transfer_list, transfer_cancel, elevation_preview, elevation_confirm, elevation_cancel, protected_placement_preview, protected_placement_confirm, protected_placement_cancel])
+    .invoke_handler(tauri::generate_handler![apps::tunnel_open, apps::tunnel_close, apps::tunnel_close_all, apps::tunnel_list, apps::tunnel_focus, monitoring_accept_identity, monitoring_state, monitoring_configure, monitoring_history_limit, monitoring_discover, foundation_status, workspace_status, map_state, retry_workspace, add_server, update_server, remove_server, add_relationship, remove_relationship, import_reports, ssh_prepare, ssh_verify, ssh_cancel, health_configure, health_status, health_cancel, inventory_refresh, files_prepare, files_open, files_read, workload_inspect, workload_control_preview, workload_control_confirm, files_lock, files_terminal_start, files_terminal_poll, files_terminal_write, files_terminal_resize, files_preview, files_commit, files_discard, files_release, files_pick_upload, files_pick_download, files_selection_discard, files_transfer, files_stage_protected, transfer_list, transfer_cancel, elevation_preview, elevation_confirm, elevation_cancel, protected_placement_preview, protected_placement_confirm, protected_placement_cancel])
     .run(tauri::generate_context!())
     .expect("InfraWerf native runtime failed");
 }

@@ -83,6 +83,10 @@ run = "powershell -NoProfile -File scripts/atlas.ps1 test-health-native"
 description = "Native dynamic monitoring failure/recovery and server lifecycle on synthetic loopback data"
 run = "powershell -NoProfile -File scripts/atlas.ps1 exec -- node scripts/verify_native_monitoring.mjs"
 
+[tasks."test:apps-native"]
+description = "Native remote application tunnels: isolated window, HTTP/WebSocket, teardown and refusals on loopback fixtures (build first)"
+run = "powershell -NoProfile -File scripts/atlas.ps1 exec -- node scripts/verify_native_apps.mjs"
+
 [tasks."test:inventory-native"]
 description = "Actual Windows approved inventory refresh over disposable authenticated SSH"
 run = "powershell -NoProfile -File scripts/atlas.ps1 test-inventory-native"

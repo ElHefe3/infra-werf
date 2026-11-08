@@ -62,3 +62,4 @@ Link important discoveries from affected feature packets and the checkpoint. Nev
 - [D046 Desktop retest and SSH compatibility](D046-desktop-retest-and-ssh-compatibility.md)
 - [D049 draw.io embedding and document integration](D049-drawio-embedding-is-a-document-integration.md)
 - [D050 Installed program lives in a Codex package cache](D050-installed-program-is-in-codex-package-cache.md)
+- [D051 Owner activates remote applications and loopback forwarding](D051-owner-activates-remote-applications.md)

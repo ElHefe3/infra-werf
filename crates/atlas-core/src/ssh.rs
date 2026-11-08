@@ -74,15 +74,19 @@ impl SshOptions {
             std::fs::read_to_string(path).map_err(|_| AtlasError::new(ErrorCode::IoFailure))?;
         Ok(literal_aliases(&text))
     }
-    pub fn system() -> Self {
+    /// The Windows system OpenSSH client, or `ssh` from PATH elsewhere.
+    pub fn system_executable() -> PathBuf {
         #[cfg(windows)]
-        let executable =
-            PathBuf::from(std::env::var_os("SystemRoot").unwrap_or_else(|| "C:\\Windows".into()))
-                .join("System32/OpenSSH/ssh.exe");
+        return PathBuf::from(
+            std::env::var_os("SystemRoot").unwrap_or_else(|| "C:\\Windows".into()),
+        )
+        .join("System32/OpenSSH/ssh.exe");
         #[cfg(not(windows))]
-        let executable = PathBuf::from("ssh");
+        return PathBuf::from("ssh");
+    }
+    pub fn system() -> Self {
         Self {
-            executable,
+            executable: Self::system_executable(),
             config: std::env::var_os("ATLAS_SSH_CONFIG").map(PathBuf::from),
         }
     }
@@ -94,6 +98,12 @@ impl SshOptions {
         }
     }
     fn command(&self) -> Command {
+        self.base_command(false)
+    }
+    /// `forwarding` omits only ClearAllForwardings so one explicit, reviewed
+    /// `-L` loopback forward can be added (F17/T035, D051). Every other
+    /// restriction is identical.
+    fn base_command(&self, forwarding: bool) -> Command {
         let mut command = Command::new(&self.executable);
         #[cfg(windows)]
         {
@@ -137,7 +147,6 @@ impl SshOptions {
             "ControlPersist=no",
             "ForkAfterAuthentication=no",
             "PermitLocalCommand=no",
-            "ClearAllForwardings=yes",
             "ForwardAgent=no",
             "ForwardX11=no",
             "RequestTTY=no",
@@ -148,6 +157,9 @@ impl SshOptions {
             "ServerAliveCountMax=2",
         ] {
             command.arg("-o").arg(option);
+        }
+        if !forwarding {
+            command.arg("-o").arg("ClearAllForwardings=yes");
         }
         command
     }
@@ -277,6 +289,73 @@ impl SshOptions {
             conversation::known_host_sources(&resolved.stdout),
         ))
     }
+    /// Build a loopback-only local forward for an owner-started remote
+    /// application window. Configuration-defined forwards are refused rather
+    /// than cleared or applied, because ClearAllForwardings would also clear
+    /// the reviewed `-L` and leaving them active would open unreviewed ports.
+    pub fn tunnel_command(
+        &self,
+        alias: &str,
+        local_port: u16,
+        remote_port: u16,
+    ) -> Result<(SshProfile, Command), AtlasError> {
+        if hostname(alias)? != alias || local_port == 0 || remote_port == 0 {
+            return Err(AtlasError::new(ErrorCode::InvalidInput));
+        }
+        // Resolve without ClearAllForwardings so `-G` reveals configured
+        // forwards. `-G` evaluates local configuration only; no network contact.
+        let mut resolve = self.base_command(true);
+        resolve.arg("-G").arg("--").arg(alias);
+        let resolved = resolve
+            .output()
+            .map_err(|_| AtlasError::new(ErrorCode::IoFailure))?;
+        if !resolved.status.success() || resolved.stdout.len() > 256 * 1024 {
+            return Err(AtlasError::new(ErrorCode::Denied));
+        }
+        let text = String::from_utf8_lossy(&resolved.stdout);
+        if configured_forwards(&text) {
+            return Err(AtlasError::new(ErrorCode::Denied));
+        }
+        let (profile, key_alias) =
+            profile(alias, &text).ok_or_else(|| AtlasError::new(ErrorCode::Denied))?;
+        let mut command = self.base_command(true);
+        command.stdout(Stdio::null());
+        command
+            .arg("-N")
+            .arg("-o")
+            .arg("ExitOnForwardFailure=yes")
+            .arg("-o")
+            .arg("GatewayPorts=no")
+            .arg("-o")
+            .arg("KnownHostsCommand=none")
+            .arg("-o")
+            .arg("ProxyCommand=none")
+            .arg("-o")
+            .arg("ProxyJump=none")
+            .arg("-o")
+            .arg(format!("Hostname={}", profile.hostname))
+            .arg("-l")
+            .arg(&profile.user)
+            .arg("-p")
+            .arg(profile.port.to_string());
+        if let Some(alias) = key_alias {
+            command.arg("-o").arg(format!("HostKeyAlias={alias}"));
+        }
+        command
+            .arg("-L")
+            .arg(format!("127.0.0.1:{local_port}:localhost:{remote_port}"))
+            .arg("--")
+            .arg(alias);
+        Ok((profile, command))
+    }
+}
+
+/// `ssh -G` prints configured forwards; any present makes the alias unsuitable.
+fn configured_forwards(resolved: &str) -> bool {
+    resolved.lines().any(|line| {
+        let name = line.split(' ').next().unwrap_or("");
+        ["localforward", "remoteforward", "dynamicforward"].contains(&name)
+    })
 }
 
 fn literal_aliases(text: &str) -> Vec<String> {

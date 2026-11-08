@@ -12,6 +12,7 @@ import { WorkloadInspectionPanel } from "./workload-inspection";
 import { ElevationCheck } from "./elevation-check";
 import { HealthMonitor } from "./health-monitor";
 import { BrandMark } from "./brand";
+import { RemoteApps } from "./remote-apps";
 import { MonitoringHub, activeMap, liveStatus } from "./live-monitoring";
 import type { MonitoringState } from "./contracts.gen";
 import type { MapServer, MapState, Relationship, WorkspaceStatus } from "./contracts.gen";
@@ -21,7 +22,7 @@ import "./style.css";
 
 const client = createWorkspaceClient();
 const TerminalPanel = lazy(() => import("./terminal-panel").then(module => ({ default: module.TerminalPanel })));
-const workspaceTabs = ["Services", "Health", "Files", "Terminal", "System", "Settings", "Transfers"] as const;
+const workspaceTabs = ["Services", "Health", "Files", "Terminal", "Apps", "System", "Settings", "Transfers"] as const;
 type WorkspaceTab = typeof workspaceTabs[number];
 type Modal = { kind: "add" } | { kind: "edit"; id: string } | { kind: "relationship"; source: string; target: string } | { kind: "remove-server"; id: string } | { kind: "remove-edge"; edge: Relationship };
 type ServerFlowNode = Node<{ server: MapServer; matched: boolean; open: (id: string) => void }, "server">;
@@ -138,6 +139,7 @@ function ServerWorkspace({ server, state, close, edit, reload, initialTab = "Ser
       {refreshMessage && <p className={`inventory-refresh-status ${refreshFailure ? "form-error" : "muted"}`} role={refreshFailure ? "alert" : "status"}>{refreshMessage}</p>}
       {tab === "Services" && <><div className="section-heading"><div><h3>Saved services & containers</h3><p>The last approved inventory; live details and logs are fetched only when requested.</p></div><div className="inventory-refresh-actions"><input aria-label="Filter saved workloads" placeholder="Find a workload…" value={filter} onChange={e => setFilter(e.target.value)} /><button className="primary" disabled={checkingSsh} onClick={() => void refreshInventory()}>{refreshing ? "Refreshing…" : "Refresh inventory"}</button></div></div><SavedInventory state={{ ...state, servers: [server] }} query={filter} open={() => {}} single /><WorkloadInspectionPanel key={`${server.id}:${server.host}:workloads`} server={server} onBusy={value => reportBusy("workload", value)} /></>}
       {tab === "Health" && <HealthMonitor key={`${server.id}:${server.host}`} server={server} />}
+      {tab === "Apps" && <RemoteApps key={`${server.id}:${server.host}`} server={server} disabled={checkingSsh} />}
       {tab === "System" && <><div className="section-heading"><div><h3>Saved system inventory</h3><p>Approved host details, services and containers from the latest complete collection.</p></div><button className="primary" disabled={checkingSsh} onClick={() => void refreshInventory()}>{refreshing ? "Refreshing…" : "Refresh inventory"}</button></div>{server.inventory ? <><dl className="system-grid"><div><dt>Hostname</dt><dd>{server.inventory.hostname}</dd></div><div><dt>Logical CPUs</dt><dd>{server.inventory.cpus}</dd></div><div><dt>Total memory</dt><dd>{memory(server.inventory.memory_total_kib)}</dd></div><div><dt>Collected on host</dt><dd>{date(server.inventory.collected_at)}</dd></div></dl><Notice>These are saved hardware details. Live utilisation is not collected. Open Health for separate host and service checks.</Notice></> : <Notice>No saved system inventory is available for this server.</Notice>}</>}
       {tab === "Settings" && <><h3>Map details</h3><dl className="system-grid"><div><dt>Name</dt><dd>{server.name}</dd></div><div><dt>Host</dt><dd>{server.host}</dd></div></dl><button className="primary" disabled={checkingSsh} onClick={edit}>Edit server details</button><SshConnection key={`${server.id}:${server.host}`} server={server} disabled={checkingSsh} onBusy={value => reportBusy("ssh", value)} /><ElevationCheck key={`elevation:${server.id}:${server.host}`} server={server} disabled={checkingSsh} onBusy={value => reportBusy("elevation", value)} /></>}
       {tab === "Files" && <FileBrowser key={`${server.id}:${server.host}`} server={server} onBusy={value => reportBusy("files", value)} />}

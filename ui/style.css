@@ -322,3 +322,23 @@ form label { display: grid; gap: 7px; margin-top: 18px; color: #86987a; font-siz
 .monitoring-intervals label{flex:1}
 .history-retention{display:flex;gap:12px;align-items:center;max-width:380px}
 .history-retention select{width:auto}
+
+/* F17 remote applications */
+.remote-apps { display: flex; flex-direction: column; gap: 14px; min-height: 0; overflow: auto; }
+.app-form { display: grid; grid-template-columns: minmax(110px, 140px) minmax(120px, 1fr) minmax(140px, 1fr); gap: 12px; align-items: end; padding: 15px; border: 1px solid var(--border); border-radius: 9px; background: #fbfcfa; }
+.app-form label { display: grid; gap: 6px; font-size: 11px; color: #5f7266; }
+.app-form-actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 8px; }
+.app-shortcuts { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
+.app-shortcut { display: flex; flex-direction: column; gap: 4px; }
+.app-launch { display: grid; gap: 3px; text-align: left; padding: 12px 14px; border-radius: 9px; }
+.app-launch strong { color: #2d3e35; font-size: 13px; }
+.app-launch span { color: var(--muted); font-size: 11px; font-family: Consolas, monospace; }
+.app-launch:hover:not(:disabled) { border-color: var(--green); background: #f3f8f1; }
+.app-shortcut .text-button { align-self: flex-start; color: var(--muted); font-size: 11px; }
+.tunnel-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.tunnel-list li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 11px 14px; border: 1px solid var(--border); border-left: 3px solid var(--green); border-radius: 8px; }
+.tunnel-list li > div:first-child { display: grid; gap: 3px; min-width: 0; }
+.tunnel-list li span { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.tunnel-actions { display: flex; gap: 10px; align-items: center; flex-shrink: 0; }
+.apps-notice { color: var(--green); font-size: 12px; }
+@media (max-width: 720px) { .app-form { grid-template-columns: 1fr; } .tunnel-list li { flex-direction: column; align-items: flex-start; } }

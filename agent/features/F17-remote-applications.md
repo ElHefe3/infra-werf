@@ -1,6 +1,6 @@
-# F17 — Deferred remote applications through authenticated tunnels
+# F17 — Remote applications through authenticated tunnels
 
-<!-- atlas-feature: {"id":"F17","scope":"S11","depends_on":["F06","F12"],"deferred":true} -->
+<!-- atlas-feature: {"id":"F17","scope":"S11","depends_on":["F06","F12"],"deferred":false} -->
 
 ## Work packet
 
@@ -12,11 +12,11 @@
 
 Read [SCOPE.md](../SCOPE.md) for access boundaries; use [AGENT.md](../AGENT.md) for execution/proof rules. Ticket dependencies, not numeric ordering, control implementation.
 
-Context: the owner requested this on 2026-11-07 as a potential feature ("launching applications as if native", such as a browser reaching the server's localhost). It is captured here and is not authorised for implementation.
+Context: the owner requested this on 2026-11-07 as a potential feature ("launching applications as if native", such as a browser reaching the server's localhost). The owner activated it on 2026-11-08 with permission to implement and push; see [D051](../discovery/D051-owner-activates-remote-applications.md).
 
 ## T035 — Forwarded web view for remote localhost services
 
-<!-- atlas-ticket: {"id":"T035","feature":"F17","status":"deferred","depends_on":["T033","T021","T026"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T035","feature":"F17","status":"in_progress","depends_on":["T033","T021","T026"],"evidence":null} -->
 
 ### Outcome and included work
 
@@ -34,10 +34,10 @@ Reuse the system OpenSSH child with strict host checking and the existing profil
 
 ### Acceptance criteria
 
-- [ ] Forward listens only on Windows loopback and only for the selected server/profile; a port already in use or a failed remote bind reports a clear error without fallback.
-- [ ] HTTP and WebSocket applications work in the isolated window; that window cannot invoke InfraWerf commands.
-- [ ] Close, Lock, expiry, server lifecycle change and app exit terminate the tunnel; no listener survives.
-- [ ] Unknown/changed host keys and authentication failures use the existing trust/review outcomes; nothing alters OpenSSH trust.
+- [x] Forward listens only on Windows loopback and only for the selected server/profile; a port already in use or a failed remote bind reports a clear error without fallback.
+- [x] HTTP and WebSocket applications work in the isolated window; that window cannot invoke InfraWerf commands.
+- [x] Close, Lock, expiry, server lifecycle change and app exit terminate the tunnel; no listener survives.
+- [x] Unknown/changed host keys and authentication failures use the existing trust/review outcomes; nothing alters OpenSSH trust.
 
 ### Verification
 
@@ -45,15 +45,15 @@ Loopback asyncssh/OpenSSH fixture with a private HTTP+WebSocket app on the fixtu
 
 ### Evidence and closure
 
-Use a concise [feature acceptance record](../evidence/README.md) mapped to T035. Current proof: **not run**.
+Native proof recorded in [T035 progress](../evidence/T035-progress.md); all four criteria demonstrated on loopback fixtures. Independent review is pending, so the ticket remains in progress.
 
 ### Stop conditions
 
-Remain deferred until S11 activation and the recorded forwarding decision. Stop if webview isolation from IPC cannot be proven on Windows.
+Stop if webview isolation from IPC cannot be proven on Windows.
 
 ## T036 — Decide and prototype remote graphical applications
 
-<!-- atlas-ticket: {"id":"T036","feature":"F17","status":"deferred","depends_on":["T035"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T036","feature":"F17","status":"todo","depends_on":["T035"],"evidence":null} -->
 
 ### Outcome and included work
 

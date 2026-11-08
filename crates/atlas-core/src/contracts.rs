@@ -469,6 +469,7 @@ pub fn typescript_contracts() -> String {
     output.push_str(&crate::operations::typescript_contracts(&cfg));
     output.push_str(&crate::monitoring::typescript_contracts(&cfg));
     output.push_str(&crate::ssh::typescript_contracts(&cfg));
+    output.push_str(&crate::tunnel::typescript_contracts(&cfg));
     output.push_str(&crate::files::typescript_contracts());
     output.push_str(&crate::workloads::typescript_contracts());
     let mut output = output

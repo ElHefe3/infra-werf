@@ -15,7 +15,9 @@ $steps = @(
     @{ Name='terminal'; File='scripts/verify_native_terminal.mjs'; Arguments=@() },
     @{ Name='elevation'; File='scripts/verify_native_elevation.mjs'; Arguments=@() },
     @{ Name='workloads'; File='scripts/verify_native_workloads.mjs'; Arguments=@() },
-    @{ Name='workload-control'; File='scripts/verify_native_workload_control.mjs'; Arguments=@() }
+    @{ Name='workload-control'; File='scripts/verify_native_workload_control.mjs'; Arguments=@() },
+    @{ Name='monitoring'; File='scripts/verify_native_monitoring.mjs'; Arguments=@() },
+    @{ Name='apps'; File='scripts/verify_native_apps.mjs'; Arguments=@() }
 )
 if ($steps.Name -notcontains $StartAt) { throw 'Unknown starting suite.' }
 $started = $false

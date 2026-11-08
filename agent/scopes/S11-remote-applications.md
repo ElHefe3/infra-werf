@@ -1,6 +1,6 @@
-# S11 — Deferred remote applications
+# S11 — Remote applications
 
-<!-- atlas-scope: {"id":"S11","features":["F17"],"depends_on":["S06"],"window":null,"deferred":true} -->
+<!-- atlas-scope: {"id":"S11","features":["F17"],"depends_on":["S06"],"window":2,"deferred":false} -->
 
 ## Outcome
 
@@ -8,11 +8,11 @@ Use a server's private applications from inside InfraWerf as if they were local:
 
 ## Entry and sequence
 
-The owner explicitly activates S11 after the core release. Activation deliberately widens the current SSH boundary, which excludes forwarding (see [F04](../features/F04-native-shells.md) T033). That change must be recorded as an owner decision before implementation.
+The owner activated S11 on 2026-11-08 ([D051](../discovery/D051-owner-activates-remote-applications.md)). Activation deliberately widens the current SSH boundary, which excludes forwarding (see [F04](../features/F04-native-shells.md) T033). D051 records that decision.
 
 Deliver the forwarded web view first (T035). Remote graphical applications (T036) start with a decision record and proceed only with separate approval of any server-side software.
 
-**Scope dependencies:** [S06](S06-core-release.md). **Budget:** deferred; outside the core target.
+**Scope dependencies:** [S06](S06-core-release.md). **Budget:** owner-authorised extension; no fixed window.
 
 ## Feature batches
 

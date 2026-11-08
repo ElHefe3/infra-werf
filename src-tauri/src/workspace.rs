@@ -5,6 +5,7 @@ use atlas_core::files::{
 };
 use atlas_core::*;
 mod monitoring;
+mod tunnels;
 use atlas_core::{
     files::{
         FileAction, FileChange, FileMutationPreview, FileMutationReceipt, FileResult, FileSession,
@@ -107,6 +108,7 @@ pub struct Workspace {
     health: Arc<Mutex<HealthMonitor>>,
     live: Mutex<monitoring::LiveScheduler>,
     live_contact: Mutex<()>,
+    tunnels: Mutex<tunnels::Tunnels>,
 }
 
 impl Workspace {
@@ -135,6 +137,7 @@ impl Workspace {
             health: Arc::new(Mutex::new(HealthMonitor::default())),
             live: Mutex::new(monitoring::LiveScheduler::default()),
             live_contact: Mutex::new(()),
+            tunnels: Mutex::new(tunnels::Tunnels::default()),
         })
     }
 

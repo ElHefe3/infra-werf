@@ -62,6 +62,16 @@ export type MonitoringState = { contract_version: number, records: Array<Monitor
 export type SshProfile = { alias: string, hostname: string, user: string, port: number, identity_files: number, };
 export type SshCheckState = "verified" | "unknown_host" | "changed_host" | "authentication_failed" | "unreachable" | "unsupported_configuration" | "client_unavailable" | "failed";
 export type SshVerification = { contract_version: number, state: SshCheckState, profile: SshProfile | null, fingerprint: string | null, key_type: string | null, checked_at: string, };
+export type TunnelRequest = { remote_port: number,
+/**
+ * Initial path such as `/` or `/admin`; never a scheme or host.
+ */
+path: string, };
+export type TunnelInfo = { contract_version: number, tunnel_id: string, server_id: ServerId, server_name: string, remote_port: number, local_port: number,
+/**
+ * Loopback URL the isolated window opens.
+ */
+url: string, opened_at: string, expires_at: string, };
 export type FileResource = { id: string, label: string, };
 export type FileKind = "file" | "directory" | "symlink" | "other" | "unknown";
 export type FileEntry = { resource: FileResource, kind: FileKind, size_bytes: string | null, permissions: string | null, owner: number | null, group: number | null, modified_at: string | null, };

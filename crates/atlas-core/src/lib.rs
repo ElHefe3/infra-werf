@@ -10,6 +10,7 @@ mod sftp;
 pub mod ssh;
 pub mod store;
 pub mod terminal;
+pub mod tunnel;
 pub mod validation;
 pub mod workloads;
 
