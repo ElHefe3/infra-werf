@@ -87,6 +87,10 @@ run = "powershell -NoProfile -File scripts/atlas.ps1 exec -- node scripts/verify
 description = "Native remote application tunnels: isolated window, HTTP/WebSocket, teardown and refusals on loopback fixtures (build first)"
 run = "powershell -NoProfile -File scripts/atlas.ps1 exec -- node scripts/verify_native_apps.mjs"
 
+[tasks."demo:apps"]
+description = "Visible remote-apps demo on a throwaway workspace and loopback fixture (build first; close your InfraWerf first)"
+run = "powershell -NoProfile -File scripts/atlas.ps1 exec -- node scripts/demo_apps.mjs"
+
 [tasks."test:inventory-native"]
 description = "Actual Windows approved inventory refresh over disposable authenticated SSH"
 run = "powershell -NoProfile -File scripts/atlas.ps1 test-inventory-native"
