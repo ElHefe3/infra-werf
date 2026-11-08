@@ -40,3 +40,14 @@ Artifacts (ignored, untracked): `.tools/apps-proof-*/` (`result.json`, `apps-tab
 - "Lock" in this app is per protected Files session; tunnels are not tied to it. They end on window close, Close all, server lifecycle change, expiry and exit.
 - Sites that redirect to another origin (for example external single sign-on) are blocked inside the window by design.
 - Not yet installed as the owner's primary release; the owner's installed copy is still the pre-F17 build (see D050).
+
+## Update 2026-11-08 — application discovery (owner request)
+
+Owner: "add discovery so I can use a dropdown to open localhost/applications sites without needing to know their exact port or address."
+
+- New read-only inspection `ApplicationDiscovery`: a fixed script over a verified, host-pinned session (the inventory-refresh path) lists listening TCP sockets with `ss -Hltnp` and reads each port's HTTP status and `<title>` (falling back to the first `<h1>`) with a 2 s, 64 KiB GET from the server itself. Only port, bind address, status, HTTPS-only flag, title and visible process name are returned and strictly parsed.
+- The Apps tab runs discovery on open and offers a **Detected applications** dropdown (web apps openable; non-HTTP, HTTPS-only and HTTP 400 ports listed but disabled). Manual entry and shortcuts moved under "Enter a port manually".
+- Apps bound to a specific server address (not `127.0.0.1`/`::1`/any) can be opened through that address only when the latest discovery for that server and endpoint reported that address and port; other addresses, ports and hostnames are refused.
+- Checks: `mise run check`; 85 Rust tests (6 tunnel tests including strict discovery parsing and destination validation); 18 UI tests; native journey 7/7 on the 0.1.5 release binary (adds dropdown discovery and the specific-address refusals). The real discovery script was also run read-only on lab-server-2 and lab-server-3; it found the expected services (several web applications). This exposed and fixed IPv6 bracket handling, an empty status code and missing-title fallback.
+- Installed as 0.1.5 to `%LOCALAPPDATA%\InfraWerf` after a data backup (`pre-0.1.5-install-20261108-130710`, `atlas.sqlite3` SHA-256 `C61323DFA3EEAC665E1D9A1A3516C44DBB99173B24FFFB4A5DB13B6972A87B54`). Installer SHA-256 `91C7ECB104D3DF250C577A8CEC45CC460C38FEF1542F2F2BB29153E31EFF3FE0`; installed executable SHA-256 `B4B66C376756E021DA155FDF811FFBC4E897407E8594D5E8DAC720851D005328`.
+- Known limits: HTTPS-only apps cannot open in the window yet; apps that route by host name (such as a web application on `app.lan`) show their default site through the tunnel.

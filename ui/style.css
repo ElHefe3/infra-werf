@@ -342,3 +342,7 @@ form label { display: grid; gap: 7px; margin-top: 18px; color: #86987a; font-siz
 .tunnel-actions { display: flex; gap: 10px; align-items: center; flex-shrink: 0; }
 .apps-notice { color: var(--green); font-size: 12px; }
 @media (max-width: 720px) { .app-form { grid-template-columns: 1fr; } .tunnel-list li { flex-direction: column; align-items: flex-start; } }
+.app-discovery { display: flex; gap: 8px; align-items: center; }
+.app-discovery select { flex: 1; min-width: 0; padding: 8px 10px; border: 1px solid var(--border); border-radius: 7px; background: white; font: inherit; }
+.app-manual > summary { cursor: pointer; color: var(--green); font-size: 12px; margin-bottom: 10px; }
+@media (max-width: 720px) { .app-discovery { flex-wrap: wrap; } .app-discovery select { flex-basis: 100%; } }

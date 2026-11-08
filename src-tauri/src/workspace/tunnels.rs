@@ -2,7 +2,10 @@
 use super::*;
 use atlas_core::{
     ssh::SshCheckState,
-    tunnel::{MAX_TUNNELS, TUNNEL_LIFETIME, TunnelInfo, TunnelProcess, TunnelRequest},
+    tunnel::{
+        AppDiscovery, DiscoveredApp, MAX_TUNNELS, TUNNEL_LIFETIME, TunnelInfo, TunnelProcess,
+        TunnelRequest,
+    },
 };
 
 pub(super) struct TunnelEntry {
@@ -14,6 +17,9 @@ pub(super) struct TunnelEntry {
 #[derive(Default)]
 pub(super) struct Tunnels {
     entries: HashMap<String, TunnelEntry>,
+    /// Latest discovery per server and endpoint; authorises specific-address
+    /// destinations. Cleared when the server's target changes.
+    discovered: HashMap<ServerId, (ServerTarget, Vec<DiscoveredApp>)>,
 }
 
 impl Workspace {
@@ -26,6 +32,21 @@ impl Workspace {
         request: TunnelRequest,
     ) -> Result<TunnelInfo, AtlasError> {
         request.validate()?;
+        if let Some(host) = request.remote_host.as_deref() {
+            // A non-loopback destination must be an address discovery found
+            // this server listening on, for this exact port and endpoint.
+            let target = self.ssh_target(id)?;
+            let tunnels = self.lock_tunnels()?;
+            let allowed = tunnels.discovered.get(id).is_some_and(|(seen, apps)| {
+                *seen == target
+                    && apps.iter().any(|app| {
+                        app.port == request.remote_port && app.remote_host.as_deref() == Some(host)
+                    })
+            });
+            if !allowed {
+                return Err(AtlasError::new(ErrorCode::Denied));
+            }
+        }
         if self.lock_tunnels()?.entries.len() >= MAX_TUNNELS {
             return Err(AtlasError::new(ErrorCode::Conflict));
         }
@@ -50,7 +71,12 @@ impl Workspace {
             .find(|server| server.id == *id)
             .map(|server| server.name)
             .ok_or_else(|| AtlasError::new(ErrorCode::NotFound))?;
-        let process = TunnelProcess::start(&self.ssh, target.host(), request.remote_port)?;
+        let process = TunnelProcess::start(
+            &self.ssh,
+            target.host(),
+            &request.destination(),
+            request.remote_port,
+        )?;
         // A policy or endpoint edit during start-up invalidates this forward.
         if self.ssh_target(id)? != target {
             return Err(AtlasError::new(ErrorCode::Denied));
@@ -82,6 +108,45 @@ impl Workspace {
             },
         );
         Ok(info)
+    }
+
+    /// Read-only discovery of listening applications through a short-lived
+    /// verified session (the same path as inventory refresh). Nothing is
+    /// persisted beyond this run's in-memory cache.
+    pub fn discover_applications(
+        self: &Arc<Self>,
+        id: &ServerId,
+    ) -> Result<AppDiscovery, AtlasError> {
+        let _contact = self.live_contact_guard()?;
+        let _admission = self.begin()?;
+        let target = self.ssh_target(id)?;
+        let ticket = self.files.prepare(&target)?;
+        let session_admission = self.begin()?;
+        let session = self.files.open(
+            &target,
+            &ticket.operation_id,
+            Box::new(session_admission),
+            None,
+        )?;
+        let found = self
+            .files
+            .discover_applications(&target, &session.session_id);
+        let closed = self.files.close(&session.session_id);
+        let (complete, apps) = found?;
+        closed?;
+        if self.ssh_target(id)? != target {
+            return Err(AtlasError::new(ErrorCode::Denied));
+        }
+        self.lock_tunnels()?
+            .discovered
+            .insert(id.clone(), (target, apps.clone()));
+        Ok(AppDiscovery {
+            contract_version: CONTRACT_VERSION,
+            server_id: id.clone(),
+            discovered_at: chrono::Utc::now().to_rfc3339(),
+            complete,
+            apps,
+        })
     }
 
     pub fn close_tunnel(&self, tunnel_id: &str) -> Result<(), AtlasError> {

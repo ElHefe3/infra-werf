@@ -6,7 +6,7 @@
 //! check in `local_desktop`, so remote pages cannot invoke InfraWerf commands.
 use crate::{Workspace, local_desktop};
 use atlas_core::{
-    tunnel::{TunnelInfo, TunnelRequest},
+    tunnel::{AppDiscovery, TunnelInfo, TunnelRequest},
     *,
 };
 use std::sync::Arc;
@@ -68,6 +68,19 @@ pub async fn tunnel_open(
     }
     let _ = app.emit_to("main", CHANGED, ());
     Ok(info)
+}
+
+#[tauri::command]
+pub async fn tunnel_discover(
+    window: tauri::WebviewWindow,
+    workspace: State<'_, Arc<Workspace>>,
+    server_id: ServerId,
+) -> Result<AppDiscovery, AtlasError> {
+    local_desktop(&window)?;
+    let workspace = workspace.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || workspace.discover_applications(&server_id))
+        .await
+        .map_err(|_| AtlasError::new(ErrorCode::IoFailure))?
 }
 
 #[tauri::command]

@@ -52,7 +52,7 @@ export type ProtectedText = { session_id: SessionId, operation_id: OperationId, 
 export type LiveMetrics = { cpu_percent: number | null, memory_used_kib: number | null, disk_used_bytes: number | null, };
 export type OperationPhase = "queued" | "running" | "completed" | "failed" | "cancelled";
 export type OperationProgress = { operation_id: OperationId, session_id: SessionId, phase: OperationPhase, bytes_completed: number, bytes_total: number | null, };
-export type Inspection = { "kind": "system_summary", } | { "kind": "file_metadata", path: string, } | { "kind": "service_status", workload_id: string, } | { "kind": "workload_control", workload_id: string, } | { "kind": "sftp_read", resource_id: string, } | { "kind": "sftp_mutation", resource_id: string, } | { "kind": "sftp_transfer", resource_id: string, } | { "kind": "elevation_check", } | { "kind": "protected_placement", } | { "kind": "terminal_open", };
+export type Inspection = { "kind": "system_summary", } | { "kind": "application_discovery", } | { "kind": "file_metadata", path: string, } | { "kind": "service_status", workload_id: string, } | { "kind": "workload_control", workload_id: string, } | { "kind": "sftp_read", resource_id: string, } | { "kind": "sftp_mutation", resource_id: string, } | { "kind": "sftp_transfer", resource_id: string, } | { "kind": "elevation_check", } | { "kind": "protected_placement", } | { "kind": "terminal_open", };
 export type InspectionRequest = { server_id: ServerId, session_id: SessionId, inspection: Inspection, };
 export type OperationTicket = { operation_id: OperationId, expires_at: string, };
 export type ServerLifecycle = "candidate" | "active" | "archived" | "ignored";
@@ -66,12 +66,44 @@ export type TunnelRequest = { remote_port: number,
 /**
  * Initial path such as `/` or `/admin`; never a scheme or host.
  */
-path: string, };
+path: string,
+/**
+ * A server address the application binds to, when it does not listen
+ * on loopback. Accepted only when the latest discovery for this server
+ * reported that exact address and port; absent means `localhost`.
+ */
+remote_host?: string, };
 export type TunnelInfo = { contract_version: number, tunnel_id: string, server_id: ServerId, server_name: string, remote_port: number, local_port: number,
 /**
  * Loopback URL the isolated window opens.
  */
 url: string, opened_at: string, expires_at: string, };
+export type DiscoveredApp = { port: number,
+/**
+ * Address the socket binds to as reported by `ss`.
+ */
+bind: string,
+/**
+ * Destination to request for this app; `None` means `localhost`.
+ */
+remote_host: string | null,
+/**
+ * HTTP status from a GET / on the server, or `None` if not HTTP.
+ */
+http_status: number | null,
+/**
+ * HTTPS-only apps are listed but cannot be opened in the window yet.
+ */
+https_only: boolean, title: string | null,
+/**
+ * Process name when visible to the SSH account.
+ */
+process: string | null, };
+export type AppDiscovery = { contract_version: number, server_id: ServerId, discovered_at: string,
+/**
+ * False when `ss` is unavailable on the server.
+ */
+complete: boolean, apps: Array<DiscoveredApp>, };
 export type FileResource = { id: string, label: string, };
 export type FileKind = "file" | "directory" | "symlink" | "other" | "unknown";
 export type FileEntry = { resource: FileResource, kind: FileKind, size_bytes: string | null, permissions: string | null, owner: number | null, group: number | null, modified_at: string | null, };

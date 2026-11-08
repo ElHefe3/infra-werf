@@ -31,3 +31,21 @@ test("tunnel client sends only server ID, port and path", async () => {
   assert.deepEqual(calls[0], ["tunnel_open", { serverId: "server-1", request: { remote_port: 3000, path: "/" } }]);
   assert.deepEqual(calls[1], ["tunnel_close", { tunnelId: "t1" }]);
 });
+
+test("discovered applications are labelled by title, process or port and only HTTP ones open", async () => {
+  const { describeApp, appKey } = await import("./remote-apps-model.ts");
+  const base = { bind: "127.0.0.1", remote_host: null, http_status: 200, https_only: false, title: null, process: null };
+  assert.deepEqual(describeApp({ ...base, port: 3000, title: "Grafana" }), { label: "Grafana — localhost:3000", openable: true });
+  assert.deepEqual(describeApp({ ...base, port: 8080, process: "java", remote_host: "192.168.20.12" }), { label: "java — 192.168.20.12:8080", openable: true });
+  assert.equal(describeApp({ ...base, port: 22, http_status: null }).openable, false);
+  assert.equal(describeApp({ ...base, port: 9443, http_status: null, https_only: true }).label, "Port 9443 — localhost:9443 (HTTPS only, not supported yet)");
+  assert.equal(appKey({ port: 80, remote_host: null }), "localhost:80");
+  assert.equal(appKey({ port: 80, remote_host: "10.0.0.2" }), "10.0.0.2:80");
+});
+
+test("discovery client sends only the server ID", async () => {
+  const calls: [string, unknown][] = [];
+  const client = createWorkspaceClient(async (command, args) => { calls.push([command, args]); return { contract_version: 1 } as never; });
+  await client.discoverApps("server-1").catch(() => {});
+  assert.deepEqual(calls[0], ["tunnel_discover", { serverId: "server-1" }]);
+});

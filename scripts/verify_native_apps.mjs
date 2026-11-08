@@ -59,20 +59,29 @@ try {
   expect(node).toBeTruthy(); expect(forwarding).toBeTruthy();
   await invoke('monitoring_configure', { serverId: node.id, policy }); await invoke('monitoring_configure', { serverId: forwarding.id, policy });
 
-  // 1. Native UI: workspace → Apps → save a shortcut → open it.
+  // 1. Native UI: workspace → Apps → discovery dropdown → open, without typing a port.
   await page.getByRole('button', { name: `Open ${node.name} workspace`, exact: true }).click();
   await page.getByRole('tab', { name: 'Apps', exact: true }).click();
+  const picker = page.getByLabel('Detected applications');
+  await expect(picker).toBeEnabled({ timeout: 30000 });
+  await expect(picker.locator('optgroup[label="Web applications"] option')).toHaveText([`Fixture Dashboard — localhost:${info.app_port}`, `Second app — 127.0.0.2:${info.second_port}`]);
+  await expect(picker.locator('optgroup[label="Other listening ports"] option')).toHaveText(['sshd — localhost:22 (not a web page)', 'Port 9443 — localhost:9443 (HTTPS only, not supported yet)']);
+  expect(await picker.inputValue()).toBe(`localhost:${info.app_port}`);
+  expect((await stats()).discoveries).toBe(1);
+  await page.getByRole('button', { name: 'Open', exact: true }).click();
+  await expect(page.locator('.tunnel-list li')).toHaveCount(1, { timeout: 30000 });
+  // Manual entry and shortcuts remain available under the disclosure.
+  await page.getByText('Enter a port manually').click();
   await page.getByLabel('Remote port').fill(String(info.app_port));
   await page.getByLabel('Application name').fill('Fixture dashboard');
   await page.getByRole('button', { name: 'Save shortcut', exact: true }).click();
-  await page.locator('button.app-launch', { hasText: 'Fixture dashboard' }).click();
-  await expect(page.locator('.tunnel-list li')).toHaveCount(1, { timeout: 30000 });
+  await expect(page.locator('button.app-launch', { hasText: 'Fixture dashboard' })).toBeVisible();
   let [tunnel] = await invoke('tunnel_list');
   expect(tunnel.url).toBe(`http://127.0.0.1:${tunnel.local_port}/`); expect(tunnel.remote_port).toBe(info.app_port);
   const { viewer, view } = await appPage(tunnel.url);
   await expect(view.locator('#api')).toHaveText('online'); await expect(view.locator('#ws')).toHaveText('pong');
   expect((await stats()).forwards.every(([host, port]) => host === 'localhost' && port === info.app_port)).toBe(true);
-  results.push('native Apps tab verifies SSH, opens an isolated window and the private app works over HTTP and WebSocket through localhost forwarding');
+  results.push('Apps tab discovers listening applications into a dropdown (web apps openable; SSH and HTTPS-only listed but disabled), and opening the selection verifies SSH and shows the private app over HTTP and WebSocket in an isolated window');
   console.log('PASS: open application through tunnel');
 
   // 2. Isolation: no InfraWerf commands, no off-origin navigation, loopback-only listener.
@@ -119,8 +128,21 @@ try {
   results.push('aliases with configured forwards and invalid ports/paths are refused; no unreviewed forward was requested');
   console.log('PASS: refusals');
 
-  // 6. Quitting InfraWerf ends every tunnel.
+  // 6. Specific-address apps open only for an address/port discovery reported.
   await invoke('monitoring_configure', { serverId: node.id, policy });
+  const found = await invoke('tunnel_discover', { serverId: node.id });
+  expect(found.apps.find(a => a.port === info.second_port)?.remote_host).toBe('127.0.0.2');
+  const specific = await invoke('tunnel_open', { serverId: node.id, request: { remote_port: info.second_port, path: '/', remote_host: '127.0.0.2' } });
+  expect(await (await fetch(specific.url)).text()).toContain('Second app on 127.0.0.2');
+  expect((await stats()).forwards.some(([host, port]) => host === '127.0.0.2' && port === info.second_port)).toBe(true);
+  expect(await rejected('tunnel_open', { serverId: node.id, request: { remote_port: info.second_port, path: '/', remote_host: '127.0.0.3' } })).toBe('denied');
+  expect(await rejected('tunnel_open', { serverId: node.id, request: { remote_port: info.app_port, path: '/', remote_host: '127.0.0.2' } })).toBe('denied');
+  expect(await rejected('tunnel_open', { serverId: node.id, request: { remote_port: 80, path: '/', remote_host: 'example.com' } })).toBe('invalid_input');
+  await invoke('tunnel_close', { tunnelId: specific.tunnel_id });
+  results.push('apps bound to a specific server address open through that address only when discovery reported it; other addresses, ports and hostnames are refused');
+  console.log('PASS: discovered specific-address app');
+
+  // 7. Quitting InfraWerf ends every tunnel.
   tunnel = await invoke('tunnel_open', { serverId: node.id, request: { remote_port: info.app_port, path: '/' } });
   const second = await invoke('tunnel_open', { serverId: node.id, request: { remote_port: info.app_port, path: '/api/ping' } });
   expect(second.url.endsWith('/api/ping')).toBe(true); expect((await invoke('tunnel_list')).length).toBe(2);

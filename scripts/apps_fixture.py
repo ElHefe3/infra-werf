@@ -23,7 +23,7 @@ const s=new WebSocket('ws://'+location.host+'/ws');s.onopen=()=>s.send('ping');
 s.onmessage=m=>{const e=document.getElementById('ws');e.textContent=m.data;e.className='ok';};
 </script></body></html>"""
 
-async def http(reader, writer, stats):
+async def http(reader, writer, stats, page=None):
     try:
         head = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), 10)
         lines = head.decode("latin-1").split("\r\n")
@@ -41,7 +41,7 @@ async def http(reader, writer, stats):
             writer.write(bytes([0x81, len(reply)]) + reply); await writer.drain(); stats["websocket"] += 1
             await asyncio.sleep(0.5)
         else:
-            body, kind = (json.dumps({"status": "online"}).encode(), "application/json") if path == "/api/ping" else (PAGE.encode(), "text/html; charset=utf-8")
+            body, kind = (json.dumps({"status": "online"}).encode(), "application/json") if path == "/api/ping" else ((page or PAGE).encode(), "text/html; charset=utf-8")
             writer.write(f"HTTP/1.1 200 OK\r\nContent-Type: {kind}\r\nContent-Length: {len(body)}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n".encode() + body)
             await writer.drain()
     except Exception:
@@ -60,11 +60,14 @@ async def main(directory):
         subprocess.run(["icacls", str(key), "/inheritance:r", "/grant:r", "*" + sid + ":F"], capture_output=True, check=True, timeout=10)
     else:
         key.chmod(0o600)
-    stats = {"connections": 0, "active": 0, "forwards": [], "refused_forwards": 0, "http": 0, "websocket": 0}
+    stats = {"connections": 0, "active": 0, "forwards": [], "refused_forwards": 0, "http": 0, "websocket": 0, "discoveries": 0}
     def save():
         temp = directory / "stats-next.json"; temp.write_text(json.dumps(stats)); temp.replace(directory / "stats.json")
     app = await asyncio.start_server(lambda r, w: http(r, w, stats), "127.0.0.1", 0)
     app_port = app.sockets[0].getsockname()[1]
+    second_page = "<!doctype html><html><head><title>Second app</title></head><body><h1>Second app on 127.0.0.2</h1></body></html>"
+    second = await asyncio.start_server(lambda r, w: http(r, w, stats, second_page), "127.0.0.2", 0)
+    second_port = second.sockets[0].getsockname()[1]
     class Server(asyncssh.SSHServer):
         def connection_made(self, conn): stats["connections"] += 1; stats["active"] += 1; save()
         def connection_lost(self, exc): stats["active"] -= 1; save()
@@ -73,29 +76,41 @@ async def main(directory):
         def validate_public_key(self, user, key): return user == "fixture" and key.get_fingerprint() == identity.get_fingerprint()
         def connection_requested(self, dest_host, dest_port, orig_host, orig_port):
             # Permit only the server's own loopback, like a typical private app.
-            if dest_host in ("localhost", "127.0.0.1", "::1"):
+            if dest_host in ("localhost", "127.0.0.1", "::1", "127.0.0.2"):
                 stats["forwards"].append([dest_host, dest_port]); save(); return True
             stats["refused_forwards"] += 1; save(); return False
         def server_requested(self, listen_host, listen_port):
             stats["refused_forwards"] += 1; save(); return False
     async def process(proc):
-        marker = re.fullmatch(r"echo (ATLAS_VERIFY_[a-f0-9]{32})", proc.command or "")
+        command = proc.command or ""
+        marker = re.fullmatch(r"echo (ATLAS_VERIFY_[a-f0-9]{32})", command)
         if marker: proc.stdout.write(marker[1] + "\n"); proc.exit(0)
+        elif "ATLAS_APPS_V1" in command:
+            # Canned read-only discovery reply describing this fixture.
+            stats["discoveries"] += 1; save()
+            proc.stdout.write("ATLAS_APPS_V1\n"
+                f"APP\t127.0.0.1\t{app_port}\t200\t0\tpython\tFixture Dashboard\n"
+                f"APP\t127.0.0.2\t{second_port}\t200\t0\tpython\tSecond app\n"
+                "APP\t0.0.0.0\t22\t000\t0\tsshd\t\n"
+                "APP\t*\t9443\t000\t1\t\t\n"
+                "END\n")
+            proc.exit(0)
         else: proc.exit(1)
-    listener = await asyncssh.create_server(Server, "127.0.0.1", 0, server_host_keys=[host_key], process_factory=process)
+    home = directory / "home"; home.mkdir()
+    listener = await asyncssh.create_server(Server, "127.0.0.1", 0, server_host_keys=[host_key], process_factory=process, sftp_factory=lambda chan: asyncssh.SFTPServer(chan, chroot=str(home)))
     port = listener.get_port()
     known = directory / "known_hosts"; known.write_text(f"[127.0.0.1]:{port} {host_key.export_public_key().decode().strip()}\n")
     common = f"  HostName 127.0.0.1\n  Port {port}\n  User fixture\n  IdentityFile \"{key.as_posix()}\"\n  UserKnownHostsFile \"{known.as_posix()}\"\n  GlobalKnownHostsFile none\n"
     config = directory / "config"
     config.write_text(f"Host apps-node\n{common}Host apps-forwarding\n{common}  LocalForward 127.0.0.1:47999 localhost:22\n")
     save()
-    print(json.dumps({"config": str(config), "stats": str(directory / "stats.json"), "app_port": app_port}), flush=True)
+    print(json.dumps({"config": str(config), "stats": str(directory / "stats.json"), "app_port": app_port, "second_port": second_port}), flush=True)
     try:
         while True:
             line = (await asyncio.to_thread(sys.stdin.readline)).strip()
             if not line or line == "quit": break
     finally:
-        listener.close(); await listener.wait_closed(); app.close()
+        listener.close(); await listener.wait_closed(); app.close(); second.close()
 
 if __name__ == "__main__":
     asyncio.run(main(Path(sys.argv[1]).resolve()))

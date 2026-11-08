@@ -297,9 +297,17 @@ impl SshOptions {
         &self,
         alias: &str,
         local_port: u16,
+        destination: &str,
         remote_port: u16,
     ) -> Result<(SshProfile, Command), AtlasError> {
-        if hostname(alias)? != alias || local_port == 0 || remote_port == 0 {
+        // Destination is the server's own `localhost` or one IP literal that
+        // discovery reported for this server (checked by the caller).
+        let destination_ok = destination == "localhost"
+            || crate::tunnel::destination_ip(destination).is_some_and(|ip| {
+                let text = ip.to_string();
+                destination == text || destination == format!("[{text}]")
+            });
+        if hostname(alias)? != alias || local_port == 0 || remote_port == 0 || !destination_ok {
             return Err(AtlasError::new(ErrorCode::InvalidInput));
         }
         // Resolve without ClearAllForwardings so `-G` reveals configured
@@ -343,7 +351,9 @@ impl SshOptions {
         }
         command
             .arg("-L")
-            .arg(format!("127.0.0.1:{local_port}:localhost:{remote_port}"))
+            .arg(format!(
+                "127.0.0.1:{local_port}:{destination}:{remote_port}"
+            ))
             .arg("--")
             .arg(alias);
         Ok((profile, command))

@@ -28,6 +28,12 @@ pub struct TunnelRequest {
     pub remote_port: u16,
     /// Initial path such as `/` or `/admin`; never a scheme or host.
     pub path: String,
+    /// A server address the application binds to, when it does not listen
+    /// on loopback. Accepted only when the latest discovery for this server
+    /// reported that exact address and port; absent means `localhost`.
+    #[serde(default)]
+    #[ts(optional)]
+    pub remote_host: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -46,11 +52,200 @@ pub struct TunnelInfo {
 
 impl TunnelRequest {
     pub fn validate(&self) -> Result<(), AtlasError> {
-        if self.remote_port == 0 || !valid_path(&self.path) {
+        if self.remote_port == 0
+            || !valid_path(&self.path)
+            || self
+                .remote_host
+                .as_deref()
+                .is_some_and(|host| destination_ip(host).is_none())
+        {
             return Err(AtlasError::new(ErrorCode::InvalidInput));
         }
         Ok(())
     }
+    /// The `-L` destination: `localhost` or a bracketed/plain IP literal.
+    pub fn destination(&self) -> String {
+        match self.remote_host.as_deref().and_then(destination_ip) {
+            Some(std::net::IpAddr::V6(ip)) => format!("[{ip}]"),
+            Some(ip) => ip.to_string(),
+            None => "localhost".into(),
+        }
+    }
+}
+
+/// A specific, usable server address (not unspecified or multicast).
+pub fn destination_ip(value: &str) -> Option<std::net::IpAddr> {
+    let ip: std::net::IpAddr = value.trim_matches(|c| c == '[' || c == ']').parse().ok()?;
+    (!ip.is_unspecified() && !ip.is_multicast()).then_some(ip)
+}
+
+/// One listening TCP port found by read-only discovery on the server.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct DiscoveredApp {
+    pub port: u16,
+    /// Address the socket binds to as reported by `ss`.
+    pub bind: String,
+    /// Destination to request for this app; `None` means `localhost`.
+    pub remote_host: Option<String>,
+    /// HTTP status from a GET / on the server, or `None` if not HTTP.
+    pub http_status: Option<u16>,
+    /// HTTPS-only apps are listed but cannot be opened in the window yet.
+    pub https_only: bool,
+    pub title: Option<String>,
+    /// Process name when visible to the SSH account.
+    pub process: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct AppDiscovery {
+    pub contract_version: u32,
+    pub server_id: ServerId,
+    pub discovered_at: String,
+    /// False when `ss` is unavailable on the server.
+    pub complete: bool,
+    pub apps: Vec<DiscoveredApp>,
+}
+
+pub const MAX_DISCOVERED: usize = 64;
+
+/// Fixed read-only discovery: listening TCP sockets from `ss`, then one GET /
+/// per port from the server itself (2 s each, 64 KiB cap) for the HTTP status
+/// and page title. Only those fields are returned.
+pub(crate) const REMOTE_APPS_COMMAND: &str = r#####"
+LC_ALL=C; LANG=C; export LC_ALL LANG
+printf 'ATLAS_APPS_V1\n'
+if ! command -v ss >/dev/null 2>&1; then printf 'NO_SS\nEND\n'; exit 0; fi
+seen=' '
+ss -Hltnp 2>/dev/null | awk '{print $4, $6}' | head -n 256 | while read -r local proc; do
+  port=${local##*:}; addr=${local%:*}; addr=${addr#\[}; addr=${addr%\]}; addr=${addr%%%*}
+  case "$port" in ''|*[!0-9]*) continue;; esac
+  case "$seen" in *" $addr:$port "*) continue;; esac
+  seen="$seen$addr:$port "
+  name=$(printf '%s' "$proc" | sed -n 's/^users:(("\([A-Za-z0-9._-]*\)".*/\1/p' | cut -c1-64)
+  case "$addr" in
+    '*'|0.0.0.0|127.0.0.1|'::') host=127.0.0.1;;
+    '::1') host='[::1]';;
+    *:*) host="[$addr]";;
+    *) host="$addr";;
+  esac
+  code=000; title=''; https=0; out=''
+  if command -v curl >/dev/null 2>&1; then
+    out=$(curl -s -m 2 --max-filesize 65536 -H 'Accept: text/html' -w '\n__ATLAS_CODE__%{http_code}' "http://$host:$port/" 2>/dev/null | head -c 70000)
+    code=${out##*__ATLAS_CODE__}; [ -n "$code" ] || code=000
+    if [ "$code" = 000 ] || [ "$code" = 400 ]; then
+      if curl -sk -m 2 -o /dev/null "https://$host:$port/" 2>/dev/null; then https=1; out=''; fi
+    fi
+    flat=$(printf '%s' "$out" | tr -d '\r' | tr '\n\t' '  ')
+    title=$(printf '%s' "$flat" | sed -n 's/.*<[Tt][Ii][Tt][Ll][Ee][^>]*>\([^<]*\)<.*/\1/p' | cut -c1-160)
+    [ -n "$title" ] || title=$(printf '%s' "$flat" | sed -n 's/.*<[Hh]1[^>]*>\([^<]*\)<.*/\1/p' | cut -c1-160)
+  fi
+  printf 'APP\t%s\t%s\t%s\t%s\t%s\t%s\n' "$addr" "$port" "$code" "$https" "$name" "$title"
+done
+printf 'END\n'
+"#####;
+
+fn clean_title(raw: &str) -> Option<String> {
+    let decoded = raw
+        .replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace("&nbsp;", " ");
+    let text = decoded
+        .chars()
+        .filter(|c| !c.is_control())
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    let text: String = text.chars().take(120).collect();
+    (!text.is_empty()).then_some(text)
+}
+
+/// Strictly parse discovery output; malformed lines are skipped, never echoed.
+pub fn parse_discovery(output: &str) -> Option<(bool, Vec<DiscoveredApp>)> {
+    let mut lines = output.lines();
+    if lines.next()? != "ATLAS_APPS_V1" {
+        return None;
+    }
+    let mut complete = true;
+    let mut ended = false;
+    let mut apps: Vec<DiscoveredApp> = Vec::new();
+    for line in lines {
+        match line {
+            "END" => {
+                ended = true;
+                break;
+            }
+            "NO_SS" => complete = false,
+            _ => {
+                let fields: Vec<&str> = line.splitn(7, '\t').collect();
+                if fields.len() != 7 || fields[0] != "APP" || apps.len() >= MAX_DISCOVERED {
+                    continue;
+                }
+                let bind = fields[1];
+                let Ok(port) = fields[2].parse::<u16>() else {
+                    continue;
+                };
+                if port == 0 {
+                    continue;
+                }
+                // Only these reach the app through the server's `localhost`;
+                // other loopback addresses (127.0.0.2, ...) need that address.
+                let loopback_or_any = matches!(bind, "*" | "0.0.0.0" | "::" | "127.0.0.1" | "::1");
+                let remote_host = if loopback_or_any {
+                    None
+                } else {
+                    match destination_ip(bind) {
+                        Some(ip) => Some(ip.to_string()),
+                        None => continue,
+                    }
+                };
+                let http_status = fields[3]
+                    .parse::<u16>()
+                    .ok()
+                    .filter(|code| (100..=599).contains(code));
+                let process = Some(fields[5])
+                    .filter(|name| {
+                        !name.is_empty()
+                            && name.len() <= 64
+                            && name
+                                .bytes()
+                                .all(|c| c.is_ascii_alphanumeric() || b"._-".contains(&c))
+                    })
+                    .map(str::to_owned);
+                let https_only = fields[4] == "1" && http_status.is_none_or(|c| c == 400);
+                let app = DiscoveredApp {
+                    port,
+                    bind: bind.chars().take(64).collect(),
+                    remote_host,
+                    http_status: if https_only { None } else { http_status },
+                    https_only,
+                    title: clean_title(fields[6]),
+                    process,
+                };
+                if !apps
+                    .iter()
+                    .any(|a| a.port == app.port && a.remote_host == app.remote_host)
+                {
+                    apps.push(app);
+                }
+            }
+        }
+    }
+    if !ended {
+        return None;
+    }
+    // A port also reachable through `localhost` needs no address-specific entry.
+    let local: std::collections::HashSet<u16> = apps
+        .iter()
+        .filter(|a| a.remote_host.is_none())
+        .map(|a| a.port)
+        .collect();
+    apps.retain(|a| a.remote_host.is_none() || !local.contains(&a.port));
+    apps.sort_by_key(|a| (a.http_status.is_none(), a.port));
+    Some((complete, apps))
 }
 
 /// A relative URL path with a conservative character set: no scheme, host,
@@ -85,9 +280,15 @@ pub struct TunnelProcess {
 impl TunnelProcess {
     /// Start the forward and wait until its loopback listener accepts.
     /// Callers verify trusted SSH access first; this never alters trust.
-    pub fn start(options: &SshOptions, alias: &str, remote_port: u16) -> Result<Self, AtlasError> {
+    pub fn start(
+        options: &SshOptions,
+        alias: &str,
+        destination: &str,
+        remote_port: u16,
+    ) -> Result<Self, AtlasError> {
         let local_port = ephemeral_port()?;
-        let (_, mut command) = options.tunnel_command(alias, local_port, remote_port)?;
+        let (_, mut command) =
+            options.tunnel_command(alias, local_port, destination, remote_port)?;
         command.stdin(Stdio::null()).stderr(Stdio::piped());
         let mut child = command
             .spawn()
@@ -223,10 +424,15 @@ mod job {
 }
 
 pub fn typescript_contracts(config: &Config) -> String {
-    [TunnelRequest::decl(config), TunnelInfo::decl(config)]
-        .into_iter()
-        .map(|d| format!("export {d}\n"))
-        .collect()
+    [
+        TunnelRequest::decl(config),
+        TunnelInfo::decl(config),
+        DiscoveredApp::decl(config),
+        AppDiscovery::decl(config),
+    ]
+    .into_iter()
+    .map(|d| format!("export {d}\n"))
+    .collect()
 }
 
 #[cfg(test)]
@@ -274,7 +480,8 @@ mod tests {
         assert!(
             TunnelRequest {
                 remote_port: 0,
-                path: "/".into()
+                path: "/".into(),
+                remote_host: None,
             }
             .validate()
             .is_err()
@@ -282,7 +489,8 @@ mod tests {
         assert!(
             TunnelRequest {
                 remote_port: 8080,
-                path: "/".into()
+                path: "/".into(),
+                remote_host: None,
             }
             .validate()
             .is_ok()
@@ -296,7 +504,9 @@ mod tests {
         }
         let (_dir, options) =
             options("Host lab\n  HostName 127.0.0.1\n  Port 2222\n  User fixture\n");
-        let (profile, command) = options.tunnel_command("lab", 40001, 8080).unwrap();
+        let (profile, command) = options
+            .tunnel_command("lab", 40001, "localhost", 8080)
+            .unwrap();
         assert_eq!(profile.port, 2222);
         let args = args(&command);
         let forward = args.iter().position(|a| a == "-L").unwrap();
@@ -336,7 +546,7 @@ mod tests {
             ));
             assert_eq!(
                 options
-                    .tunnel_command("lab", 40001, 8080)
+                    .tunnel_command("lab", 40001, "localhost", 8080)
                     .err()
                     .unwrap()
                     .code,
@@ -345,11 +555,15 @@ mod tests {
             );
         }
         let (_dir, options) = options("Host lab\n  HostName 127.0.0.1\n  User fixture\n");
-        assert!(options.tunnel_command("lab", 0, 8080).is_err());
-        assert!(options.tunnel_command("lab", 40001, 0).is_err());
+        assert!(options.tunnel_command("lab", 0, "localhost", 8080).is_err());
         assert!(
             options
-                .tunnel_command("-oProxyCommand=x", 40001, 80)
+                .tunnel_command("lab", 40001, "localhost", 0)
+                .is_err()
+        );
+        assert!(
+            options
+                .tunnel_command("-oProxyCommand=x", 40001, "localhost", 80)
                 .is_err()
         );
     }
@@ -359,5 +573,65 @@ mod tests {
         let port = ephemeral_port().unwrap();
         assert_ne!(port, 0);
         TcpListener::bind((Ipv4Addr::LOCALHOST, port)).unwrap();
+    }
+
+    #[test]
+    fn destinations_are_localhost_or_specific_ips() {
+        let request = |host: Option<&str>| TunnelRequest {
+            remote_port: 80,
+            path: "/".into(),
+            remote_host: host.map(str::to_owned),
+        };
+        assert_eq!(request(None).destination(), "localhost");
+        assert_eq!(
+            request(Some("192.168.20.12")).destination(),
+            "192.168.20.12"
+        );
+        assert_eq!(request(Some("fd00::5")).destination(), "[fd00::5]");
+        for bad in [
+            "0.0.0.0",
+            "::",
+            "example.com",
+            "224.0.0.1",
+            "1.2.3.4 -oX",
+            "",
+        ] {
+            assert!(request(Some(bad)).validate().is_err(), "{bad:?}");
+        }
+        assert!(request(Some("10.0.0.5")).validate().is_ok());
+    }
+
+    #[test]
+    fn discovery_parses_only_strict_fields() {
+        let output = "ATLAS_APPS_V1\n\
+APP\t127.0.0.1\t3000\t200\t0\tgrafana\t  Grafana &amp; friends \n\
+APP\t0.0.0.0\t22\t000\t0\tsshd\t\n\
+APP\t*\t9443\t000\t1\t\t\n\
+APP\t192.168.20.12\t8080\t302\t0\tjava\t\x1b[31mEvil\x07 Title\n\
+APP\t::1\t3000\t200\t0\tgrafana\tdup\n\
+APP\tnot-an-ip\t81\t200\t0\tx\tbad\n\
+APP\t127.0.0.1\t99999\t200\t0\tx\tbad\n\
+garbage line\n\
+APP\t127.0.0.1\t5000\t200\t0\tbad name!\tok\n\
+APP\t192.168.20.12\t3000\t200\t0\tgrafana\tsame port on LAN\n\
+END\n";
+        let (complete, apps) = parse_discovery(output).unwrap();
+        assert!(complete);
+        let ports: Vec<u16> = apps.iter().map(|a| a.port).collect();
+        assert_eq!(ports, vec![3000, 5000, 8080, 22, 9443]);
+        assert_eq!(apps[0].title.as_deref(), Some("Grafana & friends"));
+        assert_eq!(apps[0].process.as_deref(), Some("grafana"));
+        assert_eq!(apps[0].remote_host, None);
+        assert_eq!(apps[1].process, None);
+        assert_eq!(apps[2].remote_host.as_deref(), Some("192.168.20.12"));
+        assert_eq!(apps[2].title.as_deref(), Some("[31mEvil Title"));
+        assert_eq!(apps[3].http_status, None);
+        assert!(apps[4].https_only);
+        assert!(parse_discovery("ATLAS_APPS_V1\nAPP\t127.0.0.1\t1\t200\t0\tx\ty\n").is_none());
+        assert!(parse_discovery("nope\nEND\n").is_none());
+        assert_eq!(
+            parse_discovery("ATLAS_APPS_V1\nNO_SS\nEND\n"),
+            Some((false, vec![]))
+        );
     }
 }

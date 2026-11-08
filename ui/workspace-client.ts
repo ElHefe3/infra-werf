@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { MonitoringState, MonitoringPolicy, TunnelInfo, TunnelRequest } from "./contracts.gen";
+import type { MonitoringState, MonitoringPolicy, TunnelInfo, TunnelRequest, AppDiscovery } from "./contracts.gen";
 import { CONTRACT_VERSION, type AddRelationship, type AddServer, type MapState, type UpdateServer, type WorkspaceStatus, type OperationTicket, type SshVerification, type FileSession, type FileAction, type FileResult, type FileChange, type FileMutationPreview, type FileMutationReceipt, type LocalSelection, type TransferView, type ElevationPreview, type ElevationReceipt, type ProtectedPlacementRequest, type ProtectedPlacementStage, type ProtectedPlacementReceipt, type HealthProbeConfig, type HealthSnapshot, type InventoryRefreshResult, type TerminalPoll, type WorkloadInspection, type WorkloadAction, type WorkloadControlPreview, type WorkloadControlReceipt } from "./contracts.gen.ts";
 
 export type NativeTransport = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
@@ -12,6 +12,7 @@ export function createWorkspaceClient(transport: NativeTransport = invoke) {
   const map = (command: string, args?: Record<string, unknown>) => request<MapState>(command, args);
   return {
     openTunnel: (serverId: string, target: TunnelRequest) => request<TunnelInfo>("tunnel_open", { serverId, request: target }),
+    discoverApps: (serverId: string) => request<AppDiscovery>("tunnel_discover", { serverId }),
     tunnels: () => transport<TunnelInfo[]>("tunnel_list"),
     closeTunnel: (tunnelId: string) => transport<void>("tunnel_close", { tunnelId }),
     closeAllTunnels: () => transport<void>("tunnel_close_all"),

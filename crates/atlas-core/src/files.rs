@@ -838,6 +838,74 @@ impl FileSessions {
         }
     }
 
+    /// Read-only application discovery (F17/T035): the fixed
+    /// `REMOTE_APPS_COMMAND` over this authenticated, host-pinned session.
+    /// Only parsed port/bind/status/title/process fields are returned.
+    pub fn discover_applications(
+        &self,
+        target: &ServerTarget,
+        id: &SessionId,
+    ) -> Result<(bool, Vec<crate::tunnel::DiscoveredApp>), AtlasError> {
+        let session = self.session(target, id)?;
+        let ticket = self.broker.prepare(
+            Some(&self.authority),
+            target,
+            InspectionRequest {
+                server_id: target.server_id().clone(),
+                session_id: id.clone(),
+                inspection: Inspection::ApplicationDiscovery {},
+            },
+        )?;
+        let worker = session.clone();
+        let options = self.options.clone();
+        let profile = session.profile.clone();
+        let fingerprint = session.fingerprint.clone();
+        let host_key = session
+            .host_key
+            .clone()
+            .ok_or_else(|| error(ErrorCode::HostTrustFailure))?;
+        let policy = self.policy;
+        let result = self.broker.execute(
+            Some(&self.authority),
+            &ticket.operation_id,
+            target,
+            move |plan, context| {
+                if !matches!(plan, InspectionPlan::ApplicationDiscovery) {
+                    return Err(error(ErrorCode::Denied));
+                }
+                let valid = || {
+                    if worker.view_valid(policy) {
+                        Ok(())
+                    } else {
+                        Err(error(ErrorCode::ExpiredSession))
+                    }
+                };
+                valid()?;
+                let peer = options.pin_peer(&profile, &fingerprint, &host_key, context)?;
+                let reply = peer.run(
+                    &["/bin/bash", "-c", crate::tunnel::REMOTE_APPS_COMMAND],
+                    None,
+                    context,
+                    &valid,
+                )?;
+                context.checkpoint()?;
+                valid()?;
+                let parsed = if reply.success {
+                    crate::tunnel::parse_discovery(&reply.stdout)
+                } else {
+                    None
+                };
+                let (complete, apps) = parsed.ok_or_else(|| error(ErrorCode::RemoteRejected))?;
+                let encoded = serde_json::to_string(&(complete, apps))
+                    .map_err(|_| error(ErrorCode::IoFailure))?;
+                context.write(&encoded)?;
+                *lock(&worker.last_used)? = Instant::now();
+                Ok(())
+            },
+        )?;
+        serde_json::from_str(&result.text).map_err(|_| error(ErrorCode::IoFailure))
+    }
+
     /// Inspect one saved workload through its authenticated, host-pinned SSH
     /// session. The typed identity is reconstructed from trusted inventory at
     /// session open; no caller field is ever used as a remote command.

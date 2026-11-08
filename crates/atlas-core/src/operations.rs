@@ -31,6 +31,7 @@ fn lock<T>(value: &Mutex<T>) -> Result<std::sync::MutexGuard<'_, T>, AtlasError>
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Inspection {
     SystemSummary {},
+    ApplicationDiscovery {},
     FileMetadata { path: String },
     ServiceStatus { workload_id: String },
     WorkloadControl { workload_id: String },
@@ -154,6 +155,7 @@ pub enum InspectionPlan {
     ProtectedPlacement,
     TerminalOpen,
     SystemSummary,
+    ApplicationDiscovery,
     FileMetadata(ScopedPath),
     ServiceStatus { workload_id: String },
     WorkloadControl { workload_id: String },
@@ -213,6 +215,7 @@ impl SessionScope {
                 InspectionPlan::SftpRead { resource_id }
             }
             Inspection::SystemSummary {} => InspectionPlan::SystemSummary,
+            Inspection::ApplicationDiscovery {} => InspectionPlan::ApplicationDiscovery,
             Inspection::FileMetadata { path } => {
                 let path = absolute_path(&path)?;
                 let root = self
