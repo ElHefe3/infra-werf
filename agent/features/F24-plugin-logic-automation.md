@@ -1,0 +1,88 @@
+# F24 — Sandboxed plugin logic and automation
+
+<!-- atlas-feature: {"id":"F24","scope":"S12","depends_on":["F20","F21","F22"],"deferred":true} -->
+
+## Work packet
+
+**Outcome:** A plugin can run its own logic and automated jobs against servers, inside a sandbox that only reaches the host functions the owner granted.
+
+**User journey:** Enable a trusted plugin → it runs a multi-step job or a schedule → every step is visible in the activity log and stops when trust is revoked.
+
+**Scope:** [S12](../scopes/S12-extensibility.md). **Feature prerequisites:** [F20](F20-plugin-permissions.md), [F21](F21-declarative-packs.md), [F22](F22-plugin-install-integrity.md).
+
+Read [SCOPE.md](../SCOPE.md) for access boundaries; use [AGENT.md](../AGENT.md) for execution/proof rules. Ticket dependencies, not numeric ordering, control implementation.
+
+Context: This is the highest-risk tier and the one that delivers actions and automation. Jobs run while the app is open unless a later decision adds a background or server runtime. Direction and working assumptions are recorded in [D052](../discovery/D052-plugin-platform-direction.md). Deferred until the owner activates S12.
+
+## T048 — Choose the sandbox runtime and host functions
+
+<!-- atlas-ticket: {"id":"T048","feature":"F24","status":"deferred","depends_on":["T046","T044"],"evidence":null} -->
+
+### Outcome and included work
+
+A recorded decision on the sandbox (WebAssembly is the working assumption) and a first host-function set, with a prototype plugin that reads through granted functions.
+
+### Exclusions
+
+Native or unsandboxed script plugins; host functions that return keys, passwords or raw sessions.
+
+### Implementation and contracts
+
+Compare runtimes for Windows and future Android support, resource limits, author experience and size. Host functions map one-to-one onto capabilities from T041. Enforce memory, time and call limits.
+
+**Ticket dependencies:** [T046](F22-plugin-install-integrity.md), [T044](F21-declarative-packs.md).
+
+### Acceptance criteria
+
+- [ ] The runtime choice and its trade-offs are recorded as a discovery note.
+- [ ] A prototype plugin calls a granted host function and is refused an ungranted one.
+- [ ] Memory, time and call limits stop a runaway plugin without affecting the app.
+
+### Verification
+
+Prototype plus runaway and escape fixtures.
+
+### Evidence and closure
+
+None yet. The ticket is deferred until the owner activates S12.
+
+### Stop conditions
+
+Stop if no runtime can enforce the limits on Windows.
+
+## T049 — Plugin actions and scheduled jobs under trusted automation
+
+<!-- atlas-ticket: {"id":"T049","feature":"F24","status":"deferred","depends_on":["T048"],"evidence":null} -->
+
+### Outcome and included work
+
+A sandboxed plugin can run declared changing actions and schedules. Without trusted automation each action uses the preview-and-confirm flow; with it, actions run unattended within the grant.
+
+### Exclusions
+
+Jobs that run while the app is closed (needs a separate runtime decision); implied sudo; changes outside the granted servers.
+
+### Implementation and contracts
+
+Actions are declared in the manifest with their target and effect so the consent screen can describe them. Schedules are owned by the core, not the plugin, so revocation and the kill switch always work. Failures are reported, never retried silently without bound.
+
+**Ticket dependencies:** [T048](F24-plugin-logic-automation.md).
+
+### Acceptance criteria
+
+- [ ] An action runs with confirmation when trust is not granted and unattended when it is.
+- [ ] A schedule fires while the app is open, is visible, and stops on revoke or disable.
+- [ ] An action needing elevation follows the elevation rules or its named exception.
+- [ ] Every run and failure is in the activity log.
+
+### Verification
+
+Loopback fixture with a changing action and a schedule; revoke and kill-switch journeys. No real-host testing without owner direction.
+
+### Evidence and closure
+
+None yet. The ticket is deferred until the owner activates S12.
+
+### Stop conditions
+
+Stop if unattended actions cannot be bounded to the granted servers and actions.
