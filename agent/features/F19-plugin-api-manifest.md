@@ -1,6 +1,6 @@
 # F19 — Plugin API and manifest v1
 
-<!-- atlas-feature: {"id":"F19","scope":"S12","depends_on":["F18"],"deferred":true} -->
+<!-- atlas-feature: {"id":"F19","scope":"S12","depends_on":["F18"],"deferred":false} -->
 
 ## Work packet
 
@@ -12,11 +12,11 @@
 
 Read [SCOPE.md](../SCOPE.md) for access boundaries; use [AGENT.md](../AGENT.md) for execution/proof rules. Ticket dependencies, not numeric ordering, control implementation.
 
-Context: Other people will write plugins for their own instances, so the contract must be stable and documented from the first public release. Direction and working assumptions are recorded in [D052](../discovery/D052-plugin-platform-direction.md). Deferred until the owner activates S12.
+Context: Other people will write plugins for their own instances, so the contract must be stable and documented from the first public release. Direction and working assumptions are recorded in [D052](../discovery/D052-plugin-platform-direction.md). Activated 2026-11-12 ([D053](../discovery/D053-owner-activates-extensibility.md)).
 
 ## T039 — Define and validate the plugin manifest and API version
 
-<!-- atlas-ticket: {"id":"T039","feature":"F19","status":"deferred","depends_on":["T038"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T039","feature":"F19","status":"todo","depends_on":["T038"],"evidence":null} -->
 
 ### Outcome and included work
 
@@ -45,7 +45,7 @@ Fixture manifests (valid and one per rejection rule) in unit tests; schema gener
 
 ### Evidence and closure
 
-None yet. The ticket is deferred until the owner activates S12.
+None yet.
 
 ### Stop conditions
 
@@ -53,7 +53,7 @@ Stop if the manifest needs to grant a capability that SCOPE.md forbids; raise it
 
 ## T040 — Write the plugin author guide and example pack
 
-<!-- atlas-ticket: {"id":"T040","feature":"F19","status":"deferred","depends_on":["T039"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T040","feature":"F19","status":"todo","depends_on":["T039"],"evidence":null} -->
 
 ### Outcome and included work
 
@@ -81,7 +81,7 @@ Automated load of the example; one recorded cold-read walkthrough of the guide.
 
 ### Evidence and closure
 
-None yet. The ticket is deferred until the owner activates S12.
+None yet.
 
 ### Stop conditions
 

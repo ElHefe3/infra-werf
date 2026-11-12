@@ -32,6 +32,10 @@ impl Workspace {
         request: TunnelRequest,
     ) -> Result<TunnelInfo, AtlasError> {
         request.validate()?;
+        self.broker.extensions().authorize(
+            "builtin.operation.loopback-tunnel",
+            atlas_core::extensions::Capability::LoopbackTunnel,
+        )?;
         if let Some(host) = request.remote_host.as_deref() {
             // A non-loopback destination must be an address discovery found
             // this server listening on, for this exact port and endpoint.

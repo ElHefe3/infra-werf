@@ -1,0 +1,696 @@
+//! Extension points (S12/F18). Every workspace tab, server-card badge,
+//! settings section, collector, health check and operation is a registered
+//! contribution with a stable ID, an owner and the capabilities it uses.
+//!
+//! The registry describes and authorises; it grants nothing by itself. SSH
+//! authentication, session scope and elevation rules are enforced where they
+//! always were. Today every contribution is owned by `builtin`.
+use crate::health::ProbeKind;
+use crate::operations::Inspection;
+use crate::*;
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
+use ts_rs::{Config, TS};
+
+/// Owner of every contribution compiled into the application.
+pub const BUILTIN_OWNER: &str = "builtin";
+pub const MAX_CONTRIBUTIONS: usize = 512;
+
+/// Where a contribution attaches.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ExtensionPoint {
+    WorkspaceTab,
+    ServerBadge,
+    SettingsSection,
+    Collector,
+    HealthCheck,
+    Operation,
+}
+
+/// What a contribution may use. A contribution must declare every capability
+/// it relies on; `ExtensionRegistry::authorize` refuses anything undeclared.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum Capability {
+    /// Read the saved map, approved inventory and activity on this PC.
+    ReadSavedState,
+    /// Change map entries on this PC. Never changes a server.
+    EditMap,
+    /// Unauthenticated TCP/HTTP reachability checks.
+    NetworkProbe,
+    /// Verify and use the owner's existing OpenSSH access.
+    SshSession,
+    /// Run a fixed, approved read-only command in an authenticated session.
+    RunApprovedCommand,
+    /// Read remote files and metadata over SFTP.
+    ReadFiles,
+    /// Create, rename, move or delete remote files after confirmation.
+    WriteFiles,
+    /// Upload and download between this PC and a server.
+    TransferFiles,
+    /// The owner's interactive terminal in an authenticated session.
+    InteractiveTerminal,
+    /// Ask for sudo for one named action.
+    Elevate,
+    /// Start, stop or restart a discovered workload after confirmation.
+    ControlWorkloads,
+    /// Open a loopback-only SSH forward to a server's own localhost.
+    LoopbackTunnel,
+}
+
+impl ExtensionPoint {
+    /// Capabilities a contribution at this point may declare.
+    pub fn permitted(self) -> &'static [Capability] {
+        use Capability::*;
+        match self {
+            // Interface contributions may surface any capability their
+            // underlying operations use; the operation is what is enforced.
+            Self::WorkspaceTab | Self::SettingsSection => &[
+                ReadSavedState,
+                EditMap,
+                NetworkProbe,
+                SshSession,
+                RunApprovedCommand,
+                ReadFiles,
+                WriteFiles,
+                TransferFiles,
+                InteractiveTerminal,
+                Elevate,
+                ControlWorkloads,
+                LoopbackTunnel,
+            ],
+            Self::ServerBadge => &[ReadSavedState],
+            Self::Collector => &[SshSession, RunApprovedCommand],
+            Self::HealthCheck => &[NetworkProbe],
+            Self::Operation => &[
+                SshSession,
+                RunApprovedCommand,
+                ReadFiles,
+                WriteFiles,
+                TransferFiles,
+                InteractiveTerminal,
+                Elevate,
+                ControlWorkloads,
+                LoopbackTunnel,
+            ],
+        }
+    }
+}
+
+/// One registered contribution.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct Contribution {
+    /// Stable dotted identifier, for example `builtin.tab.files`.
+    pub id: String,
+    pub point: ExtensionPoint,
+    /// Display name; for tabs this is the visible label.
+    pub title: String,
+    pub owner: String,
+    /// Position among contributions at the same point.
+    pub order: u16,
+    pub capabilities: Vec<Capability>,
+}
+
+/// The registry as shown to the interface.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ExtensionCatalogue {
+    pub contract_version: u32,
+    pub contributions: Vec<Contribution>,
+}
+
+fn invalid() -> AtlasError {
+    AtlasError::new(ErrorCode::InvalidInput)
+}
+
+/// Lower-case dotted identifier with at least two segments.
+fn valid_id(id: &str) -> bool {
+    let segments: Vec<&str> = id.split('.').collect();
+    id.len() <= 96
+        && segments.len() >= 2
+        && segments.iter().all(|segment| {
+            !segment.is_empty()
+                && !segment.starts_with('-')
+                && !segment.ends_with('-')
+                && segment
+                    .bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+        })
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct ExtensionRegistry {
+    entries: Vec<Contribution>,
+}
+
+impl ExtensionRegistry {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Adds a contribution. Rejects a malformed or duplicate ID, an empty or
+    /// repeated capability list and any capability its point does not permit.
+    pub fn register(&mut self, contribution: Contribution) -> Result<(), AtlasError> {
+        if !valid_id(&contribution.id) || !valid_id(&format!("owner.{}", contribution.owner)) {
+            return Err(invalid());
+        }
+        if text(&contribution.title, 40, false)? != contribution.title {
+            return Err(invalid());
+        }
+        let declared: BTreeSet<Capability> = contribution.capabilities.iter().copied().collect();
+        if declared.is_empty()
+            || declared.len() != contribution.capabilities.len()
+            || declared
+                .iter()
+                .any(|capability| !contribution.point.permitted().contains(capability))
+        {
+            return Err(invalid());
+        }
+        if self.entries.len() >= MAX_CONTRIBUTIONS
+            || self.entries.iter().any(|e| e.id == contribution.id)
+        {
+            return Err(AtlasError::new(ErrorCode::Conflict));
+        }
+        self.entries.push(contribution);
+        Ok(())
+    }
+
+    pub fn get(&self, id: &str) -> Option<&Contribution> {
+        self.entries.iter().find(|entry| entry.id == id)
+    }
+
+    /// Contributions at one point, in display order.
+    pub fn at(&self, point: ExtensionPoint) -> Vec<&Contribution> {
+        let mut found: Vec<&Contribution> =
+            self.entries.iter().filter(|e| e.point == point).collect();
+        found.sort_by(|a, b| (a.order, &a.id).cmp(&(b.order, &b.id)));
+        found
+    }
+
+    /// Confirms a registered contribution declared the capability it is about
+    /// to use. Unknown contributions and undeclared capabilities are refused.
+    pub fn authorize(&self, id: &str, capability: Capability) -> Result<(), AtlasError> {
+        let entry = self
+            .get(id)
+            .ok_or_else(|| AtlasError::new(ErrorCode::NotFound))?;
+        if !entry.capabilities.contains(&capability) {
+            return Err(AtlasError::new(ErrorCode::Denied));
+        }
+        Ok(())
+    }
+
+    pub fn catalogue(&self) -> ExtensionCatalogue {
+        let mut contributions = self.entries.clone();
+        contributions.sort_by(|a, b| (a.point, a.order, &a.id).cmp(&(b.point, b.order, &b.id)));
+        ExtensionCatalogue {
+            contract_version: CONTRACT_VERSION,
+            contributions,
+        }
+    }
+}
+
+pub const COLLECTOR_BASELINE_INVENTORY: &str = "builtin.collector.baseline-inventory";
+
+/// Registry entry behind a health probe kind.
+pub fn health_check_id(kind: ProbeKind) -> &'static str {
+    match kind {
+        ProbeKind::Tcp => "builtin.health.tcp",
+        ProbeKind::Http => "builtin.health.http",
+    }
+}
+
+/// Registry entry and capability behind each brokered operation.
+pub fn operation_entry(inspection: &Inspection) -> (&'static str, Capability) {
+    use Capability::*;
+    match inspection {
+        Inspection::SystemSummary {} => ("builtin.operation.system-summary", RunApprovedCommand),
+        Inspection::ApplicationDiscovery {} => (
+            "builtin.operation.application-discovery",
+            RunApprovedCommand,
+        ),
+        Inspection::FileMetadata { .. } => ("builtin.operation.file-metadata", ReadFiles),
+        Inspection::ServiceStatus { .. } => {
+            ("builtin.operation.service-status", RunApprovedCommand)
+        }
+        Inspection::WorkloadControl { .. } => {
+            ("builtin.operation.workload-control", ControlWorkloads)
+        }
+        Inspection::SftpRead { .. } => ("builtin.operation.sftp-read", ReadFiles),
+        Inspection::SftpMutation { .. } => ("builtin.operation.sftp-mutation", WriteFiles),
+        Inspection::SftpTransfer { .. } => ("builtin.operation.sftp-transfer", TransferFiles),
+        Inspection::ElevationCheck {} => ("builtin.operation.elevation-check", Elevate),
+        Inspection::ProtectedPlacement {} => ("builtin.operation.protected-placement", Elevate),
+        Inspection::TerminalOpen {} => ("builtin.operation.terminal", InteractiveTerminal),
+    }
+}
+
+/// Everything compiled into InfraWerf, registered through the same contract a
+/// plugin will use.
+pub fn builtin() -> ExtensionRegistry {
+    use Capability::*;
+    use ExtensionPoint::*;
+    let mut registry = ExtensionRegistry::new();
+    let entries: &[(&str, ExtensionPoint, &str, u16, &[Capability])] = &[
+        // Workspace tabs. Titles are the visible labels and must stay stable.
+        (
+            "builtin.tab.services",
+            WorkspaceTab,
+            "Services",
+            10,
+            &[
+                ReadSavedState,
+                SshSession,
+                RunApprovedCommand,
+                ControlWorkloads,
+                Elevate,
+            ],
+        ),
+        (
+            "builtin.tab.health",
+            WorkspaceTab,
+            "Health",
+            20,
+            &[ReadSavedState, NetworkProbe],
+        ),
+        (
+            "builtin.tab.files",
+            WorkspaceTab,
+            "Files",
+            30,
+            &[SshSession, ReadFiles, WriteFiles, TransferFiles, Elevate],
+        ),
+        (
+            "builtin.tab.terminal",
+            WorkspaceTab,
+            "Terminal",
+            40,
+            &[SshSession, InteractiveTerminal],
+        ),
+        (
+            "builtin.tab.apps",
+            WorkspaceTab,
+            "Apps",
+            50,
+            &[SshSession, RunApprovedCommand, LoopbackTunnel],
+        ),
+        (
+            "builtin.tab.system",
+            WorkspaceTab,
+            "System",
+            60,
+            &[ReadSavedState, SshSession, RunApprovedCommand],
+        ),
+        (
+            "builtin.tab.settings",
+            WorkspaceTab,
+            "Settings",
+            70,
+            &[ReadSavedState, EditMap, SshSession, Elevate],
+        ),
+        (
+            "builtin.tab.transfers",
+            WorkspaceTab,
+            "Transfers",
+            80,
+            &[ReadSavedState, TransferFiles],
+        ),
+        // Server-card badges.
+        (
+            "builtin.badge.observation",
+            ServerBadge,
+            "Inventory observation",
+            10,
+            &[ReadSavedState],
+        ),
+        (
+            "builtin.badge.live-status",
+            ServerBadge,
+            "Live status",
+            20,
+            &[ReadSavedState],
+        ),
+        (
+            "builtin.badge.workloads",
+            ServerBadge,
+            "Workload preview",
+            30,
+            &[ReadSavedState],
+        ),
+        // Sections of the Settings tab.
+        (
+            "builtin.settings.map-details",
+            SettingsSection,
+            "Map details",
+            10,
+            &[ReadSavedState, EditMap],
+        ),
+        (
+            "builtin.settings.ssh-connection",
+            SettingsSection,
+            "SSH connection",
+            20,
+            &[SshSession],
+        ),
+        (
+            "builtin.settings.elevation",
+            SettingsSection,
+            "Elevation check",
+            30,
+            &[SshSession, Elevate],
+        ),
+        // Collectors and health checks.
+        (
+            COLLECTOR_BASELINE_INVENTORY,
+            Collector,
+            "Approved baseline inventory",
+            10,
+            &[SshSession, RunApprovedCommand],
+        ),
+        (
+            "builtin.health.tcp",
+            HealthCheck,
+            "TCP reachability",
+            10,
+            &[NetworkProbe],
+        ),
+        (
+            "builtin.health.http",
+            HealthCheck,
+            "HTTP service check",
+            20,
+            &[NetworkProbe],
+        ),
+        // Brokered operations, one per `Inspection`.
+        (
+            "builtin.operation.system-summary",
+            Operation,
+            "System summary",
+            10,
+            &[RunApprovedCommand],
+        ),
+        (
+            "builtin.operation.application-discovery",
+            Operation,
+            "Application discovery",
+            20,
+            &[RunApprovedCommand],
+        ),
+        (
+            "builtin.operation.file-metadata",
+            Operation,
+            "File metadata",
+            30,
+            &[ReadFiles],
+        ),
+        (
+            "builtin.operation.service-status",
+            Operation,
+            "Workload status and logs",
+            40,
+            &[RunApprovedCommand],
+        ),
+        (
+            "builtin.operation.workload-control",
+            Operation,
+            "Workload start, stop, restart",
+            50,
+            &[ControlWorkloads],
+        ),
+        (
+            "builtin.operation.sftp-read",
+            Operation,
+            "Read files",
+            60,
+            &[ReadFiles],
+        ),
+        (
+            "builtin.operation.sftp-mutation",
+            Operation,
+            "Change files",
+            70,
+            &[WriteFiles],
+        ),
+        (
+            "builtin.operation.sftp-transfer",
+            Operation,
+            "Transfer files",
+            80,
+            &[TransferFiles],
+        ),
+        (
+            "builtin.operation.elevation-check",
+            Operation,
+            "Elevation check",
+            90,
+            &[Elevate],
+        ),
+        (
+            "builtin.operation.protected-placement",
+            Operation,
+            "Protected file placement",
+            100,
+            &[Elevate],
+        ),
+        (
+            "builtin.operation.terminal",
+            Operation,
+            "Interactive terminal",
+            110,
+            &[InteractiveTerminal],
+        ),
+        (
+            "builtin.operation.loopback-tunnel",
+            Operation,
+            "Remote application tunnel",
+            120,
+            &[LoopbackTunnel],
+        ),
+    ];
+    for (id, point, title, order, capabilities) in entries {
+        registry
+            .register(Contribution {
+                id: (*id).into(),
+                point: *point,
+                title: (*title).into(),
+                owner: BUILTIN_OWNER.into(),
+                order: *order,
+                capabilities: capabilities.to_vec(),
+            })
+            .expect("built-in contributions are valid and unique");
+    }
+    registry
+}
+
+pub fn typescript_contracts(config: &Config) -> String {
+    [
+        ExtensionPoint::decl(config),
+        Capability::decl(config),
+        Contribution::decl(config),
+        ExtensionCatalogue::decl(config),
+    ]
+    .into_iter()
+    .map(|d| format!("export {d}\n"))
+    .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn entry(id: &str, point: ExtensionPoint, capabilities: &[Capability]) -> Contribution {
+        Contribution {
+            id: id.into(),
+            point,
+            title: "Example".into(),
+            owner: BUILTIN_OWNER.into(),
+            order: 1,
+            capabilities: capabilities.to_vec(),
+        }
+    }
+
+    #[test]
+    fn builtin_registry_covers_every_extension_point() {
+        let registry = builtin();
+        for point in [
+            ExtensionPoint::WorkspaceTab,
+            ExtensionPoint::ServerBadge,
+            ExtensionPoint::SettingsSection,
+            ExtensionPoint::Collector,
+            ExtensionPoint::HealthCheck,
+            ExtensionPoint::Operation,
+        ] {
+            assert!(!registry.at(point).is_empty(), "{point:?} has no entries");
+        }
+        let tabs: Vec<&str> = registry
+            .at(ExtensionPoint::WorkspaceTab)
+            .iter()
+            .map(|c| c.title.as_str())
+            .collect();
+        assert_eq!(
+            tabs,
+            [
+                "Services",
+                "Health",
+                "Files",
+                "Terminal",
+                "Apps",
+                "System",
+                "Settings",
+                "Transfers"
+            ]
+        );
+        assert!(
+            registry
+                .catalogue()
+                .contributions
+                .iter()
+                .all(|c| c.owner == BUILTIN_OWNER && !c.capabilities.is_empty())
+        );
+    }
+
+    #[test]
+    fn every_health_check_and_operation_is_registered_with_its_capability() {
+        let registry = builtin();
+        for kind in [ProbeKind::Tcp, ProbeKind::Http] {
+            registry
+                .authorize(health_check_id(kind), Capability::NetworkProbe)
+                .unwrap();
+        }
+        registry
+            .authorize(COLLECTOR_BASELINE_INVENTORY, Capability::RunApprovedCommand)
+            .unwrap();
+        let operations = [
+            Inspection::SystemSummary {},
+            Inspection::ApplicationDiscovery {},
+            Inspection::FileMetadata { path: "/".into() },
+            Inspection::ServiceStatus {
+                workload_id: "w".into(),
+            },
+            Inspection::WorkloadControl {
+                workload_id: "w".into(),
+            },
+            Inspection::SftpRead {
+                resource_id: "r".into(),
+            },
+            Inspection::SftpMutation {
+                resource_id: "r".into(),
+            },
+            Inspection::SftpTransfer {
+                resource_id: "r".into(),
+            },
+            Inspection::ElevationCheck {},
+            Inspection::ProtectedPlacement {},
+            Inspection::TerminalOpen {},
+        ];
+        for operation in &operations {
+            let (id, capability) = operation_entry(operation);
+            assert_eq!(registry.get(id).unwrap().point, ExtensionPoint::Operation);
+            registry.authorize(id, capability).unwrap();
+        }
+    }
+
+    #[test]
+    fn duplicate_and_malformed_ids_are_rejected() {
+        let mut registry = ExtensionRegistry::new();
+        let tab = entry(
+            "example.tab.one",
+            ExtensionPoint::WorkspaceTab,
+            &[Capability::ReadSavedState],
+        );
+        registry.register(tab.clone()).unwrap();
+        assert_eq!(
+            registry.register(tab).unwrap_err().code,
+            ErrorCode::Conflict
+        );
+        for id in [
+            "",
+            "single",
+            "Upper.case",
+            "has space.x",
+            "a..b",
+            "a.-b",
+            "a.b-",
+            "a/b.c",
+        ] {
+            let bad = entry(
+                id,
+                ExtensionPoint::WorkspaceTab,
+                &[Capability::ReadSavedState],
+            );
+            assert_eq!(
+                registry.register(bad).unwrap_err().code,
+                ErrorCode::InvalidInput,
+                "{id:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn capabilities_must_be_declared_and_permitted_for_the_point() {
+        let mut registry = ExtensionRegistry::new();
+        // None declared, repeated, and not permitted for a badge or a check.
+        for (point, capabilities) in [
+            (ExtensionPoint::WorkspaceTab, &[][..]),
+            (
+                ExtensionPoint::WorkspaceTab,
+                &[Capability::ReadFiles, Capability::ReadFiles][..],
+            ),
+            (ExtensionPoint::ServerBadge, &[Capability::SshSession][..]),
+            (ExtensionPoint::HealthCheck, &[Capability::Elevate][..]),
+            (ExtensionPoint::Collector, &[Capability::WriteFiles][..]),
+        ] {
+            assert_eq!(
+                registry
+                    .register(entry("example.bad.entry", point, capabilities))
+                    .unwrap_err()
+                    .code,
+                ErrorCode::InvalidInput
+            );
+        }
+        registry
+            .register(entry(
+                "example.operation.read",
+                ExtensionPoint::Operation,
+                &[Capability::ReadFiles],
+            ))
+            .unwrap();
+        registry
+            .authorize("example.operation.read", Capability::ReadFiles)
+            .unwrap();
+        // An undeclared capability and an unknown contribution are refused.
+        assert_eq!(
+            registry
+                .authorize("example.operation.read", Capability::WriteFiles)
+                .unwrap_err()
+                .code,
+            ErrorCode::Denied
+        );
+        assert_eq!(
+            registry
+                .authorize("example.operation.missing", Capability::ReadFiles)
+                .unwrap_err()
+                .code,
+            ErrorCode::NotFound
+        );
+    }
+
+    #[test]
+    fn titles_are_bounded_and_trimmed() {
+        let mut registry = ExtensionRegistry::new();
+        for title in ["", "  padded  ", &"x".repeat(41), "line\nbreak"] {
+            let mut bad = entry(
+                "example.tab.title",
+                ExtensionPoint::WorkspaceTab,
+                &[Capability::ReadSavedState],
+            );
+            bad.title = title.into();
+            assert_eq!(
+                registry.register(bad).unwrap_err().code,
+                ErrorCode::InvalidInput,
+                "{title:?}"
+            );
+        }
+    }
+}

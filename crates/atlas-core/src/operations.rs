@@ -291,6 +291,7 @@ pub struct OperationBroker {
     shared: Arc<Shared>,
     duration: Duration,
     output_limit: usize,
+    extensions: Arc<crate::extensions::ExtensionRegistry>,
 }
 
 impl Default for OperationBroker {
@@ -316,7 +317,17 @@ impl OperationBroker {
             }),
             duration,
             output_limit,
+            extensions: Arc::new(crate::extensions::builtin()),
         })
+    }
+    /// Replaces the extension registry; used when contributions are disabled
+    /// or, later, added. Operations without a registered entry are refused.
+    pub fn with_extensions(mut self, registry: crate::extensions::ExtensionRegistry) -> Self {
+        self.extensions = Arc::new(registry);
+        self
+    }
+    pub fn extensions(&self) -> &crate::extensions::ExtensionRegistry {
+        &self.extensions
     }
     /// Native code calls this for its trusted local window. A future remote
     /// adapter may call it ONLY after validated pairing/session authentication.
@@ -503,6 +514,9 @@ impl OperationBroker {
         current_target: &ServerTarget,
         request: InspectionRequest,
     ) -> Result<OperationTicket, AtlasError> {
+        // Every brokered operation is a registered contribution (S12/F18).
+        let (extension, capability) = crate::extensions::operation_entry(&request.inspection);
+        self.extensions.authorize(extension, capability)?;
         let mut registry = lock(&self.shared.registry)?;
         let actor = self.actor(&registry, authority)?;
         let session = registry
@@ -986,6 +1000,64 @@ mod tests {
             .unwrap();
         let job = broker.job(Some(&caller), &ticket.operation_id).unwrap();
         (broker, caller, job, ticket.operation_id)
+    }
+
+    #[test]
+    fn unregistered_or_undeclared_operations_are_refused_before_preparation() {
+        use crate::extensions::{
+            BUILTIN_OWNER, Capability, Contribution, ExtensionPoint, ExtensionRegistry,
+        };
+        let request = |broker: &OperationBroker, caller: &Authority| {
+            let target =
+                ServerTarget::new(ServerId::parse("ext-host").unwrap(), "ext.invalid").unwrap();
+            let session = broker
+                .register_authenticated_session(
+                    caller,
+                    target.clone(),
+                    SessionScope::new(vec![], vec![]).unwrap(),
+                    Duration::from_secs(60),
+                )
+                .unwrap();
+            broker.prepare(
+                Some(caller),
+                &target,
+                InspectionRequest {
+                    server_id: target.server_id.clone(),
+                    session_id: session,
+                    inspection: Inspection::SystemSummary {},
+                },
+            )
+        };
+        // The built-in registry admits it.
+        let broker = OperationBroker::default();
+        let caller = broker.issue_backend_authority().unwrap();
+        assert!(request(&broker, &caller).is_ok());
+        // With the contribution absent, the same request is refused.
+        let broker = OperationBroker::default().with_extensions(ExtensionRegistry::new());
+        let caller = broker.issue_backend_authority().unwrap();
+        assert_eq!(
+            request(&broker, &caller).err().unwrap().code,
+            ErrorCode::NotFound
+        );
+        // Registered without the capability it needs: also refused.
+        let mut registry = ExtensionRegistry::new();
+        registry
+            .register(Contribution {
+                id: "builtin.operation.system-summary".into(),
+                point: ExtensionPoint::Operation,
+                title: "System summary".into(),
+                owner: BUILTIN_OWNER.into(),
+                order: 1,
+                capabilities: vec![Capability::ReadFiles],
+            })
+            .unwrap();
+        let broker = OperationBroker::default().with_extensions(registry);
+        let caller = broker.issue_backend_authority().unwrap();
+        assert_eq!(
+            request(&broker, &caller).err().unwrap().code,
+            ErrorCode::Denied
+        );
+        assert_eq!(broker.active_workers(), 0);
     }
 
     #[test]

@@ -1,6 +1,6 @@
 # F25 — Open-source readiness and reference plugin
 
-<!-- atlas-feature: {"id":"F25","scope":"S12","depends_on":["F19","F21"],"deferred":true} -->
+<!-- atlas-feature: {"id":"F25","scope":"S12","depends_on":["F19","F21"],"deferred":false} -->
 
 ## Work packet
 
@@ -12,11 +12,11 @@
 
 Read [SCOPE.md](../SCOPE.md) for access boundaries; use [AGENT.md](../AGENT.md) for execution/proof rules. Ticket dependencies, not numeric ordering, control implementation.
 
-Context: The owner's instance remains theirs alone; openness is about the software and its plugin ecosystem. Direction and working assumptions are recorded in [D052](../discovery/D052-plugin-platform-direction.md). Deferred until the owner activates S12.
+Context: The owner's instance remains theirs alone; openness is about the software and its plugin ecosystem. Direction and working assumptions are recorded in [D052](../discovery/D052-plugin-platform-direction.md). Activated 2026-11-12 ([D053](../discovery/D053-owner-activates-extensibility.md)).
 
 ## T050 — Licence, public repository and contribution rules
 
-<!-- atlas-ticket: {"id":"T050","feature":"F25","status":"deferred","depends_on":["T040"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T050","feature":"F25","status":"todo","depends_on":["T040"],"evidence":null} -->
 
 ### Outcome and included work
 
@@ -45,7 +45,7 @@ Audit report; a clean clone builds from the public documents alone.
 
 ### Evidence and closure
 
-None yet. The ticket is deferred until the owner activates S12.
+None yet.
 
 ### Stop conditions
 
@@ -53,7 +53,7 @@ Stop before any push to a public remote without explicit owner approval.
 
 ## T051 — Reference plugin for a real homelab need
 
-<!-- atlas-ticket: {"id":"T051","feature":"F25","status":"deferred","depends_on":["T043","T040"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T051","feature":"F25","status":"todo","depends_on":["T043","T040"],"evidence":null} -->
 
 ### Outcome and included work
 
@@ -81,7 +81,7 @@ Owner acceptance on the installed desktop application.
 
 ### Evidence and closure
 
-None yet. The ticket is deferred until the owner activates S12.
+None yet.
 
 ### Stop conditions
 

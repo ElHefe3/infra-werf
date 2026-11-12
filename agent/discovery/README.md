@@ -64,3 +64,5 @@ Link important discoveries from affected feature packets and the checkpoint. Nev
 - [D050 Installed program lives in a Codex package cache](D050-installed-program-is-in-codex-package-cache.md)
 - [D051 Owner activates remote applications and loopback forwarding](D051-owner-activates-remote-applications.md)
 - [D052 Owner direction: InfraWerf as an open-source plugin platform](D052-plugin-platform-direction.md)
+- [D053 Owner activates extensibility (S12) and starts T037](D053-owner-activates-extensibility.md)
+- [D054 Eight native suites fail at add_server since alias discovery](D054-native-suites-conflict-with-alias-discovery.md)

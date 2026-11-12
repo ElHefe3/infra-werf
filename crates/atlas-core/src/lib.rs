@@ -1,6 +1,7 @@
 //! Shared domain contracts. Native commands and coordinator transports use the
 //! same definitions; neither this crate nor a DTO grants authenticated access.
 pub mod contracts;
+pub mod extensions;
 pub mod files;
 pub mod health;
 pub mod inventory;

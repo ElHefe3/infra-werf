@@ -51,7 +51,7 @@ Owner decision, 2026-10-26: **get desktop 100%; mobile is future development**. 
 - S07: custom agents, enrolment/modules, always-on server deployment and privileged-collection exceptions.
 - S08: rsync and its Windows runtime; later copy/update default, dry-run and explicit destination deletion.
 - S11 (activated 2026-11-08, D051): remote applications — loopback-only SSH local forwards to a server's `localhost` web interfaces in an isolated in-app browser window, then optionally reviewed graphical applications. Narrowly widens the no-forwarding SSH boundary for owner-started loopback forwards only.
-- S12 (drafted 2026-11-11, D052; not activated): extensibility — plugins and add-ons on a small core, with capability grants enforced in the Rust core, owner consent, an activity log and sandboxed code tiers. Activation widens rule 6 to operations declared by plugins the owner has reviewed and enabled; no plugin may obtain keys, sudo passwords or a raw SSH session.
+- S12 (activated 2026-11-12, D053; direction in D052): extensibility — plugins and add-ons on a small core, with capability grants enforced in the Rust core, owner consent, an activity log and sandboxed code tiers. From F21 it widens rule 6 to operations declared by plugins the owner has reviewed and enabled, which still needs a recorded owner decision; no plugin may obtain keys, sudo passwords or a raw SSH session.
 - No iOS/macOS/Linux packages, public endpoint, new VPN, multi-user roles, app-store publication or cloud sync.
 - No automatic network/proxy/deployment rewiring from diagram edges, infrastructure migrations, broad root/container grants, floating-window desktop, remote-desktop streaming or visual redesign.
 

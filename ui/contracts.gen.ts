@@ -135,3 +135,19 @@ export type WorkloadControlPreview = { contract_version: number, operation_id: O
 export type WorkloadControlReceipt = { contract_version: number, operation_id: OperationId, workload_id: string, action: WorkloadAction, outcome: WorkloadActionOutcome, observed_state: WorkloadState, observed_at: string, message: string, };
 export type WorkloadDetail = { label: string, value: string, };
 export type WorkloadInspection = { contract_version: number, workload_id: string, inspected_at: string, state: WorkloadState, details: Array<WorkloadDetail>, logs_state: WorkloadLogState, logs: string, logs_truncated: boolean, };
+export type ExtensionPoint = "workspace_tab" | "server_badge" | "settings_section" | "collector" | "health_check" | "operation";
+export type Capability = "read_saved_state" | "edit_map" | "network_probe" | "ssh_session" | "run_approved_command" | "read_files" | "write_files" | "transfer_files" | "interactive_terminal" | "elevate" | "control_workloads" | "loopback_tunnel";
+export type Contribution = {
+/**
+ * Stable dotted identifier, for example `builtin.tab.files`.
+ */
+id: string, point: ExtensionPoint,
+/**
+ * Display name; for tabs this is the visible label.
+ */
+title: string, owner: string,
+/**
+ * Position among contributions at the same point.
+ */
+order: number, capabilities: Array<Capability>, };
+export type ExtensionCatalogue = { contract_version: number, contributions: Array<Contribution>, };

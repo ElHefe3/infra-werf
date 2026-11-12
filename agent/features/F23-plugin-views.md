@@ -1,6 +1,6 @@
 # F23 — Sandboxed plugin views
 
-<!-- atlas-feature: {"id":"F23","scope":"S12","depends_on":["F20","F22"],"deferred":true} -->
+<!-- atlas-feature: {"id":"F23","scope":"S12","depends_on":["F20","F22"],"deferred":false} -->
 
 ## Work packet
 
@@ -12,11 +12,11 @@
 
 Read [SCOPE.md](../SCOPE.md) for access boundaries; use [AGENT.md](../AGENT.md) for execution/proof rules. Ticket dependencies, not numeric ordering, control implementation.
 
-Context: Builds on the isolated window proven for remote applications, where content cannot invoke InfraWerf commands. Direction and working assumptions are recorded in [D052](../discovery/D052-plugin-platform-direction.md). Deferred until the owner activates S12.
+Context: Builds on the isolated window proven for remote applications, where content cannot invoke InfraWerf commands. Direction and working assumptions are recorded in [D052](../discovery/D052-plugin-platform-direction.md). Activated 2026-11-12 ([D053](../discovery/D053-owner-activates-extensibility.md)).
 
 ## T047 — Isolated plugin view with a message API
 
-<!-- atlas-ticket: {"id":"T047","feature":"F23","status":"deferred","depends_on":["T045"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T047","feature":"F23","status":"todo","depends_on":["T045"],"evidence":null} -->
 
 ### Outcome and included work
 
@@ -45,7 +45,7 @@ Hostile fixture view attempting each escape; native journey; independent review 
 
 ### Evidence and closure
 
-None yet. The ticket is deferred until the owner activates S12.
+None yet.
 
 ### Stop conditions
 

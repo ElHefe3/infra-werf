@@ -1,6 +1,6 @@
 # F20 — Plugin permissions, consent and activity log
 
-<!-- atlas-feature: {"id":"F20","scope":"S12","depends_on":["F19"],"deferred":true} -->
+<!-- atlas-feature: {"id":"F20","scope":"S12","depends_on":["F19"],"deferred":false} -->
 
 ## Work packet
 
@@ -12,11 +12,11 @@
 
 Read [SCOPE.md](../SCOPE.md) for access boundaries; use [AGENT.md](../AGENT.md) for execution/proof rules. Ticket dependencies, not numeric ordering, control implementation.
 
-Context: The owner decided on 2026-11-11 that an explicitly trusted plugin may act without asking each time (D052). Keys and sudo passwords still never reach a plugin. Direction and working assumptions are recorded in [D052](../discovery/D052-plugin-platform-direction.md). Deferred until the owner activates S12.
+Context: The owner decided on 2026-11-11 that an explicitly trusted plugin may act without asking each time (D052). Keys and sudo passwords still never reach a plugin. Direction and working assumptions are recorded in [D052](../discovery/D052-plugin-platform-direction.md). Activated 2026-11-12 ([D053](../discovery/D053-owner-activates-extensibility.md)).
 
 ## T041 — Capability model and consent screen
 
-<!-- atlas-ticket: {"id":"T041","feature":"F20","status":"deferred","depends_on":["T039"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T041","feature":"F20","status":"todo","depends_on":["T039"],"evidence":null} -->
 
 ### Outcome and included work
 
@@ -45,7 +45,7 @@ Core tests that attempt every ungranted capability; native journey for grant, us
 
 ### Evidence and closure
 
-None yet. The ticket is deferred until the owner activates S12.
+None yet.
 
 ### Stop conditions
 
@@ -53,7 +53,7 @@ Stop if a requested capability cannot be enforced in the core.
 
 ## T042 — Activity log, trusted automation and kill switch
 
-<!-- atlas-ticket: {"id":"T042","feature":"F20","status":"deferred","depends_on":["T041"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T042","feature":"F20","status":"todo","depends_on":["T041"],"evidence":null} -->
 
 ### Outcome and included work
 
@@ -82,7 +82,7 @@ Native journey with a fixture plugin performing allowed, refused and cancelled a
 
 ### Evidence and closure
 
-None yet. The ticket is deferred until the owner activates S12.
+None yet.
 
 ### Stop conditions
 

@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { MonitoringState, MonitoringPolicy, TunnelInfo, TunnelRequest, AppDiscovery } from "./contracts.gen";
+import type { MonitoringState, MonitoringPolicy, TunnelInfo, TunnelRequest, AppDiscovery, ExtensionCatalogue } from "./contracts.gen";
 import { CONTRACT_VERSION, type AddRelationship, type AddServer, type MapState, type UpdateServer, type WorkspaceStatus, type OperationTicket, type SshVerification, type FileSession, type FileAction, type FileResult, type FileChange, type FileMutationPreview, type FileMutationReceipt, type LocalSelection, type TransferView, type ElevationPreview, type ElevationReceipt, type ProtectedPlacementRequest, type ProtectedPlacementStage, type ProtectedPlacementReceipt, type HealthProbeConfig, type HealthSnapshot, type InventoryRefreshResult, type TerminalPoll, type WorkloadInspection, type WorkloadAction, type WorkloadControlPreview, type WorkloadControlReceipt } from "./contracts.gen.ts";
 
 export type NativeTransport = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
@@ -22,6 +22,7 @@ export function createWorkspaceClient(transport: NativeTransport = invoke) {
     configureMonitoring: (serverId:string,policy:MonitoringPolicy) => request<MonitoringState>("monitoring_configure",{serverId,policy}),
     discoverServers: () => request<MonitoringState>("monitoring_discover"),
     historyLimit: (limit:number) => request<MonitoringState>("monitoring_history_limit",{limit}),
+    extensions: () => request<ExtensionCatalogue>("extensions_state"),
     status: () => request<WorkspaceStatus>("workspace_status"),
     load: () => map("map_state"),
     retry: () => map("retry_workspace"),

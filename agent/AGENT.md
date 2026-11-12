@@ -14,7 +14,7 @@
 - **Core target:** Windows desktop 100% by the owner’s explicit 2026-10-26 decision. Mobile/coordinator is future S09; agents/rsync stay deferred. Run all remaining desktop batches sequentially without asking between batches; retain proportional proof/review and actual permission boundaries.
 - **Budget target:** two five-hour usage windows; a prioritisation target, not a quota or elapsed-time guarantee.
 - **Baseline:** A01 Python/SQLite/browser work is historical, with evidence in [IMPLEMENTATION.md](../IMPLEMENTATION.md). It does not complete new Rust/React/native tickets.
-- **Tracker:** 51 tickets / 25 features / 12 scopes: 28 core and 23 deferred tickets. Done=25, in progress=2, todo=1, deferred=23. Feature-packet ticket metadata is the sole status authority. S10/F16/T034 is the authorised dynamic desktop extension; mobile and server-agent deployment remain deferred.
+- **Tracker:** 51 tickets / 25 features / 12 scopes: 43 core and 8 deferred tickets. Done=25, in progress=3, todo=15, deferred=8. Feature-packet ticket metadata is the sole status authority. S10/F16/T034 is the authorised dynamic desktop extension; mobile and server-agent deployment remain deferred.
 
 ## Read protocol
 
@@ -37,7 +37,7 @@
 | 8 | [S08 Sync](scopes/S08-synchronisation.md) | [F14 rsync](features/F14-rsync.md) | T030–T031 | Deferred; separate owner authorisation |
 | 10 | [S10 Live desktop](scopes/S10-live-desktop.md) | [F16 monitoring and lifecycle](features/F16-live-desktop.md) | T034 | Authorised desktop extension after S06 |
 | 11 | [S11 Remote applications](scopes/S11-remote-applications.md) | [F17 remote applications](features/F17-remote-applications.md) | T035–T036 | Owner-activated 2026-11-08 (D051); loopback forwards only |
-| 12 | [S12 Extensibility](scopes/S12-extensibility.md) | [F18 extension points](features/F18-extension-points.md), [F19 plugin API](features/F19-plugin-api-manifest.md), [F20 permissions](features/F20-plugin-permissions.md), [F21 packs](features/F21-declarative-packs.md), [F22 install](features/F22-plugin-install-integrity.md), [F23 views](features/F23-plugin-views.md), [F24 logic/automation](features/F24-plugin-logic-automation.md), [F25 open source](features/F25-open-source-readiness.md) | T037–T051 | Deferred; owner direction recorded 2026-11-11 (D052), not yet activated |
+| 12 | [S12 Extensibility](scopes/S12-extensibility.md) | [F18 extension points](features/F18-extension-points.md), [F19 plugin API](features/F19-plugin-api-manifest.md), [F20 permissions](features/F20-plugin-permissions.md), [F21 packs](features/F21-declarative-packs.md), [F22 install](features/F22-plugin-install-integrity.md), [F23 views](features/F23-plugin-views.md), [F24 logic/automation](features/F24-plugin-logic-automation.md), [F25 open source](features/F25-open-source-readiness.md) | T037–T051 | Owner-activated 2026-11-12 (D053); on branch `feature/s12-extensibility` until the feature set is done |
 
 [S09 Future mobile](scopes/S09-future-mobile.md) retains T009–T011, Android adapters, pairing and phone acceptance for separate activation after desktop completion.
 

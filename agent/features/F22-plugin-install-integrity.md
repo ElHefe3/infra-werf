@@ -1,6 +1,6 @@
 # F22 — Plugin install, integrity and updates
 
-<!-- atlas-feature: {"id":"F22","scope":"S12","depends_on":["F20"],"deferred":true} -->
+<!-- atlas-feature: {"id":"F22","scope":"S12","depends_on":["F20"],"deferred":false} -->
 
 ## Work packet
 
@@ -12,11 +12,11 @@
 
 Read [SCOPE.md](../SCOPE.md) for access boundaries; use [AGENT.md](../AGENT.md) for execution/proof rules. Ticket dependencies, not numeric ordering, control implementation.
 
-Context: There is no central store in the first release. Plugins come from files, folders or addresses the owner chooses. Direction and working assumptions are recorded in [D052](../discovery/D052-plugin-platform-direction.md). Deferred until the owner activates S12.
+Context: There is no central store in the first release. Plugins come from files, folders or addresses the owner chooses. Direction and working assumptions are recorded in [D052](../discovery/D052-plugin-platform-direction.md). Activated 2026-11-12 ([D053](../discovery/D053-owner-activates-extensibility.md)).
 
 ## T045 — Install, remove and verify plugins
 
-<!-- atlas-ticket: {"id":"T045","feature":"F22","status":"deferred","depends_on":["T042"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T045","feature":"F22","status":"todo","depends_on":["T042"],"evidence":null} -->
 
 ### Outcome and included work
 
@@ -45,7 +45,7 @@ Malicious-archive fixtures; native install, restart and remove journey.
 
 ### Evidence and closure
 
-None yet. The ticket is deferred until the owner activates S12.
+None yet.
 
 ### Stop conditions
 
@@ -53,7 +53,7 @@ Stop if installation would need to run plugin-supplied code.
 
 ## T046 — Updates that re-ask when capabilities grow
 
-<!-- atlas-ticket: {"id":"T046","feature":"F22","status":"deferred","depends_on":["T045"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T046","feature":"F22","status":"todo","depends_on":["T045"],"evidence":null} -->
 
 ### Outcome and included work
 
@@ -81,7 +81,7 @@ Fixture plugins at two versions for each case.
 
 ### Evidence and closure
 
-None yet. The ticket is deferred until the owner activates S12.
+None yet.
 
 ### Stop conditions
 

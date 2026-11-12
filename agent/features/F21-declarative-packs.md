@@ -1,6 +1,6 @@
 # F21 — Declarative plugin packs
 
-<!-- atlas-feature: {"id":"F21","scope":"S12","depends_on":["F19","F20"],"deferred":true} -->
+<!-- atlas-feature: {"id":"F21","scope":"S12","depends_on":["F19","F20"],"deferred":false} -->
 
 ## Work packet
 
@@ -12,11 +12,11 @@
 
 Read [SCOPE.md](../SCOPE.md) for access boundaries; use [AGENT.md](../AGENT.md) for execution/proof rules. Ticket dependencies, not numeric ordering, control implementation.
 
-Context: Data-only packs are the main public format: a reviewer can read exactly what a pack runs, and they need no sandboxed code. Direction and working assumptions are recorded in [D052](../discovery/D052-plugin-platform-direction.md). Deferred until the owner activates S12.
+Context: Data-only packs are the main public format: a reviewer can read exactly what a pack runs, and they need no sandboxed code. Direction and working assumptions are recorded in [D052](../discovery/D052-plugin-platform-direction.md). Activated 2026-11-12 ([D053](../discovery/D053-owner-activates-extensibility.md)).
 
 ## T043 — Packs for collectors, health checks and workload kinds
 
-<!-- atlas-ticket: {"id":"T043","feature":"F21","status":"deferred","depends_on":["T041"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T043","feature":"F21","status":"todo","depends_on":["T041"],"evidence":null} -->
 
 ### Outcome and included work
 
@@ -45,7 +45,7 @@ Loopback SSH fixture; rejection fixtures for unsafe commands; native journey sho
 
 ### Evidence and closure
 
-None yet. The ticket is deferred until the owner activates S12.
+None yet.
 
 ### Stop conditions
 
@@ -53,7 +53,7 @@ Stop if a pack needs protected data kept after the session ends.
 
 ## T044 — Packs for remote applications, map badges and relationship kinds
 
-<!-- atlas-ticket: {"id":"T044","feature":"F21","status":"deferred","depends_on":["T043"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T044","feature":"F21","status":"todo","depends_on":["T043"],"evidence":null} -->
 
 ### Outcome and included work
 
@@ -81,7 +81,7 @@ Remote-applications fixture and map UI tests with a fixture pack.
 
 ### Evidence and closure
 
-None yet. The ticket is deferred until the owner activates S12.
+None yet.
 
 ### Stop conditions
 

@@ -144,6 +144,10 @@ impl Workspace {
     pub fn live_contact_guard(&self) -> Result<std::sync::MutexGuard<'_, ()>, AtlasError> {
         self.live_contact.lock().map_err(|_| failure())
     }
+    /// Registered extension points for the interface (S12/F18).
+    pub fn extensions(&self) -> atlas_core::extensions::ExtensionCatalogue {
+        self.broker.extensions().catalogue()
+    }
     pub fn status(&self) -> Result<WorkspaceStatus, AtlasError> {
         Ok(WorkspaceStatus {
             contract_version: CONTRACT_VERSION,
@@ -227,6 +231,10 @@ impl Workspace {
     ) -> Result<HealthSnapshot, AtlasError> {
         let _contact = self.live_contact_guard()?;
         config.validate()?;
+        self.broker.extensions().authorize(
+            atlas_core::extensions::health_check_id(config.service_kind),
+            atlas_core::extensions::Capability::NetworkProbe,
+        )?;
         if self
             .with_store(|s| s.monitoring())?
             .records
@@ -545,6 +553,10 @@ impl Workspace {
         revision: Option<&str>,
         source_binding: Option<&str>,
     ) -> Result<InventoryRefreshResult, AtlasError> {
+        self.broker.extensions().authorize(
+            atlas_core::extensions::COLLECTOR_BASELINE_INVENTORY,
+            atlas_core::extensions::Capability::RunApprovedCommand,
+        )?;
         let _refresh_admission = self.begin()?;
         let target = self.ssh_target(id)?;
         let ticket = self.files.prepare(&target)?;

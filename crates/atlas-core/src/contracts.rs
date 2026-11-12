@@ -472,6 +472,7 @@ pub fn typescript_contracts() -> String {
     output.push_str(&crate::tunnel::typescript_contracts(&cfg));
     output.push_str(&crate::files::typescript_contracts());
     output.push_str(&crate::workloads::typescript_contracts());
+    output.push_str(&crate::extensions::typescript_contracts(&cfg));
     let mut output = output
         .lines()
         .map(str::trim_end)

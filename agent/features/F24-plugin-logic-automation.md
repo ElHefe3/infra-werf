@@ -1,6 +1,6 @@
 # F24 — Sandboxed plugin logic and automation
 
-<!-- atlas-feature: {"id":"F24","scope":"S12","depends_on":["F20","F21","F22"],"deferred":true} -->
+<!-- atlas-feature: {"id":"F24","scope":"S12","depends_on":["F20","F21","F22"],"deferred":false} -->
 
 ## Work packet
 
@@ -12,11 +12,11 @@
 
 Read [SCOPE.md](../SCOPE.md) for access boundaries; use [AGENT.md](../AGENT.md) for execution/proof rules. Ticket dependencies, not numeric ordering, control implementation.
 
-Context: This is the highest-risk tier and the one that delivers actions and automation. Jobs run while the app is open unless a later decision adds a background or server runtime. Direction and working assumptions are recorded in [D052](../discovery/D052-plugin-platform-direction.md). Deferred until the owner activates S12.
+Context: This is the highest-risk tier and the one that delivers actions and automation. Jobs run while the app is open unless a later decision adds a background or server runtime. Direction and working assumptions are recorded in [D052](../discovery/D052-plugin-platform-direction.md). Activated 2026-11-12 ([D053](../discovery/D053-owner-activates-extensibility.md)).
 
 ## T048 — Choose the sandbox runtime and host functions
 
-<!-- atlas-ticket: {"id":"T048","feature":"F24","status":"deferred","depends_on":["T046","T044"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T048","feature":"F24","status":"todo","depends_on":["T046","T044"],"evidence":null} -->
 
 ### Outcome and included work
 
@@ -44,7 +44,7 @@ Prototype plus runaway and escape fixtures.
 
 ### Evidence and closure
 
-None yet. The ticket is deferred until the owner activates S12.
+None yet.
 
 ### Stop conditions
 
@@ -52,7 +52,7 @@ Stop if no runtime can enforce the limits on Windows.
 
 ## T049 — Plugin actions and scheduled jobs under trusted automation
 
-<!-- atlas-ticket: {"id":"T049","feature":"F24","status":"deferred","depends_on":["T048"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T049","feature":"F24","status":"todo","depends_on":["T048"],"evidence":null} -->
 
 ### Outcome and included work
 
@@ -81,7 +81,7 @@ Loopback fixture with a changing action and a schedule; revoke and kill-switch j
 
 ### Evidence and closure
 
-None yet. The ticket is deferred until the owner activates S12.
+None yet.
 
 ### Stop conditions
 

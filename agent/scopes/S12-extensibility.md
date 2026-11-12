@@ -1,6 +1,6 @@
-# S12 — Deferred extensibility: plugins and add-ons
+# S12 — Extensibility: plugins and add-ons
 
-<!-- atlas-scope: {"id":"S12","features":["F18","F19","F20","F21","F22","F23","F24","F25"],"depends_on":["S06","S11"],"window":null,"deferred":true} -->
+<!-- atlas-scope: {"id":"S12","features":["F18","F19","F20","F21","F22","F23","F24","F25"],"depends_on":["S06"],"window":2,"deferred":false} -->
 
 ## Outcome
 
@@ -8,13 +8,13 @@ InfraWerf becomes open-source software with a small core (map, SSH access, safet
 
 ## Entry and sequence
 
-The owner explicitly activates S12, as a whole or one feature at a time. Activation widens the "allowlisted operations" rule in [SCOPE.md](../SCOPE.md) to operations declared by plugins the owner has reviewed and enabled; that change must be recorded as an owner decision before implementation. Direction and working assumptions are in [D052](../discovery/D052-plugin-platform-direction.md).
+The owner activated S12 on 2026-11-12 by starting T037 ([D053](../discovery/D053-owner-activates-extensibility.md)). Work stays on the `feature/s12-extensibility` branch and reaches `master` only when the whole feature set is done. From F21 onward the scope widens the "allowlisted operations" rule in [SCOPE.md](../SCOPE.md) to operations declared by plugins the owner has reviewed and enabled; that widening must be recorded as an owner decision before F21 starts; F18–F20 change no boundary. Direction and working assumptions are in [D052](../discovery/D052-plugin-platform-direction.md).
 
-Deliver in this order: extension points (F18) → plugin API and manifest (F19) → permissions and consent (F20) → declarative packs (F21) → install and integrity (F22). That is the first public-ready increment. Sandboxed views (F23) and sandboxed logic with automation (F24) each need their own activation and security review. Open-source readiness (F25) can proceed alongside once F19 exists; publication itself is an owner action.
+Deliver in this order: extension points (F18) → plugin API and manifest (F19) → permissions and consent (F20) → declarative packs (F21) → install and integrity (F22). That is the first public-ready increment. Sandboxed views (F23) and sandboxed logic with automation (F24) each need their own security review before their tickets start. Open-source readiness (F25) can proceed alongside once F19 exists; publication itself is an owner action.
 
-Before entering, close or re-scope the open desktop tickets (T034, T035) so the plugin work starts from an accepted core.
+The open desktop tickets (T034, T035) are still to be closed or re-scoped; F18 builds on the remote-applications implementation as shipped in 0.1.5.
 
-**Scope dependencies:** [S06](S06-core-release.md), [S11](S11-remote-applications.md). **Budget:** deferred; outside the core target.
+**Scope dependencies:** [S06](S06-core-release.md). **Budget:** owner-activated extension after the core release.
 
 ## Feature batches
 
