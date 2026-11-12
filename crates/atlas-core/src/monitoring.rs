@@ -289,6 +289,86 @@ impl Store {
         tx.commit().map_err(sql_error)
     }
 }
+/// Adopts a server that exists only as a discovered candidate: the owner is
+/// adding a host InfraWerf already found in the SSH configuration. The entry
+/// takes the owner's name and becomes active; its ID, position and history are
+/// kept and checks stay off until enabled. Returns `None` when the host is not
+/// a candidate, so an active, archived or ignored host still conflicts.
+pub(crate) fn adopt_candidate(
+    db: &rusqlite::Connection,
+    host: &str,
+    name: &str,
+) -> Result<Option<ServerId>, AtlasError> {
+    let found: Option<(String, String)> = db
+        .query_row(
+            "SELECT s.id,m.payload FROM servers s JOIN monitoring m ON m.server_id=s.id WHERE s.host=?1",
+            [host],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()
+        .map_err(sql_error)?;
+    let Some((id, payload)) = found else {
+        return Ok(None);
+    };
+    let mut record: MonitoringRecord =
+        serde_json::from_str(&payload).map_err(|_| AtlasError::new(ErrorCode::IoFailure))?;
+    if record.policy.lifecycle != ServerLifecycle::Candidate {
+        return Ok(None);
+    }
+    record.policy.lifecycle = ServerLifecycle::Active;
+    record.revision = ServerId::generate().as_str().to_owned();
+    record.reachability = HostReachability::default();
+    record.detail = "Checks paused".into();
+    db.execute("UPDATE servers SET name=?1 WHERE id=?2", params![name, id])
+        .map_err(sql_error)?;
+    write_record(db, &record)?;
+    event(
+        db,
+        &format!("Server added: {name} (discovered candidate adopted)"),
+        Some(&id),
+    )?;
+    Ok(Some(ServerId::parse(&id)?))
+}
+/// Frees a host held only by a discovered candidate so the owner can give it
+/// to another server. The candidate (never reviewed, never contacted) is
+/// removed. Returns false when no other server has the host or when the holder
+/// is not a candidate; the caller's update then conflicts as before.
+pub(crate) fn release_candidate_host(
+    db: &rusqlite::Connection,
+    host: &str,
+    keep: &ServerId,
+) -> Result<bool, AtlasError> {
+    let found: Option<(String, String)> = db
+        .query_row(
+            "SELECT s.id,m.payload FROM servers s JOIN monitoring m ON m.server_id=s.id WHERE s.host=?1 AND s.id<>?2",
+            params![host, keep.as_str()],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()
+        .map_err(sql_error)?;
+    let Some((id, payload)) = found else {
+        return Ok(false);
+    };
+    let record: MonitoringRecord =
+        serde_json::from_str(&payload).map_err(|_| AtlasError::new(ErrorCode::IoFailure))?;
+    if record.policy.lifecycle != ServerLifecycle::Candidate {
+        return Ok(false);
+    }
+    for statement in [
+        "DELETE FROM events WHERE server_id=?1",
+        "DELETE FROM edges WHERE source=?1 OR target=?1",
+        "DELETE FROM monitoring WHERE server_id=?1",
+        "DELETE FROM servers WHERE id=?1",
+    ] {
+        db.execute(statement, [id.as_str()]).map_err(sql_error)?;
+    }
+    event(
+        db,
+        "Discovered candidate replaced by this server's new address",
+        Some(keep.as_str()),
+    )?;
+    Ok(true)
+}
 fn write_record(db: &rusqlite::Connection, record: &MonitoringRecord) -> Result<(), AtlasError> {
     let json = serde_json::to_string(record).map_err(|_| AtlasError::new(ErrorCode::IoFailure))?;
     db.execute("INSERT INTO monitoring VALUES(?,?) ON CONFLICT(server_id) DO UPDATE SET payload=excluded.payload",params![record.server_id.as_str(),json]).map_err(sql_error)?;
@@ -309,6 +389,148 @@ pub fn typescript_contracts(config: &Config) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn adding_a_discovered_candidate_adopts_it_instead_of_conflicting() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut store = Store::create(&dir.path().join("map.db")).unwrap();
+        let candidate = store.add_monitoring_candidate("lab-alias").unwrap();
+        let before = store.snapshot().unwrap().servers[0].clone();
+        // Host matching is case-insensitive, like the unique host rule.
+        let adopted = store
+            .add_server(AddServer {
+                name: "Lab server".into(),
+                host: "LAB-ALIAS".into(),
+            })
+            .unwrap();
+        assert_eq!(adopted, candidate);
+        let state = store.snapshot().unwrap();
+        assert_eq!(state.servers.len(), 1);
+        let server = &state.servers[0];
+        assert_eq!(server.name, "Lab server");
+        assert_eq!((server.x, server.y), (before.x, before.y));
+        assert_eq!(server.host, "lab-alias");
+        let record = store.monitoring().unwrap().records.remove(0);
+        assert_eq!(record.policy.lifecycle, ServerLifecycle::Active);
+        assert!(!record.policy.enabled && !record.policy.permits_contact());
+        assert!(
+            state
+                .events
+                .iter()
+                .any(|e| e.message.contains("discovered candidate adopted"))
+        );
+        // Once active it is an ordinary server: adding it again conflicts.
+        assert_eq!(
+            store
+                .add_server(AddServer {
+                    name: "Again".into(),
+                    host: "lab-alias".into(),
+                })
+                .unwrap_err()
+                .code,
+            ErrorCode::Conflict
+        );
+    }
+
+    #[test]
+    fn editing_a_host_to_a_discovered_candidate_replaces_the_candidate() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut store = Store::create(&dir.path().join("map.db")).unwrap();
+        let server = store
+            .add_server(AddServer {
+                name: "Lab".into(),
+                host: "lab-old".into(),
+            })
+            .unwrap();
+        let candidate = store.add_monitoring_candidate("lab-new").unwrap();
+        let host_only = |host: &str| UpdateServer {
+            name: None,
+            host: Some(host.into()),
+            x: None,
+            y: None,
+        };
+        store.update_server(&server, host_only("LAB-NEW")).unwrap();
+        let state = store.snapshot().unwrap();
+        assert_eq!(state.servers.len(), 1);
+        assert_eq!(state.servers[0].id, server);
+        assert_eq!(state.servers[0].host, "LAB-NEW");
+        assert!(
+            store
+                .monitoring()
+                .unwrap()
+                .records
+                .iter()
+                .all(|r| r.server_id != candidate)
+        );
+        assert!(
+            state
+                .events
+                .iter()
+                .all(|e| e.server_id.as_ref() != Some(&candidate))
+        );
+        // A host held by a reviewed (active) server still conflicts, and the
+        // failed edit changes nothing.
+        let other = store.add_monitoring_candidate("lab-other").unwrap();
+        store
+            .set_monitoring(&other, MonitoringPolicy::default())
+            .unwrap();
+        assert_eq!(
+            store
+                .update_server(&server, host_only("lab-other"))
+                .unwrap_err()
+                .code,
+            ErrorCode::Conflict
+        );
+        let state = store.snapshot().unwrap();
+        assert_eq!(state.servers.len(), 2);
+        assert!(
+            state
+                .servers
+                .iter()
+                .any(|s| s.id == server && s.host == "LAB-NEW")
+        );
+    }
+
+    #[test]
+    fn archived_ignored_and_plain_hosts_still_conflict() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut store = Store::create(&dir.path().join("map.db")).unwrap();
+        for (host, lifecycle) in [
+            ("archived-alias", ServerLifecycle::Archived),
+            ("ignored-alias", ServerLifecycle::Ignored),
+        ] {
+            let id = store.add_monitoring_candidate(host).unwrap();
+            store
+                .set_monitoring(
+                    &id,
+                    MonitoringPolicy {
+                        lifecycle,
+                        ..MonitoringPolicy::default()
+                    },
+                )
+                .unwrap();
+        }
+        store
+            .add_server(AddServer {
+                name: "Plain".into(),
+                host: "plain-host".into(),
+            })
+            .unwrap();
+        for host in ["archived-alias", "ignored-alias", "plain-host"] {
+            assert_eq!(
+                store
+                    .add_server(AddServer {
+                        name: "Duplicate".into(),
+                        host: host.into(),
+                    })
+                    .unwrap_err()
+                    .code,
+                ErrorCode::Conflict,
+                "{host}"
+            );
+        }
+        assert_eq!(store.snapshot().unwrap().servers.len(), 3);
+    }
+
     #[test]
     fn failed_candidate_policy_write_rolls_back_entire_candidate() {
         let dir = tempfile::tempdir().unwrap();

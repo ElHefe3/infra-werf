@@ -200,6 +200,12 @@ impl Store {
         let host = hostname(&input.host)?;
         let id = ServerId::generate();
         let tx = self.db.transaction().map_err(sql_error)?;
+        // A host InfraWerf already discovered in the SSH configuration is
+        // adopted rather than refused as a duplicate (D054).
+        if let Some(adopted) = crate::monitoring::adopt_candidate(&tx, &host, &name)? {
+            tx.commit().map_err(sql_error)?;
+            return Ok(adopted);
+        }
         let count: i64 = tx
             .query_row("SELECT count(*) FROM servers", [], |r| r.get(0))
             .map_err(sql_error)?;
@@ -229,6 +235,10 @@ impl Store {
             .transpose()?;
         let host = input.host.as_ref().map(|v| hostname(v)).transpose()?;
         let tx = self.db.transaction().map_err(sql_error)?;
+        // A host held only by a discovered candidate is given to this server (D054).
+        if let Some(host) = host.as_deref() {
+            crate::monitoring::release_candidate_host(&tx, host, id)?;
+        }
         let changed = tx.execute("UPDATE servers SET name=coalesce(?1,name),host=coalesce(?2,host),x=coalesce(?3,x),y=coalesce(?4,y) WHERE id=?5", params![name, host, input.x, input.y, id.as_str()]).map_err(sql_error)?;
         if changed == 0 {
             return Err(AtlasError::new(ErrorCode::NotFound));

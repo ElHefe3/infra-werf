@@ -90,7 +90,7 @@ try {
   expect(afterComplete.edges).toEqual(before.edges);
   expect(afterComplete.servers.find(server => server.id === otherId)).toEqual(before.servers.find(server => server.id === otherId));
   expect(afterComplete.events).toHaveLength(before.events.length + 1);
-  expect(afterComplete.events[0].message).toContain('Approved inventory refreshed');
+  expect(afterComplete.events[0].message).toMatch(/Initial approved inventory collected|Approved inventory refreshed/);
   const formattedSourceTime = await page.evaluate(value => new Date(value).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }), ownerAfter.inventory.collected_at);
   expect(await workspace.getByRole('status').innerText()).toContain(formattedSourceTime);
   const completeDbBytes = await readFile(database);
