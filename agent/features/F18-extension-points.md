@@ -36,7 +36,7 @@ Define one registration contract per extension point in `crates/atlas-core` and 
 
 - [x] Every workspace tab and server-card badge is rendered from a registry entry, not a hard-coded list.
 - [x] Inventory collectors and health checks are enumerated from a registry in the core.
-- [ ] All existing native suites pass unchanged, proving no behaviour change.
+- [x] All existing native suites pass unchanged, proving no behaviour change.
 - [x] Each registry entry declares the capabilities it uses.
 
 ### Verification
@@ -45,7 +45,7 @@ Existing native verification suites and UI tests, plus a unit test per registry 
 
 ### Evidence and closure
 
-Implementation and unit proof are recorded in [T037 progress](../evidence/T037-progress.md). Three of four criteria are met. Eight native suites fail identically on the 0.1.5 baseline ([D054](../discovery/D054-native-suites-conflict-with-alias-discovery.md)), so the native criterion is open and the ticket remains in progress.
+Implementation and unit proof are recorded in [T037 progress](../evidence/T037-progress.md). All four criteria are demonstrated on `28c9efc`: all twelve native suites pass after the [D054](../discovery/D054-native-suites-conflict-with-alias-discovery.md) fix, with one disclosed inventory-suite assertion update. Independent review is pending, so the ticket remains in progress.
 
 ### Stop conditions
 

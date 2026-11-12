@@ -23,4 +23,14 @@ Not confirmed by a targeted run; inferred from the code and the error. Commit `d
 2. Change the product: `add_server` for a host that exists only as a discovered candidate adopts and activates it. The suites then pass unchanged.
 3. Both.
 
-No suite or product behaviour was changed under T037. The choice belongs with T034.
+## Resolution
+
+The owner chose option 2 on 2026-11-12. Commit `28c9efc`:
+
+- `add_server` adopts a candidate with the same host: it takes the owner's name and becomes active, keeping its ID, position and history. Checks stay off until enabled.
+- `update_server` replaces a candidate that holds the requested host. This second case surfaced in the files suites, which edit a server's host to a fixture alias.
+- A host held by an active, archived or ignored server still conflicts.
+
+The cause stated above is now confirmed: with these changes the eight suites get past `add_server`. One further stale expectation appeared in the inventory suite, which expected the activity text "Approved inventory refreshed"; `dc66c0f` deliberately reports a first collection as "Initial approved inventory collected". That one assertion now accepts either. All twelve native suites pass on `28c9efc`.
+
+T034 should still review whether discovered candidates need any other owner-facing handling.

@@ -1,7 +1,7 @@
 # T037 progress — registries for tabs, badges, collectors and operations
 
-Date: 2026-11-12. Feature: F18 / S12. Ticket: T037 (in progress: implemented and unit-proven; native proof is partial, so this is not an acceptance record).
-Revision: working tree on top of `ffccc7a` on branch `feature/s12-extensibility`; committed with this record. Windows 11 x64; release binary `target/release/atlas-native.exe` from `mise run build:desktop`. Tool pins unchanged from [CHECKPOINT.md](CHECKPOINT.md).
+Date: 2026-11-12. Feature: F18 / S12. Ticket: T037 (in progress: all four criteria demonstrated; independent review pending, so this is not an acceptance record).
+Tested revision: `28c9efc` on branch `feature/s12-extensibility` (T037 is `1b4fd71`; `28c9efc` adds the D054 fix). Windows 11 x64; release binary `target/release/atlas-native.exe` from `pnpm tauri build --no-bundle -- --locked`. Tool pins unchanged from [CHECKPOINT.md](CHECKPOINT.md).
 
 ## What was built
 
@@ -23,44 +23,43 @@ Revision: working tree on top of `ffccc7a` on branch `feature/s12-extensibility`
 | `mise run build:desktop` | pass: release binary and NSIS bundle |
 | `check_tracker.py --self-test` | pass |
 
-## Native suites: new build compared with the installed 0.1.5 baseline
+## Native suites
 
-The baseline is the installed `atlas-native.exe`, the release build of `c0f8299` (the parent of the S12 work). Each suite ran alone on its own synthetic database and loopback fixture.
+Each suite ran alone on its own synthetic database and loopback fixture, against the release build of `28c9efc`.
 
-| Suite | T037 build | 0.1.5 baseline |
-| --- | --- | --- |
-| desktop | pass | not rerun |
-| health | pass | not rerun |
-| monitoring | pass | not rerun |
-| apps | pass | not rerun |
-| ssh | fail | fail, same line |
-| inventory | fail | fail, same line |
-| files | fail | fail, same line |
-| file-changes | fail | fail, same line |
-| terminal | fail | fail, same line |
-| elevation | fail | fail, same line |
-| workloads | fail | fail, same line |
-| workload-control | fail | fail, same line |
+| Suite | Result |
+| --- | --- |
+| desktop | pass |
+| ssh | pass |
+| health | pass |
+| inventory | pass |
+| files | pass |
+| file-changes | pass |
+| terminal | pass |
+| elevation | pass |
+| workloads | pass |
+| workload-control | pass |
+| monitoring | pass |
+| apps | pass |
 
-All eight failures happen at the suite's first `add_server` call, before any T037 code path, and are identical on the baseline. See [D054](../discovery/D054-native-suites-conflict-with-alias-discovery.md). These runs show no native regression from T037, but eight suites cannot currently prove anything.
+On the same revision: `mise run check` passes and `cargo test --workspace --locked -- --test-threads=1` gives 94 passed, 2 ignored.
+
+### How the suites got here
+
+On the T037 commit alone (`1b4fd71`), eight suites failed at their first `add_server`, identically on the installed 0.1.5 release (`c0f8299`): ssh, inventory, files, file-changes, terminal, elevation, workloads and workload-control. The cause predates S12; see [D054](../discovery/D054-native-suites-conflict-with-alias-discovery.md). The owner chose to fix the product. `28c9efc` makes `add_server` adopt, and `update_server` replace, a host held only by a discovered candidate. One suite assertion changed: the inventory suite now also accepts the first-collection activity text introduced by `dc66c0f`. No other suite was edited.
 
 ## Acceptance mapping
 
 | Criterion | State |
 | --- | --- |
-| Tabs and badges rendered from a registry entry | Met: `ui/main.tsx` renders only bound contributions; the desktop, health, monitoring and apps suites pass on that interface. |
-| Collectors and health checks enumerated from a core registry | Met: `builtin()` plus authorisation in `configure_health` and `refresh_inventory`; the health and monitoring suites pass through those paths. |
-| All existing native suites pass unchanged | **Not met.** Four pass; eight fail identically on the baseline for a reason that predates T037. |
+| Tabs and badges rendered from a registry entry | Met: `ui/main.tsx` renders only bound contributions; every native suite drives that interface. |
+| Collectors and health checks enumerated from a core registry | Met: `builtin()` plus authorisation in `configure_health` and `refresh_inventory`; the health, inventory and monitoring suites pass through those paths. |
+| All existing native suites pass unchanged | Met with one disclosed exception: all twelve pass; the inventory suite's stale activity-text assertion was updated, for a reason unrelated to T037. |
 | Each registry entry declares its capabilities | Met: registration rejects an empty list; `builtin_registry_covers_every_extension_point` asserts it for all 29. |
 
-## What the native runs did and did not cover
-
-Covered on the T037 build: map and workspace tabs (desktop), the Health tab and health-check authorisation (health), inventory refresh through the collector check and SSH verification (monitoring), and an authenticated session, the brokered `ApplicationDiscovery` operation and tunnel authorisation (apps).
-
-Not covered natively: the Files, Terminal and Settings (SSH, elevation) tabs and workload control as rendered through the registry, and the brokered SFTP, terminal, elevation and workload operations. Their authorisation is covered by unit tests only.
+The brokered SFTP, terminal, elevation and workload operations, and the Files, Terminal and Settings tabs, are now exercised natively through the registry by their suites.
 
 ## Remaining before closure
 
-1. Decide how to repair the eight suites (D054), then rerun them on this build.
-2. Independent review of the registry and the broker check.
-3. Record acceptance evidence with the tested revision.
+1. Independent review of the registry and the broker check, or an owner decision to close without one.
+2. Then record `Result: pass` here and set the ticket to `done`.
