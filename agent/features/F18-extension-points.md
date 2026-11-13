@@ -86,3 +86,41 @@ None yet.
 ### Stop conditions
 
 Stop if the conversion needs a private back door into the core; that means the extension points are wrong.
+
+## T052 — Application Settings screen as an extension point
+
+<!-- atlas-ticket: {"id":"T052","feature":"F18","status":"todo","depends_on":["T037"],"evidence":null} -->
+
+### Outcome and included work
+
+One application-wide Settings screen, reached from the main navigation, that holds every setting not tied to a single server ([D055](../discovery/D055-plugin-choices-belong-to-the-owner-in-settings.md)). Its sections are registered contributions at a new `app_settings_section` extension point. The existing application-wide options move into it: history retention and SSH alias discovery, which are on the Servers & monitoring view today.
+
+### Exclusions
+
+Plugin management itself (F20, F22); any per-server setting, which stays in the server's Settings tab; new settings beyond the ones that exist today.
+
+### Implementation and contracts
+
+Add `app_settings_section` to `ExtensionPoint` with the capabilities its sections may declare, register the built-in sections in `builtin()` and bind them in the interface exactly as workspace tabs are bound. Moving an option changes where it is shown, not its command or its stored value. Keep the Servers & monitoring view for per-server lifecycle and monitoring policy.
+
+**Ticket dependencies:** [T037](F18-extension-points.md).
+
+### Acceptance criteria
+
+- [ ] A Settings entry in the main navigation opens one screen whose sections all come from registry entries.
+- [ ] History retention and alias discovery are on that screen and behave as before.
+- [ ] No per-server setting appears on it, and no application-wide setting remains only on another screen.
+- [ ] The native suites that use the moved options pass, updated only for the new location.
+
+### Verification
+
+Unit tests for the new extension point and binding; the monitoring native suite for the moved options; a native journey that opens Settings and changes history retention.
+
+### Evidence and closure
+
+None yet.
+
+### Stop conditions
+
+Stop if moving an option would change its stored value or its command contract.
+

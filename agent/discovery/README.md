@@ -66,3 +66,4 @@ Link important discoveries from affected feature packets and the checkpoint. Nev
 - [D052 Owner direction: InfraWerf as an open-source plugin platform](D052-plugin-platform-direction.md)
 - [D053 Owner activates extensibility (S12) and starts T037](D053-owner-activates-extensibility.md)
 - [D054 Eight native suites fail at add_server since alias discovery](D054-native-suites-conflict-with-alias-discovery.md)
+- [D055 Plugin choices belong to each owner, in one Settings screen](D055-plugin-choices-belong-to-the-owner-in-settings.md)

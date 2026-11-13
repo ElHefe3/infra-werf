@@ -16,7 +16,7 @@ Context: The owner decided on 2026-11-11 that an explicitly trusted plugin may a
 
 ## T041 — Capability model and consent screen
 
-<!-- atlas-ticket: {"id":"T041","feature":"F20","status":"todo","depends_on":["T039"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T041","feature":"F20","status":"todo","depends_on":["T039","T052"],"evidence":null} -->
 
 ### Outcome and included work
 
@@ -28,9 +28,9 @@ Capabilities that expose private keys, raw SSH sessions, sudo passwords or the l
 
 ### Implementation and contracts
 
-Enforce capabilities in the Rust core at the extension-point boundary, never in the UI. A plugin may only use what its manifest requested and the owner granted. Grants are stored per plugin and per server. Three trust levels: read-only, changes with confirmation (existing preview-and-confirm flow) and trusted automation.
+Trust is each owner's choice ([D055](../discovery/D055-plugin-choices-belong-to-the-owner-in-settings.md)): the consent screen and trust level live in the application Settings screen (T052), and per-server grants in that server's Settings tab. A newly enabled plugin starts at the default trust level (proposed: read-only; a project-owner decision). Enforce capabilities in the Rust core at the extension-point boundary, never in the UI. A plugin may only use what its manifest requested and the owner granted. Grants are stored per plugin and per server. Three trust levels: read-only, changes with confirmation (existing preview-and-confirm flow) and trusted automation.
 
-**Ticket dependencies:** [T039](F19-plugin-api-manifest.md).
+**Ticket dependencies:** [T039](F19-plugin-api-manifest.md), [T052](F18-extension-points.md).
 
 ### Acceptance criteria
 
@@ -65,7 +65,7 @@ Storing protected results or command output containing secrets in the log; remot
 
 ### Implementation and contracts
 
-Extend the existing bounded activity history with a plugin source. Elevation is never implied by trust: a trusted plugin that needs sudo still uses the per-action elevation rules unless the owner grants a named, scoped exception. Disabling cancels the plugin's running and scheduled work.
+The plugin activity log and the control that turns all plugins off are sections of the application Settings screen (T052). Extend the existing bounded activity history with a plugin source. Elevation is never implied by trust: a trusted plugin that needs sudo still uses the per-action elevation rules unless the owner grants a named exception for one plugin, one server and one action, in that server's Settings tab. There is no blanket elevation option. Disabling cancels the plugin's running and scheduled work.
 
 **Ticket dependencies:** [T041](F20-plugin-permissions.md).
 
