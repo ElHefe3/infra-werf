@@ -8,7 +8,7 @@ import { createWorkspaceClient } from "./workspace-client";
 import { TransferQueue, useTransfers } from "./transfer-queue";
 import { BrandMark } from "./brand";
 import { MonitoringHub, activeMap, liveStatus } from "./live-monitoring";
-import { bindExtensions, DEFAULT_TAB_FOOTER, ExtensionsContext, ServerBadges, useExtensions, type BoundExtensions, type WorkspaceContext } from "./extensions";
+import { bindExtensions, DEFAULT_TAB_FOOTER, ExtensionsContext, ServerBadges, TAB, useExtensions, type BoundExtensions, type WorkspaceContext } from "./extensions";
 import { date, memory, Notice, SavedInventory } from "./workspace-parts";
 import type { MonitoringState } from "./contracts.gen";
 import type { MapServer, MapState, Relationship, WorkspaceStatus } from "./contracts.gen";
@@ -17,7 +17,7 @@ import "@xyflow/react/dist/style.css";
 import "./style.css";
 
 const client = createWorkspaceClient();
-// A workspace tab is identified by its registered title (for example "Files").
+// A workspace tab is identified by its contribution ID (for example TAB.files).
 type WorkspaceTab = string;
 type Modal = { kind: "add" } | { kind: "edit"; id: string } | { kind: "relationship"; source: string; target: string } | { kind: "remove-server"; id: string } | { kind: "remove-edge"; edge: Relationship };
 type ServerFlowNode = Node<{ server: MapServer; matched: boolean; open: (id: string) => void }, "server">;
@@ -91,7 +91,7 @@ function Dialog({ title, children, close, busy = false, wide = false }: { title:
 }
 
 
-function ServerWorkspace({ server, state, close, edit, reload, initialTab = "Services" }: { server: MapServer; state: MapState; close: () => void; edit: () => void; reload: () => Promise<void>; initialTab?: WorkspaceTab }) {
+function ServerWorkspace({ server, state, close, edit, reload, initialTab = TAB.services }: { server: MapServer; state: MapState; close: () => void; edit: () => void; reload: () => Promise<void>; initialTab?: WorkspaceTab }) {
   const extensions = useExtensions();
   const [tab, setTab] = useState<WorkspaceTab>(initialTab);
   const transfers = useTransfers();
@@ -114,10 +114,10 @@ function ServerWorkspace({ server, state, close, edit, reload, initialTab = "Ser
       setRefreshMessage(`Inventory refresh failed. The last saved observation was retained. ${errorMessage(failure)}`);
     } finally { reportBusy("inventory", false); setRefreshing(false); }
   };
-  const active = extensions.tabs.find(entry => entry.contribution.title === tab) ?? extensions.tabs[0];
+  const active = extensions.tabs.find(entry => entry.contribution.id === tab) ?? extensions.tabs[0];
   const context: WorkspaceContext = { server, state, busy: checkingSsh, reportBusy, refreshInventory, refreshing, filter, setFilter, transfers, openTab: setTab, edit, settings: extensions.settings };
   return <Dialog title={server.name} close={close} wide busy={checkingSsh}><div className="workspace-server-line"><span>{server.host}</span><span>{observedLabel(server)} · {date(server.inventory?.collected_at)}</span></div>
-    <div className="workspace-tabs" role="tablist" aria-label="Server workspace">{extensions.tabs.map(({ contribution }) => <button key={contribution.id} role="tab" disabled={checkingSsh} aria-selected={active?.contribution.id === contribution.id} onClick={() => setTab(contribution.title)}>{contribution.title}</button>)}</div>
+    <div className="workspace-tabs" role="tablist" aria-label="Server workspace">{extensions.tabs.map(({ contribution }) => <button key={contribution.id} role="tab" disabled={checkingSsh} aria-selected={active?.contribution.id === contribution.id} onClick={() => setTab(contribution.id)}>{contribution.title}</button>)}</div>
     <section className="workspace-body" role="tabpanel" aria-label={active?.contribution.title}>
       {refreshMessage && <p className={`inventory-refresh-status ${refreshFailure ? "form-error" : "muted"}`} role={refreshFailure ? "alert" : "status"}>{refreshMessage}</p>}
       {active && <React.Fragment key={active.contribution.id}>{active.renderer.render(context)}</React.Fragment>}
@@ -127,9 +127,12 @@ function ServerWorkspace({ server, state, close, edit, reload, initialTab = "Ser
 
 function App() {
   const transfers = useTransfers();
-  const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>("Services");
+  const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>(TAB.services);
   const [state, setState] = useState<MapState | null>(null);
   const [extensions, setExtensions] = useState<BoundExtensions | null>(null);
+  // The map is shown only once the extension catalogue is bound; a card
+  // without its badges, or a workspace that cannot open, is worse than none.
+  const extensionsReady = useRef(false);
   const [monitoring,setMonitoring]=useState<MonitoringState|null>(null);
   const [,setLiveClock]=useState(0);
   const [status, setStatus] = useState<WorkspaceStatus | null>(null);
@@ -148,12 +151,12 @@ function App() {
   const search = useRef<HTMLInputElement>(null);
   const refresh = useCallback(async () => {
     setError("");
-    try { const value = await client.retry(); setExtensions(bindExtensions(await client.extensions())); setState(value); setStatus(await client.status()); setSelected(current => current && value.servers.some(s => s.id === current) ? current : value.servers[0]?.id ?? null); }
+    try { const value = await client.retry(); const bound = bindExtensions(await client.extensions()); const live = await client.monitoring(); setExtensions(bound); extensionsReady.current = true; setMonitoring(live); setState(value); setStatus(await client.status()); setSelected(current => current && value.servers.some(s => s.id === current) ? current : value.servers[0]?.id ?? null); }
     catch (e) { setError(errorMessage(e)); }
   }, []);
   const reloadLive=useCallback(async()=>{
     const [map,live]=await Promise.all([client.load(),client.monitoring()]);
-    if (!busyRef.current) {setState(map);setMonitoring(live);}
+    if (!busyRef.current && extensionsReady.current) {setState(map);setMonitoring(live);}
   },[]);
   useEffect(()=>{
     if (!isTauri()) return;
@@ -177,11 +180,11 @@ function App() {
   async function mutate(action: () => Promise<MapState>, message: string, close = false): Promise<boolean> {
     if (busyRef.current) return false;
     busyRef.current = true; setBusy(true); setError(""); setNotice("");
-    try { const next = await action(); setState(next); setNotice(message); if (close) setModal(null); setSelected(current => current && next.servers.some(s => s.id === current) ? current : next.servers.at(-1)?.id ?? null); return true; }
+    try { const next = await action(); const live = await client.monitoring().catch(() => null); setState(next); if (live) setMonitoring(live); setNotice(message); if (close) setModal(null); setSelected(current => current && next.servers.some(s => s.id === current) ? current : next.servers.at(-1)?.id ?? null); return true; }
     catch (e) { setError(errorMessage(e)); return false; }
     finally { busyRef.current = false; setBusy(false); }
   }
-  const open = useCallback((id: string) => { setWorkspaceTab("Services"); setSelected(id); setWorkspace(id); }, []);
+  const open = useCallback((id: string) => { setWorkspaceTab(TAB.services); setSelected(id); setWorkspace(id); }, []);
   const visibleState=state ? activeMap(state,monitoring) : null;
   const server = visibleState?.servers.find(s => s.id === selected);
   const workspaceServer = state?.servers.find(s => s.id === workspace);
@@ -209,7 +212,7 @@ function App() {
               {view === "servers" && <MonitoringHub state={state} monitoring={monitoring} client={client} reload={reloadLive} remove={id=>setModal({kind:"remove-server",id})} open={open} />}
               {view === "inventory" && <SavedInventory state={state} query={query} open={open} />}
               {view === "activity" && <div className="activity-view"><h2>Workspace activity</h2><p>Timestamped reachability, inventory and lifecycle changes. Use Servers & monitoring to set history retention.</p><ActivityList state={state} /></div>}
-              {view === "transfers" && <TransferQueue rows={transfers.rows} failure={transfers.failure} retry={id => { setWorkspaceTab("Files"); setSelected(id); setWorkspace(id); }} />}
+              {view === "transfers" && <TransferQueue rows={transfers.rows} failure={transfers.failure} retry={id => { setWorkspaceTab(TAB.files); setSelected(id); setWorkspace(id); }} />}
             </>}
             <footer className="map-footer"><div><span><i className="legend-dot saved" /> Inventory observation</span><span><i className="legend-dot stale" /> Stale / unknown</span></div><button className="text-button" onClick={()=>setView("servers")}>Servers & monitoring</button><button className="text-button" disabled={!available || !status?.report_import_available} title={status?.report_import_available ? "Import newer approved saved reports" : "No report directory configured for this native workspace"} onClick={() => void mutate(client.importReports, "Approved report import finished.")}>↻ Import newer reports</button></footer>
           </div>

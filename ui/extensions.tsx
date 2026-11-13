@@ -30,8 +30,8 @@ export type WorkspaceContext = {
   filter: string;
   setFilter: (value: string) => void;
   transfers: ReturnType<typeof useTransfers>;
-  /** Switch to another tab by its title. */
-  openTab: (title: string) => void;
+  /** Switch to another tab by its contribution ID. */
+  openTab: (id: string) => void;
   edit: () => void;
   settings: Bound<SettingsRenderer>[];
 };
@@ -39,6 +39,9 @@ export type WorkspaceContext = {
 export type TabRenderer = { render: (context: WorkspaceContext) => React.ReactNode; footer?: string };
 export type SettingsRenderer = (context: WorkspaceContext) => React.ReactNode;
 export type BadgeRenderer = { slot: "heading" | "body"; render: (server: MapServer) => React.ReactNode };
+
+/** Tabs the application shell opens by itself. Tabs are identified by ID; titles are only labels. */
+export const TAB = { services: "builtin.tab.services", files: "builtin.tab.files" } as const;
 
 export const DEFAULT_TAB_FOOTER = "Saved inventory view · Live controls require an authenticated session";
 
@@ -50,7 +53,7 @@ const tabs: Record<string, TabRenderer> = {
   "builtin.tab.apps": { render: c => <RemoteApps key={`${c.server.id}:${c.server.host}`} server={c.server} disabled={c.busy} /> },
   "builtin.tab.system": { render: c => <><div className="section-heading"><div><h3>Saved system inventory</h3><p>Approved host details, services and containers from the latest complete collection.</p></div><button className="primary" disabled={c.busy} onClick={() => void c.refreshInventory()}>{c.refreshing ? "Refreshing…" : "Refresh inventory"}</button></div>{c.server.inventory ? <><dl className="system-grid"><div><dt>Hostname</dt><dd>{c.server.inventory.hostname}</dd></div><div><dt>Logical CPUs</dt><dd>{c.server.inventory.cpus}</dd></div><div><dt>Total memory</dt><dd>{memory(c.server.inventory.memory_total_kib)}</dd></div><div><dt>Collected on host</dt><dd>{date(c.server.inventory.collected_at)}</dd></div></dl><Notice>These are saved hardware details. Live utilisation is not collected. Open Health for separate host and service checks.</Notice></> : <Notice>No saved system inventory is available for this server.</Notice>}</> },
   "builtin.tab.settings": { render: c => <>{c.settings.map(section => <React.Fragment key={section.contribution.id}>{section.renderer(c)}</React.Fragment>)}</> },
-  "builtin.tab.transfers": { render: c => <TransferQueue rows={c.transfers.rows.filter(row => row.server_id === c.server.id)} failure={c.transfers.failure} retry={() => c.openTab("Files")} /> },
+  "builtin.tab.transfers": { render: c => <TransferQueue rows={c.transfers.rows.filter(row => row.server_id === c.server.id)} failure={c.transfers.failure} retry={() => c.openTab(TAB.files)} /> },
 };
 
 const settings: Record<string, SettingsRenderer> = {

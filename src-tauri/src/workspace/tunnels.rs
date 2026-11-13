@@ -33,7 +33,7 @@ impl Workspace {
     ) -> Result<TunnelInfo, AtlasError> {
         request.validate()?;
         self.broker.extensions().authorize(
-            "builtin.operation.loopback-tunnel",
+            atlas_core::extensions::OPERATION_LOOPBACK_TUNNEL,
             atlas_core::extensions::Capability::LoopbackTunnel,
         )?;
         if let Some(host) = request.remote_host.as_deref() {

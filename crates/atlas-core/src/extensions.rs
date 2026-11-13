@@ -5,6 +5,12 @@
 //! The registry describes and authorises; it grants nothing by itself. SSH
 //! authentication, session scope and elevation rules are enforced where they
 //! always were. Today every contribution is owned by `builtin`.
+//!
+//! What `authorize` proves today: the operation, collector or check about to
+//! run is registered and declared the capability it needs, so removing a
+//! contribution turns it off. It does not yet know which tab or plugin asked;
+//! the capabilities declared by interface contributions are descriptive until
+//! F20 adds caller identity and owner grants.
 use crate::health::ProbeKind;
 use crate::operations::Inspection;
 use crate::*;
@@ -212,6 +218,11 @@ impl ExtensionRegistry {
 }
 
 pub const COLLECTOR_BASELINE_INVENTORY: &str = "builtin.collector.baseline-inventory";
+/// Operations that are not an `Inspection`: the two session bootstraps and the
+/// remote-application tunnel.
+pub const OPERATION_CONNECTION_CHECK: &str = "builtin.operation.connection-check";
+pub const OPERATION_SFTP_OPEN: &str = "builtin.operation.sftp-open";
+pub const OPERATION_LOOPBACK_TUNNEL: &str = "builtin.operation.loopback-tunnel";
 
 /// Registry entry behind a health probe kind.
 pub fn health_check_id(kind: ProbeKind) -> &'static str {
@@ -382,7 +393,21 @@ pub fn builtin() -> ExtensionRegistry {
             20,
             &[NetworkProbe],
         ),
-        // Brokered operations, one per `Inspection`.
+        // Brokered operations: the two bootstraps, then one per `Inspection`.
+        (
+            OPERATION_CONNECTION_CHECK,
+            Operation,
+            "SSH connection check",
+            1,
+            &[SshSession],
+        ),
+        (
+            OPERATION_SFTP_OPEN,
+            Operation,
+            "Open file session",
+            2,
+            &[SshSession],
+        ),
         (
             "builtin.operation.system-summary",
             Operation,
@@ -461,7 +486,7 @@ pub fn builtin() -> ExtensionRegistry {
             &[InteractiveTerminal],
         ),
         (
-            "builtin.operation.loopback-tunnel",
+            OPERATION_LOOPBACK_TUNNEL,
             Operation,
             "Remote application tunnel",
             120,
@@ -561,6 +586,14 @@ mod tests {
         registry
             .authorize(COLLECTOR_BASELINE_INVENTORY, Capability::RunApprovedCommand)
             .unwrap();
+        for (id, capability) in [
+            (OPERATION_CONNECTION_CHECK, Capability::SshSession),
+            (OPERATION_SFTP_OPEN, Capability::SshSession),
+            (OPERATION_LOOPBACK_TUNNEL, Capability::LoopbackTunnel),
+        ] {
+            assert_eq!(registry.get(id).unwrap().point, ExtensionPoint::Operation);
+            registry.authorize(id, capability).unwrap();
+        }
         let operations = [
             Inspection::SystemSummary {},
             Inspection::ApplicationDiscovery {},

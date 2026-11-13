@@ -88,6 +88,21 @@ fn marker(db: &Connection) -> Result<(i32, i32), AtlasError> {
             .map_err(sql_error)?,
     ))
 }
+/// Deletes a server and every row keyed to it. Returns false when it did not
+/// exist. The one place that knows which tables hold per-server rows.
+pub(crate) fn delete_server_rows(db: &Connection, id: &ServerId) -> Result<bool, AtlasError> {
+    for statement in [
+        "DELETE FROM events WHERE server_id=?1",
+        "DELETE FROM edges WHERE source=?1 OR target=?1",
+        "DELETE FROM monitoring WHERE server_id=?1",
+    ] {
+        db.execute(statement, [id.as_str()]).map_err(sql_error)?;
+    }
+    Ok(db
+        .execute("DELETE FROM servers WHERE id=?1", [id.as_str()])
+        .map_err(sql_error)?
+        > 0)
+}
 pub(crate) fn event(db: &Connection, message: &str, sid: Option<&str>) -> Result<(), AtlasError> {
     db.execute(
         "INSERT INTO events(at,message,server_id) VALUES(?,?,?)",
@@ -227,6 +242,17 @@ impl Store {
     }
 
     pub fn update_server(&mut self, id: &ServerId, input: UpdateServer) -> Result<(), AtlasError> {
+        self.update_server_replacing(id, input).map(|_| ())
+    }
+
+    /// Updates a server. When the new host was held only by a discovered
+    /// candidate, that candidate is removed and its ID returned so the caller
+    /// can end anything still attached to it.
+    pub fn update_server_replacing(
+        &mut self,
+        id: &ServerId,
+        input: UpdateServer,
+    ) -> Result<Option<ServerId>, AtlasError> {
         input.validate()?;
         let name = input
             .name
@@ -236,9 +262,10 @@ impl Store {
         let host = input.host.as_ref().map(|v| hostname(v)).transpose()?;
         let tx = self.db.transaction().map_err(sql_error)?;
         // A host held only by a discovered candidate is given to this server (D054).
-        if let Some(host) = host.as_deref() {
-            crate::monitoring::release_candidate_host(&tx, host, id)?;
-        }
+        let replaced = match host.as_deref() {
+            Some(host) => crate::monitoring::release_candidate_host(&tx, host, id)?,
+            None => None,
+        };
         let changed = tx.execute("UPDATE servers SET name=coalesce(?1,name),host=coalesce(?2,host),x=coalesce(?3,x),y=coalesce(?4,y) WHERE id=?5", params![name, host, input.x, input.y, id.as_str()]).map_err(sql_error)?;
         if changed == 0 {
             return Err(AtlasError::new(ErrorCode::NotFound));
@@ -246,23 +273,13 @@ impl Store {
         if name.is_some() || host.is_some() {
             event(&tx, "Server details updated", Some(id.as_str()))?;
         }
-        tx.commit().map_err(sql_error)
+        tx.commit().map_err(sql_error)?;
+        Ok(replaced)
     }
 
     pub fn remove_server(&mut self, id: &ServerId) -> Result<(), AtlasError> {
         let tx = self.db.transaction().map_err(sql_error)?;
-        tx.execute("DELETE FROM events WHERE server_id=?", [id.as_str()])
-            .map_err(sql_error)?;
-        tx.execute(
-            "DELETE FROM edges WHERE source=?1 OR target=?1",
-            [id.as_str()],
-        )
-        .map_err(sql_error)?;
-        if tx
-            .execute("DELETE FROM servers WHERE id=?", [id.as_str()])
-            .map_err(sql_error)?
-            == 0
-        {
+        if !delete_server_rows(&tx, id)? {
             return Err(AtlasError::new(ErrorCode::NotFound));
         }
         event(&tx, "Server removed from map", None)?;

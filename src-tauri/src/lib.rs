@@ -731,13 +731,19 @@ async fn update_server(
     run_store(workspace.inner().clone(), move |w| {
         let host_changed = input.host.is_some();
         let _contact = host_changed.then(|| w.live_contact_guard()).transpose()?;
-        let state = w.with_store(|s| {
-            s.update_server(&id, input)?;
-            s.snapshot()
+        let (state, replaced) = w.with_store(|s| {
+            let replaced = s.update_server_replacing(&id, input)?;
+            Ok((s.snapshot()?, replaced))
         })?;
         w.invalidate_server(&id);
         if host_changed {
             w.cancel_health(&id)?;
+        }
+        // A discovered candidate that gave up its host is gone: end anything
+        // still attached to it, exactly as removing a server does.
+        if let Some(replaced) = &replaced {
+            w.invalidate_server(replaced);
+            w.cancel_health(replaced)?;
         }
         Ok(state)
     })

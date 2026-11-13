@@ -289,85 +289,93 @@ impl Store {
         tx.commit().map_err(sql_error)
     }
 }
+/// The discovered candidate holding `host`, if any. A host held by an active,
+/// archived or ignored server is not a candidate. `except` skips one server.
+fn candidate_for_host(
+    db: &rusqlite::Connection,
+    host: &str,
+    except: Option<&ServerId>,
+) -> Result<Option<MonitoringRecord>, AtlasError> {
+    let payload: Option<String> = db
+        .query_row(
+            "SELECT m.payload FROM servers s JOIN monitoring m ON m.server_id=s.id WHERE s.host=?1 AND s.id<>?2",
+            params![host, except.map_or("", |id| id.as_str())],
+            |r| r.get(0),
+        )
+        .optional()
+        .map_err(sql_error)?;
+    let Some(payload) = payload else {
+        return Ok(None);
+    };
+    let record: MonitoringRecord =
+        serde_json::from_str(&payload).map_err(|_| AtlasError::new(ErrorCode::IoFailure))?;
+    Ok((record.policy.lifecycle == ServerLifecycle::Candidate).then_some(record))
+}
 /// Adopts a server that exists only as a discovered candidate: the owner is
 /// adding a host InfraWerf already found in the SSH configuration. The entry
-/// takes the owner's name and becomes active; its ID, position and history are
-/// kept and checks stay off until enabled. Returns `None` when the host is not
-/// a candidate, so an active, archived or ignored host still conflicts.
+/// takes the owner's name and becomes active; its ID, position, relationships
+/// and history are kept and checks stay off until enabled. Returns `None` when
+/// the host is not a candidate, so any other duplicate host still conflicts.
 pub(crate) fn adopt_candidate(
     db: &rusqlite::Connection,
     host: &str,
     name: &str,
 ) -> Result<Option<ServerId>, AtlasError> {
-    let found: Option<(String, String)> = db
-        .query_row(
-            "SELECT s.id,m.payload FROM servers s JOIN monitoring m ON m.server_id=s.id WHERE s.host=?1",
-            [host],
-            |r| Ok((r.get(0)?, r.get(1)?)),
-        )
-        .optional()
-        .map_err(sql_error)?;
-    let Some((id, payload)) = found else {
+    let Some(mut record) = candidate_for_host(db, host, None)? else {
         return Ok(None);
     };
-    let mut record: MonitoringRecord =
-        serde_json::from_str(&payload).map_err(|_| AtlasError::new(ErrorCode::IoFailure))?;
-    if record.policy.lifecycle != ServerLifecycle::Candidate {
-        return Ok(None);
-    }
+    let id = record.server_id.clone();
     record.policy.lifecycle = ServerLifecycle::Active;
     record.revision = ServerId::generate().as_str().to_owned();
     record.reachability = HostReachability::default();
     record.detail = "Checks paused".into();
-    db.execute("UPDATE servers SET name=?1 WHERE id=?2", params![name, id])
-        .map_err(sql_error)?;
+    db.execute(
+        "UPDATE servers SET name=?1 WHERE id=?2",
+        params![name, id.as_str()],
+    )
+    .map_err(sql_error)?;
     write_record(db, &record)?;
     event(
         db,
         &format!("Server added: {name} (discovered candidate adopted)"),
-        Some(&id),
+        Some(id.as_str()),
     )?;
-    Ok(Some(ServerId::parse(&id)?))
+    Ok(Some(id))
 }
 /// Frees a host held only by a discovered candidate so the owner can give it
-/// to another server. The candidate (never reviewed, never contacted) is
-/// removed. Returns false when no other server has the host or when the holder
-/// is not a candidate; the caller's update then conflicts as before.
+/// to another server, and returns the removed candidate's ID. A candidate with
+/// documented relationships is never discarded this way: the function returns
+/// `None` and the caller's update conflicts, so the owner decides what to do
+/// with it. Also `None` when no other server holds the host.
 pub(crate) fn release_candidate_host(
     db: &rusqlite::Connection,
     host: &str,
     keep: &ServerId,
-) -> Result<bool, AtlasError> {
-    let found: Option<(String, String)> = db
-        .query_row(
-            "SELECT s.id,m.payload FROM servers s JOIN monitoring m ON m.server_id=s.id WHERE s.host=?1 AND s.id<>?2",
-            params![host, keep.as_str()],
-            |r| Ok((r.get(0)?, r.get(1)?)),
-        )
-        .optional()
-        .map_err(sql_error)?;
-    let Some((id, payload)) = found else {
-        return Ok(false);
+) -> Result<Option<ServerId>, AtlasError> {
+    let Some(record) = candidate_for_host(db, host, Some(keep))? else {
+        return Ok(None);
     };
-    let record: MonitoringRecord =
-        serde_json::from_str(&payload).map_err(|_| AtlasError::new(ErrorCode::IoFailure))?;
-    if record.policy.lifecycle != ServerLifecycle::Candidate {
-        return Ok(false);
+    let id = record.server_id;
+    let relationships: i64 = db
+        .query_row(
+            "SELECT count(*) FROM edges WHERE source=?1 OR target=?1",
+            [id.as_str()],
+            |r| r.get(0),
+        )
+        .map_err(sql_error)?;
+    if relationships > 0 {
+        return Ok(None);
     }
-    for statement in [
-        "DELETE FROM events WHERE server_id=?1",
-        "DELETE FROM edges WHERE source=?1 OR target=?1",
-        "DELETE FROM monitoring WHERE server_id=?1",
-        "DELETE FROM servers WHERE id=?1",
-    ] {
-        db.execute(statement, [id.as_str()]).map_err(sql_error)?;
-    }
+    crate::store::delete_server_rows(db, &id)?;
     event(
         db,
-        "Discovered candidate replaced by this server's new address",
+        &format!(
+            "Discovered candidate {} replaced by this server's new address",
+            record.host
+        ),
         Some(keep.as_str()),
     )?;
-    Ok(true)
+    Ok(Some(id))
 }
 fn write_record(db: &rusqlite::Connection, record: &MonitoringRecord) -> Result<(), AtlasError> {
     let json = serde_json::to_string(record).map_err(|_| AtlasError::new(ErrorCode::IoFailure))?;
@@ -448,7 +456,12 @@ mod tests {
             x: None,
             y: None,
         };
-        store.update_server(&server, host_only("LAB-NEW")).unwrap();
+        assert_eq!(
+            store
+                .update_server_replacing(&server, host_only("LAB-NEW"))
+                .unwrap(),
+            Some(candidate.clone())
+        );
         let state = store.snapshot().unwrap();
         assert_eq!(state.servers.len(), 1);
         assert_eq!(state.servers[0].id, server);
@@ -467,6 +480,33 @@ mod tests {
                 .iter()
                 .all(|e| e.server_id.as_ref() != Some(&candidate))
         );
+        assert!(
+            state
+                .events
+                .iter()
+                .any(|e| e.message.contains("candidate lab-new replaced"))
+        );
+        // A candidate with a documented relationship is not discarded: the
+        // edit conflicts and the candidate and its relationship remain.
+        let linked = store.add_monitoring_candidate("lab-linked").unwrap();
+        store
+            .add_relationship(AddRelationship {
+                source: server.clone(),
+                target: linked.clone(),
+                label: "Backs up to".into(),
+            })
+            .unwrap();
+        assert_eq!(
+            store
+                .update_server(&server, host_only("lab-linked"))
+                .unwrap_err()
+                .code,
+            ErrorCode::Conflict
+        );
+        let kept = store.snapshot().unwrap();
+        assert!(kept.servers.iter().any(|s| s.id == linked));
+        assert_eq!(kept.edges.len(), 1);
+        store.remove_server(&linked).unwrap();
         // A host held by a reviewed (active) server still conflicts, and the
         // failed edit changes nothing.
         let other = store.add_monitoring_candidate("lab-other").unwrap();

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { bind, contributionsAt, declares, ExtensionBindingError } from "./extensions-model.ts";
+import { bind, contributionsAt, ExtensionBindingError } from "./extensions-model.ts";
 import { createWorkspaceClient, type NativeTransport } from "./workspace-client.ts";
 import { CONTRACT_VERSION, type Contribution, type ExtensionCatalogue } from "./contracts.gen.ts";
 
@@ -29,8 +29,6 @@ test("a registered contribution without a renderer, or a renderer without a regi
 test("duplicate IDs and contributions without capabilities are rejected", () => {
   assert.throws(() => bind(catalogue(entry("builtin.tab.files", 1), entry("builtin.tab.files", 2)), "workspace_tab", { "builtin.tab.files": "F" }), /registered twice/);
   assert.throws(() => bind(catalogue(entry("builtin.tab.files", 1, "workspace_tab", [])), "workspace_tab", { "builtin.tab.files": "F" }), /declares no capabilities/);
-  assert.ok(declares(entry("builtin.tab.files", 1, "workspace_tab", ["ssh_session", "read_files"]), "read_files"));
-  assert.ok(!declares(entry("builtin.tab.files", 1), "write_files"));
 });
 
 test("the client reads the catalogue and refuses an incompatible contract", async () => {

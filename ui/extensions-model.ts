@@ -1,10 +1,9 @@
-import type { Capability, Contribution, ExtensionCatalogue, ExtensionPoint } from "./contracts.gen.ts";
+import type { Contribution, ExtensionCatalogue, ExtensionPoint } from "./contracts.gen.ts";
 
 // Extension points the interface renders (S12/F18). The Rust core owns the
 // catalogue: IDs, titles, order, owners and declared capabilities. The
 // interface only supplies a renderer for each contribution it is given.
 export type UiPoint = Extract<ExtensionPoint, "workspace_tab" | "server_badge" | "settings_section">;
-export const UI_POINTS: readonly UiPoint[] = ["workspace_tab", "server_badge", "settings_section"];
 
 export type Bound<R> = { contribution: Contribution; renderer: R };
 
@@ -36,9 +35,4 @@ export function bind<R>(catalogue: ExtensionCatalogue, point: UiPoint, renderers
     if (!seen.has(id)) throw new ExtensionBindingError(`Renderer ${id} is not a registered ${point} extension.`);
   }
   return entries.map(contribution => ({ contribution, renderer: renderers[contribution.id] }));
-}
-
-/** True when a contribution declared the capability. */
-export function declares(contribution: Contribution, capability: Capability): boolean {
-  return contribution.capabilities.includes(capability);
 }
