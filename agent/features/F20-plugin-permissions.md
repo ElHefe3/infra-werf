@@ -28,7 +28,7 @@ Capabilities that expose private keys, raw SSH sessions, sudo passwords or the l
 
 ### Implementation and contracts
 
-Trust is each owner's choice ([D055](../discovery/D055-plugin-choices-belong-to-the-owner-in-settings.md)): the consent screen and trust level live in the application Settings screen (T052), and per-server grants in that server's Settings tab. There is no default trust level: enabling a plugin requires the owner to choose one each time, with nothing preselected, and a plugin cannot be enabled without that choice. Enforce capabilities in the Rust core at the extension-point boundary, never in the UI. A plugin may only use what its manifest requested and the owner granted. Grants are stored per plugin and per server. Three trust levels: read-only, changes with confirmation (existing preview-and-confirm flow) and trusted automation.
+Trust is each owner's choice ([D055](../discovery/D055-plugin-choices-belong-to-the-owner-in-settings.md)): each plugin has one configuration page in the application Settings screen (T052) that holds all its permissions: what it declared, its trust level, the servers it may act on and any elevation exception. That page is the only place permissions are changed; a server's Settings tab shows a read-only list that links to it. There is no default trust level: enabling a plugin requires the owner to choose one each time, with nothing preselected, and a plugin cannot be enabled without that choice. Enforce capabilities in the Rust core at the extension-point boundary, never in the UI. A plugin may only use what its manifest requested and the owner granted. Grants are stored per plugin and per server. Three trust levels: read-only, changes with confirmation (existing preview-and-confirm flow) and trusted automation.
 
 **Ticket dependencies:** [T039](F19-plugin-api-manifest.md), [T052](F18-extension-points.md).
 
@@ -36,7 +36,8 @@ Trust is each owner's choice ([D055](../discovery/D055-plugin-choices-belong-to-
 
 - [ ] A plugin call outside its granted capabilities is refused in the core and logged.
 - [ ] The consent screen lists each requested capability in plain language, including the exact commands a declarative pack will run.
-- [ ] Grants can be given and withdrawn per server.
+- [ ] One configuration page per plugin shows every permission it has and is the only place they are changed.
+- [ ] Grants can be given and withdrawn per server, from that page.
 - [ ] Enabling a plugin requires an explicit trust-level choice; no level is preselected and none is implied.
 - [ ] No capability gives access to keys, passwords or an unrestricted shell.
 
@@ -66,7 +67,7 @@ Storing protected results or command output containing secrets in the log; remot
 
 ### Implementation and contracts
 
-The plugin activity log and the control that turns all plugins off are sections of the application Settings screen (T052). Extend the existing bounded activity history with a plugin source. Elevation is never implied by trust: a trusted plugin that needs sudo still uses the per-action elevation rules unless the owner grants a named exception for one plugin, one server and one action, in that server's Settings tab. There is no blanket elevation option. Disabling cancels the plugin's running and scheduled work.
+The plugin activity log and the control that turns all plugins off are sections of the application Settings screen (T052). Extend the existing bounded activity history with a plugin source. Elevation is never implied by trust: a trusted plugin that needs sudo still uses the per-action elevation rules unless the owner grants a named exception for one plugin, one server and one action, on the plugin's configuration page. There is no blanket elevation option. Disabling cancels the plugin's running and scheduled work.
 
 **Ticket dependencies:** [T041](F20-plugin-permissions.md).
 
