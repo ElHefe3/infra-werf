@@ -24,6 +24,6 @@ The owner did not answer these four questions; the draft assumes:
 ## Decisions still needed at activation
 
 - Settled by [D055](D055-plugin-choices-belong-to-the-owner-in-settings.md): how far a plugin may act, and whether trusted automation may use elevation, are each owner's choice per plugin and per server, with safe defaults. Recording the matching change to SCOPE.md rule 6 is still needed before F21.
-- The default trust level for a newly enabled plugin.
+- Settled by D055: there is no default trust level; the owner chooses each time a plugin is enabled.
 - Licence, and whether the repository becomes public (currently a private Forgejo remote).
 - Whether the future Android client (S09) supports plugins.

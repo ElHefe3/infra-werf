@@ -28,7 +28,7 @@ Capabilities that expose private keys, raw SSH sessions, sudo passwords or the l
 
 ### Implementation and contracts
 
-Trust is each owner's choice ([D055](../discovery/D055-plugin-choices-belong-to-the-owner-in-settings.md)): the consent screen and trust level live in the application Settings screen (T052), and per-server grants in that server's Settings tab. A newly enabled plugin starts at the default trust level (proposed: read-only; a project-owner decision). Enforce capabilities in the Rust core at the extension-point boundary, never in the UI. A plugin may only use what its manifest requested and the owner granted. Grants are stored per plugin and per server. Three trust levels: read-only, changes with confirmation (existing preview-and-confirm flow) and trusted automation.
+Trust is each owner's choice ([D055](../discovery/D055-plugin-choices-belong-to-the-owner-in-settings.md)): the consent screen and trust level live in the application Settings screen (T052), and per-server grants in that server's Settings tab. There is no default trust level: enabling a plugin requires the owner to choose one each time, with nothing preselected, and a plugin cannot be enabled without that choice. Enforce capabilities in the Rust core at the extension-point boundary, never in the UI. A plugin may only use what its manifest requested and the owner granted. Grants are stored per plugin and per server. Three trust levels: read-only, changes with confirmation (existing preview-and-confirm flow) and trusted automation.
 
 **Ticket dependencies:** [T039](F19-plugin-api-manifest.md), [T052](F18-extension-points.md).
 
@@ -37,6 +37,7 @@ Trust is each owner's choice ([D055](../discovery/D055-plugin-choices-belong-to-
 - [ ] A plugin call outside its granted capabilities is refused in the core and logged.
 - [ ] The consent screen lists each requested capability in plain language, including the exact commands a declarative pack will run.
 - [ ] Grants can be given and withdrawn per server.
+- [ ] Enabling a plugin requires an explicit trust-level choice; no level is preselected and none is implied.
 - [ ] No capability gives access to keys, passwords or an unrestricted shell.
 
 ### Verification
