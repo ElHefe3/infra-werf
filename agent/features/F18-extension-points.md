@@ -16,7 +16,7 @@ Context: Today the 56 desktop commands and the workspace tabs in `ui/main.tsx` a
 
 ## T037 — Introduce registries for tabs, badges, collectors and operations
 
-<!-- atlas-ticket: {"id":"T037","feature":"F18","status":"in_progress","depends_on":["T026"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T037","feature":"F18","status":"done","depends_on":["T026"],"evidence":"../evidence/T037-acceptance.md"} -->
 
 ### Outcome and included work
 
@@ -45,7 +45,7 @@ Existing native verification suites and UI tests, plus a unit test per registry 
 
 ### Evidence and closure
 
-Implementation and unit proof are recorded in [T037 progress](../evidence/T037-progress.md). All four criteria are demonstrated on `28c9efc`: all twelve native suites pass after the [D054](../discovery/D054-native-suites-conflict-with-alias-discovery.md) fix, with one disclosed inventory-suite assertion update. Independent review is pending, so the ticket remains in progress.
+Accepted on `33474bc`: [T037 acceptance](../evidence/T037-acceptance.md). All four criteria are met and all twelve native suites pass. The record discloses one updated inventory-suite assertion, the review findings and the one limit left for F20.
 
 ### Stop conditions
 

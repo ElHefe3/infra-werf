@@ -33,4 +33,6 @@ The owner chose option 2 on 2026-11-12. Commit `28c9efc`:
 
 The cause stated above is now confirmed: with these changes the eight suites get past `add_server`. One further stale expectation appeared in the inventory suite, which expected the activity text "Approved inventory refreshed"; `dc66c0f` deliberately reports a first collection as "Initial approved inventory collected". That one assertion now accepts either. All twelve native suites pass on `28c9efc`.
 
+Refined in `33474bc` after review: a candidate that has documented relationships is not replaced by a host edit (the edit conflicts), the shell ends a replaced candidate's sessions and health checks, and the interface refreshes monitoring with the map so an adopted server appears at once.
+
 T034 should still review whether discovered candidates need any other owner-facing handling.
