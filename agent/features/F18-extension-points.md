@@ -89,7 +89,7 @@ Stop if the conversion needs a private back door into the core; that means the e
 
 ## T052 — Application Settings screen as an extension point
 
-<!-- atlas-ticket: {"id":"T052","feature":"F18","status":"todo","depends_on":["T037"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T052","feature":"F18","status":"done","depends_on":["T037"],"evidence":"../evidence/T052-acceptance.md"} -->
 
 ### Outcome and included work
 
@@ -107,10 +107,10 @@ Add `app_settings_section` to `ExtensionPoint` with the capabilities its section
 
 ### Acceptance criteria
 
-- [ ] A Settings entry in the main navigation opens one screen whose sections all come from registry entries.
-- [ ] History retention and alias discovery are on that screen and behave as before.
-- [ ] No per-server setting appears on it, and no application-wide setting remains only on another screen.
-- [ ] The native suites that use the moved options pass, updated only for the new location.
+- [x] A Settings entry in the main navigation opens one screen whose sections all come from registry entries.
+- [x] History retention and alias discovery are on that screen and behave as before.
+- [x] No per-server setting appears on it, and no application-wide setting remains only on another screen.
+- [x] The native suites that use the moved options pass, updated only for the new location.
 
 ### Verification
 
@@ -118,7 +118,7 @@ Unit tests for the new extension point and binding; the monitoring native suite 
 
 ### Evidence and closure
 
-None yet.
+Accepted on `19d1672`: [T052 acceptance](../evidence/T052-acceptance.md). All four criteria are met and all twelve native suites pass in one run. No separate review pass was run; the record says so.
 
 ### Stop conditions
 
