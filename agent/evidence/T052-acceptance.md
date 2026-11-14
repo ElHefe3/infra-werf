@@ -41,4 +41,4 @@ All twelve pass in a single run with no reruns: desktop, ssh, health, inventory,
 
 - "Import newer reports" in the map footer is an application-wide action, not a setting, and was left where it is. If it should move, it is a small follow-up.
 - The Settings screen is deliberately small: two sections. T041 adds the plugin pages to it.
-- Review: no separate review pass was run for this ticket. The change is about 150 lines and mirrors the T037 pattern, whose review findings were applied here (tab-style selection by ID is not involved; the map-waits-for-catalogue and monitoring-loaded guards are). The reviewer of T037 and the author are the same agent.
+- Review: no review pass was run for this ticket. The change is about 150 lines and follows the T037 pattern, and the two guards that T037's review added were kept: the Settings screen is shown only once the extension catalogue is bound, and its history select stays disabled until monitoring has loaded. The author is the same agent that reviewed T037.
