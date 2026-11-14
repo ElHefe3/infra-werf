@@ -320,6 +320,9 @@ form label { display: grid; gap: 7px; margin-top: 18px; color: #86987a; font-siz
 .monitoring-form .check-label input{width:auto;margin:0}
 .monitoring-intervals{display:flex;gap:20px}
 .monitoring-intervals label{flex:1}
+.settings-screen{padding:24px;overflow:auto;height:100%;box-sizing:border-box}
+.settings-section{max-width:640px;margin:0 0 28px;padding-top:4px}
+.settings-section h3{margin:0 0 8px}
 .history-retention{display:flex;gap:12px;align-items:center;max-width:380px}
 .history-retention select{width:auto}
 

@@ -9,6 +9,7 @@ import { ElevationCheck } from "./elevation-check";
 import { HealthMonitor } from "./health-monitor";
 import { RemoteApps } from "./remote-apps";
 import { liveStatus } from "./live-monitoring";
+import { appSettings, type AppSettingsRenderer } from "./app-settings";
 import { observedLabel, workloads } from "./map-model";
 import { date, memory, Notice, SavedInventory } from "./workspace-parts";
 
@@ -71,11 +72,11 @@ const badges: Record<string, BadgeRenderer> = {
   } },
 };
 
-export type BoundExtensions = { tabs: Bound<TabRenderer>[]; settings: Bound<SettingsRenderer>[]; badges: Bound<BadgeRenderer>[] };
+export type BoundExtensions = { tabs: Bound<TabRenderer>[]; settings: Bound<SettingsRenderer>[]; appSettings: Bound<AppSettingsRenderer>[]; badges: Bound<BadgeRenderer>[] };
 
 /** Pairs the core's catalogue with the built-in renderers; throws on any mismatch. */
 export function bindExtensions(catalogue: ExtensionCatalogue): BoundExtensions {
-  return { tabs: bind(catalogue, "workspace_tab", tabs), settings: bind(catalogue, "settings_section", settings), badges: bind(catalogue, "server_badge", badges) };
+  return { tabs: bind(catalogue, "workspace_tab", tabs), settings: bind(catalogue, "settings_section", settings), appSettings: bind(catalogue, "app_settings_section", appSettings), badges: bind(catalogue, "server_badge", badges) };
 }
 
 export const ExtensionsContext = createContext<BoundExtensions | null>(null);

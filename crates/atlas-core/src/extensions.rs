@@ -28,7 +28,10 @@ pub const MAX_CONTRIBUTIONS: usize = 512;
 pub enum ExtensionPoint {
     WorkspaceTab,
     ServerBadge,
+    /// A section of a server's Settings tab (settings about one server).
     SettingsSection,
+    /// A section of the application-wide Settings screen (D055, T052).
+    AppSettingsSection,
     Collector,
     HealthCheck,
     Operation,
@@ -87,6 +90,9 @@ impl ExtensionPoint {
                 LoopbackTunnel,
             ],
             Self::ServerBadge => &[ReadSavedState],
+            // Application-wide settings change what InfraWerf stores on this
+            // PC; they never contact a server.
+            Self::AppSettingsSection => &[ReadSavedState, EditMap],
             Self::Collector => &[SshSession, RunApprovedCommand],
             Self::HealthCheck => &[NetworkProbe],
             Self::Operation => &[
@@ -371,6 +377,21 @@ pub fn builtin() -> ExtensionRegistry {
             30,
             &[SshSession, Elevate],
         ),
+        // Sections of the application Settings screen.
+        (
+            "builtin.app-settings.history-retention",
+            AppSettingsSection,
+            "History retention",
+            10,
+            &[ReadSavedState, EditMap],
+        ),
+        (
+            "builtin.app-settings.ssh-discovery",
+            AppSettingsSection,
+            "SSH alias discovery",
+            20,
+            &[ReadSavedState, EditMap],
+        ),
         // Collectors and health checks.
         (
             COLLECTOR_BASELINE_INVENTORY,
@@ -542,12 +563,19 @@ mod tests {
             ExtensionPoint::WorkspaceTab,
             ExtensionPoint::ServerBadge,
             ExtensionPoint::SettingsSection,
+            ExtensionPoint::AppSettingsSection,
             ExtensionPoint::Collector,
             ExtensionPoint::HealthCheck,
             ExtensionPoint::Operation,
         ] {
             assert!(!registry.at(point).is_empty(), "{point:?} has no entries");
         }
+        let app_settings: Vec<&str> = registry
+            .at(ExtensionPoint::AppSettingsSection)
+            .iter()
+            .map(|c| c.title.as_str())
+            .collect();
+        assert_eq!(app_settings, ["History retention", "SSH alias discovery"]);
         let tabs: Vec<&str> = registry
             .at(ExtensionPoint::WorkspaceTab)
             .iter()
@@ -671,6 +699,11 @@ mod tests {
                 &[Capability::ReadFiles, Capability::ReadFiles][..],
             ),
             (ExtensionPoint::ServerBadge, &[Capability::SshSession][..]),
+            // Application settings never reach a server.
+            (
+                ExtensionPoint::AppSettingsSection,
+                &[Capability::SshSession][..],
+            ),
             (ExtensionPoint::HealthCheck, &[Capability::Elevate][..]),
             (ExtensionPoint::Collector, &[Capability::WriteFiles][..]),
         ] {

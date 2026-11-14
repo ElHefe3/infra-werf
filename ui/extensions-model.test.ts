@@ -31,6 +31,18 @@ test("duplicate IDs and contributions without capabilities are rejected", () => 
   assert.throws(() => bind(catalogue(entry("builtin.tab.files", 1, "workspace_tab", [])), "workspace_tab", { "builtin.tab.files": "F" }), /declares no capabilities/);
 });
 
+test("application settings sections bind at their own point and not as server settings", () => {
+  const value = catalogue(
+    entry("builtin.app-settings.ssh-discovery", 20, "app_settings_section", ["read_saved_state", "edit_map"]),
+    entry("builtin.app-settings.history-retention", 10, "app_settings_section", ["read_saved_state", "edit_map"]),
+    entry("builtin.settings.map-details", 10, "settings_section", ["read_saved_state"]));
+  const app = bind(value, "app_settings_section", { "builtin.app-settings.history-retention": "H", "builtin.app-settings.ssh-discovery": "D" });
+  assert.deepEqual(app.map(b => b.renderer), ["H", "D"]);
+  assert.deepEqual(bind(value, "settings_section", { "builtin.settings.map-details": "M" }).map(b => b.renderer), ["M"]);
+  // A server setting's renderer cannot be bound as an application setting.
+  assert.throws(() => bind(value, "app_settings_section", { "builtin.app-settings.history-retention": "H", "builtin.app-settings.ssh-discovery": "D", "builtin.settings.map-details": "M" }), /not a registered app_settings_section extension/);
+});
+
 test("the client reads the catalogue and refuses an incompatible contract", async () => {
   const calls: string[] = [];
   const value = catalogue(entry("builtin.tab.services", 10));
