@@ -25,12 +25,22 @@ type PendingPlacementCleanup = { serverId: string; sessionId: string; resourceId
 const pendingPlacementCleanups = new Map<string, PendingPlacementCleanup>();
 const expiredPlacementWarnings = new Map<string, string>();
 const actionLabels = { create_directory: "Create folder", rename: "Rename", move: "Move", delete: "Delete" };
+// The backend closes a session when its server's host is edited, and the map
+// refresh that follows remounts this view for the new host. The explanation
+// must survive that remount, so it is carried briefly per server.
+const carried = new Map<string, { message: string; at: number }>();
+/** Reads without consuming: React may run a state initialiser more than once. Entries simply expire. */
+function takeCarried(serverId: string): string {
+  const entry = carried.get(serverId);
+  return entry && Date.now() - entry.at < 15_000 ? entry.message : "";
+}
+
 export function FileBrowser({ server, onBusy }: { server: MapServer; onBusy: (value: boolean) => void }) {
   const [session, setSession] = useState<FileSession | null>(null);
   const [page, setPage] = useState<FilePage | null>(null);
   const [selected, setSelected] = useState<FileEntry | null>(null);
   const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState("");
+  const [notice, setNotice] = useState(() => takeCarried(server.id));
   const [failure, setFailure] = useState("");
   const [pinned, setPinned] = useState<FileResource | null>(null);
   const [form, setForm] = useState<ChangeForm | null>(null);
@@ -64,7 +74,7 @@ export function FileBrowser({ server, onBusy }: { server: MapServer; onBusy: (va
     setPlacement(next);
   }
 
-  function clear(message: string) {
+  function clear(message: string, carry = false) {
     if (mutating.current) message += " The server may have applied the pending change. Reconnect and inspect before retrying.";
     if (stagingTask.current) message = "Stopping private staging and cleaning up before the session is locked.";
     mutating.current = false;
@@ -75,6 +85,7 @@ export function FileBrowser({ server, onBusy }: { server: MapServer; onBusy: (va
     const cleanupResourceId = staged?.resource.id ?? placementResource.current?.id;
     active.current = null; operation.current = null;
     setSession(null); setPage(null); setSelected(null); setBusy(false); onBusy(false); setFailure(""); setNotice(message);
+    if (carry) carried.set(server.id, { message, at: Date.now() });
     setPinned(null); setForm(null); setReloadTarget(null); updatePlacement(() => null); placementResource.current = null;
     if (placementPassword.current) placementPassword.current.value = "";
     if (selectedGrant.current) void client.discardSelection(selectedGrant.current).catch(() => {});
@@ -131,7 +142,7 @@ export function FileBrowser({ server, onBusy }: { server: MapServer; onBusy: (va
     let disposed = false; const listeners: (() => void)[] = [];
     const keep = (fn: () => void) => { if (disposed) fn(); else listeners.push(fn); };
     void listen<string | null>("atlas-session-closed", event => {
-      if (active.current && (event.payload === null || event.payload === active.current.session_id)) clear("Session closed or expired. Protected file data has been cleared.");
+      if (active.current && (event.payload === null || event.payload === active.current.session_id)) clear("Session closed or expired. Protected file data has been cleared.", true);
     }).then(keep).catch(() => {});
     void listen<string>("atlas-close-blocked", event => setFailure(event.payload)).then(keep).catch(() => {});
     const hide = () => { if (document.visibilityState === "hidden") clear("Session locked while InfraWerf was hidden."); };
@@ -140,6 +151,8 @@ export function FileBrowser({ server, onBusy }: { server: MapServer; onBusy: (va
       const id = active.current?.session_id, pending = operation.current, staged = placementRef.current, pendingStage = stagingTask.current;
       const cleanupResourceId = staged?.resource.id ?? placementResource.current?.id;
       generation.current++; clearTimeout(timer.current);
+      // An open session ends with this view. If the view comes straight back (a host edit remounts it), say so there.
+      if (id && !(Date.now() - (carried.get(server.id)?.at ?? 0) < 15_000)) carried.set(server.id, { message: "Session closed or expired. Protected file data has been cleared.", at: Date.now() });
       active.current = null; operation.current = null;
       // Protected cleanup must precede optional event/state teardown.
       if (id) void (async () => {
