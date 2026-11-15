@@ -53,7 +53,7 @@ Stop if a registry cannot be introduced without changing an approved security bo
 
 ## T038 — Deliver remote applications as a built-in extension
 
-<!-- atlas-ticket: {"id":"T038","feature":"F18","status":"todo","depends_on":["T037"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T038","feature":"F18","status":"done","depends_on":["T037"],"evidence":"../evidence/T038-acceptance.md"} -->
 
 ### Outcome and included work
 
@@ -71,9 +71,9 @@ Remove the direct wiring of remote applications from `ui/main.tsx` and the comma
 
 ### Acceptance criteria
 
-- [ ] Disabling the built-in extension removes the Apps tab and its commands with no other effect.
-- [ ] The remote-applications native suite passes unchanged.
-- [ ] Gaps found in the extension contracts are fixed in the contracts and listed in the evidence.
+- [x] Disabling the built-in extension removes the Apps tab and its commands with no other effect.
+- [x] The remote-applications native suite passes unchanged.
+- [x] Gaps found in the extension contracts are fixed in the contracts and listed in the evidence.
 
 ### Verification
 
@@ -81,7 +81,7 @@ Remove the direct wiring of remote applications from `ui/main.tsx` and the comma
 
 ### Evidence and closure
 
-None yet.
+Accepted on `dd69f9c`: [T038 acceptance](../evidence/T038-acceptance.md). All three criteria are met and all twelve native suites pass in one run. Four contract gaps were found and fixed; they are listed in the evidence. No separate review pass was run; the record says so.
 
 ### Stop conditions
 

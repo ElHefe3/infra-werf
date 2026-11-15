@@ -40,4 +40,5 @@ All twelve pass in a single run: desktop, ssh, health, inventory, files, file-ch
 
 - The first desktop run failed because a category and an item were both named "Activity". The category was renamed Operations and category headers were given their own labels ("Map category"). This is recorded in D056.
 - Not verified by a test: double-click roll-up, the window-resize containment path in the real window, and the narrow (under 900 px) layout. They share code with tested paths.
+- Follow-up: a later full run (T038) caught a floating menu stopping mid-drag under load. `0509515` tracks drags on the window instead of pointer capture; see the T038 evidence.
 - Review: no separate review pass was run for this ticket.
