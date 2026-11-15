@@ -56,6 +56,7 @@ pub async fn tunnel_open(
     request: TunnelRequest,
 ) -> Result<TunnelInfo, AtlasError> {
     local_desktop(&window)?;
+    workspace.require_extension(atlas_core::extensions::REMOTE_APPS_OWNER)?;
     let workspace = workspace.inner().clone();
     let opened = workspace.clone();
     let info =
@@ -77,6 +78,7 @@ pub async fn tunnel_discover(
     server_id: ServerId,
 ) -> Result<AppDiscovery, AtlasError> {
     local_desktop(&window)?;
+    workspace.require_extension(atlas_core::extensions::REMOTE_APPS_OWNER)?;
     let workspace = workspace.inner().clone();
     tauri::async_runtime::spawn_blocking(move || workspace.discover_applications(&server_id))
         .await
@@ -91,6 +93,7 @@ pub fn tunnel_close(
     tunnel_id: String,
 ) -> Result<(), AtlasError> {
     local_desktop(&window)?;
+    workspace.require_extension(atlas_core::extensions::REMOTE_APPS_OWNER)?;
     workspace.close_tunnel(&tunnel_id)?;
     close_window(&app, &tunnel_id);
     let _ = app.emit_to("main", CHANGED, ());
@@ -104,6 +107,7 @@ pub fn tunnel_close_all(
     workspace: State<'_, Arc<Workspace>>,
 ) -> Result<(), AtlasError> {
     local_desktop(&window)?;
+    workspace.require_extension(atlas_core::extensions::REMOTE_APPS_OWNER)?;
     for id in workspace.close_all_tunnels() {
         close_window(&app, &id);
     }
@@ -117,6 +121,7 @@ pub fn tunnel_list(
     workspace: State<'_, Arc<Workspace>>,
 ) -> Result<Vec<TunnelInfo>, AtlasError> {
     local_desktop(&window)?;
+    workspace.require_extension(atlas_core::extensions::REMOTE_APPS_OWNER)?;
     workspace.tunnels()
 }
 
@@ -124,9 +129,11 @@ pub fn tunnel_list(
 pub fn tunnel_focus(
     window: tauri::WebviewWindow,
     app: AppHandle,
+    workspace: State<'_, Arc<Workspace>>,
     tunnel_id: String,
 ) -> Result<(), AtlasError> {
     local_desktop(&window)?;
+    workspace.require_extension(atlas_core::extensions::REMOTE_APPS_OWNER)?;
     let target = app
         .get_webview_window(&label(&tunnel_id))
         .ok_or_else(|| AtlasError::new(ErrorCode::NotFound))?;

@@ -35,8 +35,8 @@ async function waitForCdpState(available, timeout = 15000) {
   }
   throw new Error(`WebView CDP endpoint did not become ${available ? 'available' : 'unavailable'} within ${timeout}ms`);
 }
-async function launch(db = database, legacy = config.source) {
-  child = spawn(binary, [], { cwd: root, windowsHide: true, env: { ...process.env, ATLAS_SSH_CONFIG:sshConfig, ATLAS_NATIVE_DB: db, ATLAS_LEGACY_DB: legacy, ATLAS_REPORTS_DIR: config.reports, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: '--remote-debugging-port=9225 --remote-debugging-address=127.0.0.1', WEBVIEW2_USER_DATA_FOLDER: path.join(directory, 'webview-profile') }, stdio: ['ignore', 'pipe', 'pipe'] });
+async function launch(db = database, legacy = config.source, extra = {}) {
+  child = spawn(binary, [], { cwd: root, windowsHide: true, env: { ...process.env, ...extra, ATLAS_SSH_CONFIG:sshConfig, ATLAS_NATIVE_DB: db, ATLAS_LEGACY_DB: legacy, ATLAS_REPORTS_DIR: config.reports, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: '--remote-debugging-port=9225 --remote-debugging-address=127.0.0.1', WEBVIEW2_USER_DATA_FOLDER: path.join(directory, 'webview-profile') }, stdio: ['ignore', 'pipe', 'pipe'] });
   child.stdout.on('data', () => {}); child.stderr.on('data', () => {});
   // Tauri's Windows process may return success after handing startup to the
   // GUI process. The WebView endpoint, not the short-lived launcher handle,
@@ -292,6 +292,35 @@ try {
   await expect(page.locator('.server-card')).toHaveCount(5);
   expect((await invoke('map_state')).edges).toHaveLength(0);
   results.push('workspace tabs/full inventory, Files requires explicit authentication, other unavailable controls stay honest, explicit edge removal persists');
+
+  // T038: remote applications is a built-in extension. Switched off, its tab and commands are gone and nothing else changes.
+  const tabNames = async () => { await page.getByRole('button', { name: 'Open Core & data workspace', exact: true }).click(); const dialog = page.getByRole('dialog', { name: 'Core & data', exact: true }); await expect(dialog.getByRole('tab', { name: 'Services', exact: true })).toBeVisible(); const names = await dialog.getByRole('tab').allTextContents(); await page.keyboard.press('Escape'); await expect(dialog).not.toBeVisible(); return names.map(name => name.trim()); };
+  const rejected = (command, args) => page.evaluate(({ command, args }) => window.__TAURI_INTERNALS__.invoke(command, args).then(() => null, error => error?.code ?? JSON.stringify(error)), { command, args });
+  const enabledCatalogue = await invoke('extensions_state');
+  const enabledTabs = await tabNames();
+  expect(enabledTabs).toContain('Apps');
+  expect(await invoke('tunnel_list')).toEqual([]);
+  const mapBefore = await invoke('map_state');
+  await stop();
+  await launch(database, config.source, { ATLAS_DISABLED_EXTENSIONS: 'builtin.remote-apps' });
+  await expect(page.locator('.server-card')).toHaveCount(5);
+  const disabledCatalogue = await invoke('extensions_state');
+  expect(disabledCatalogue.extensions).toEqual([{ id: 'builtin', title: 'InfraWerf core', enabled: true, optional: false }, { id: 'builtin.remote-apps', title: 'Remote applications', enabled: false, optional: true }]);
+  const removed = enabledCatalogue.contributions.filter(c => !disabledCatalogue.contributions.some(d => d.id === c.id));
+  expect(removed.map(c => c.id).sort()).toEqual(['builtin.operation.application-discovery', 'builtin.operation.loopback-tunnel', 'builtin.tab.apps']);
+  expect(removed.every(c => c.owner === 'builtin.remote-apps')).toBe(true);
+  expect(disabledCatalogue.contributions).toEqual(enabledCatalogue.contributions.filter(c => c.owner !== 'builtin.remote-apps'));
+  expect(await tabNames()).toEqual(enabledTabs.filter(name => name !== 'Apps'));
+  const anyServer = mapBefore.servers[0].id;
+  for (const [command, args] of [['tunnel_list'], ['tunnel_close_all'], ['tunnel_close', { tunnelId: 'none' }], ['tunnel_focus', { tunnelId: 'none' }], ['tunnel_discover', { serverId: anyServer }], ['tunnel_open', { serverId: anyServer, request: { remote_port: 8080, path: '/' } }]]) expect(await rejected(command, args), command).toBe('not_found');
+  const mapAfter = await invoke('map_state');
+  for (const key of ['servers', 'edges', 'events']) expect(mapAfter[key], key).toEqual(mapBefore[key]);
+  expect(errors).toEqual([]);
+  await stop();
+  await launch();
+  await expect(page.locator('.server-card')).toHaveCount(5);
+  expect((await invoke('extensions_state')).contributions).toEqual(enabledCatalogue.contributions);
+  results.push('remote applications switched off as a built-in extension: the Apps tab, its two operations and all six tunnel commands are gone, every other tab and contribution is unchanged, and re-enabling restores them');
   await page.screenshot({ path: path.join(directory, 'desktop-final.png') });
   await stop();
 

@@ -1,12 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { bind, contributionsAt, ExtensionBindingError } from "./extensions-model.ts";
+import { bind, contributionsAt, ExtensionBindingError, forEnabled } from "./extensions-model.ts";
 import { createWorkspaceClient, type NativeTransport } from "./workspace-client.ts";
 import { CONTRACT_VERSION, type Contribution, type ExtensionCatalogue } from "./contracts.gen.ts";
 
 const entry = (id: string, order: number, point: Contribution["point"] = "workspace_tab", capabilities: Contribution["capabilities"] = ["read_saved_state"]): Contribution =>
   ({ id, point, title: id.split(".").at(-1)!, owner: "builtin", order, capabilities });
-const catalogue = (...contributions: Contribution[]): ExtensionCatalogue => ({ contract_version: CONTRACT_VERSION, contributions });
+const catalogue = (...contributions: Contribution[]): ExtensionCatalogue => ({ contract_version: CONTRACT_VERSION, extensions: [], contributions });
 
 test("contributions are bound in registry order, by point", () => {
   const value = catalogue(entry("builtin.tab.files", 30), entry("builtin.tab.services", 10), entry("builtin.badge.live-status", 5, "server_badge"), entry("builtin.tab.health", 10));
@@ -41,6 +41,21 @@ test("application settings sections bind at their own point and not as server se
   assert.deepEqual(bind(value, "settings_section", { "builtin.settings.map-details": "M" }).map(b => b.renderer), ["M"]);
   // A server setting's renderer cannot be bound as an application setting.
   assert.throws(() => bind(value, "app_settings_section", { "builtin.app-settings.history-retention": "H", "builtin.app-settings.ssh-discovery": "D", "builtin.settings.map-details": "M" }), /not a registered app_settings_section extension/);
+});
+
+test("a disabled extension's renderers are left out; an enabled one's are still required", () => {
+  const renderers = { "builtin.tab.services": "S", "builtin.tab.apps": "A" };
+  const owners = { "builtin.tab.apps": "builtin.remote-apps" };
+  const extension = (enabled: boolean) => ({ id: "builtin.remote-apps", title: "Remote applications", enabled, optional: true });
+  const off: ExtensionCatalogue = { ...catalogue(entry("builtin.tab.services", 10)), extensions: [extension(false)] };
+  assert.deepEqual(bind(off, "workspace_tab", forEnabled(off, renderers, owners)).map(b => b.renderer), ["S"]);
+  // Without the filter the leftover renderer is still an error, so nothing else can hide behind it.
+  assert.throws(() => bind(off, "workspace_tab", renderers), /builtin\.tab\.apps is not a registered/);
+  const on: ExtensionCatalogue = { ...catalogue(entry("builtin.tab.services", 10), entry("builtin.tab.apps", 50)), extensions: [extension(true)] };
+  assert.deepEqual(bind(on, "workspace_tab", forEnabled(on, renderers, owners)).map(b => b.renderer), ["S", "A"]);
+  // An enabled extension whose contribution is missing is a real mismatch.
+  const broken: ExtensionCatalogue = { ...catalogue(entry("builtin.tab.services", 10)), extensions: [extension(true)] };
+  assert.throws(() => bind(broken, "workspace_tab", forEnabled(broken, renderers, owners)), /not a registered/);
 });
 
 test("the client reads the catalogue and refuses an incompatible contract", async () => {

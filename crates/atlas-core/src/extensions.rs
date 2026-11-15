@@ -4,7 +4,9 @@
 //!
 //! The registry describes and authorises; it grants nothing by itself. SSH
 //! authentication, session scope and elevation rules are enforced where they
-//! always were. Today every contribution is owned by `builtin`.
+//! always were. Every contribution is owned by an extension. Today those are
+//! the core (`builtin`) and one optional built-in extension, remote
+//! applications (`builtin.remote-apps`, T038), which can be switched off.
 //!
 //! What `authorize` proves today: the operation, collector or check about to
 //! run is registered and declared the capability it needs, so removing a
@@ -20,6 +22,10 @@ use ts_rs::{Config, TS};
 
 /// Owner of every contribution compiled into the application.
 pub const BUILTIN_OWNER: &str = "builtin";
+/// The remote-applications feature (F17), delivered as a built-in extension.
+pub const REMOTE_APPS_OWNER: &str = "builtin.remote-apps";
+/// Comma-separated extension IDs to leave out at start-up.
+pub const DISABLED_EXTENSIONS_ENV: &str = "ATLAS_DISABLED_EXTENSIONS";
 pub const MAX_CONTRIBUTIONS: usize = 512;
 
 /// Where a contribution attaches.
@@ -127,11 +133,27 @@ pub struct Contribution {
     pub capabilities: Vec<Capability>,
 }
 
+/// One extension: the unit that owns contributions and is enabled or disabled
+/// as a whole.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ExtensionInfo {
+    /// The owner ID its contributions carry.
+    pub id: String,
+    pub title: String,
+    pub enabled: bool,
+    /// Whether it can be disabled. The core cannot.
+    pub optional: bool,
+}
+
 /// The registry as shown to the interface.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct ExtensionCatalogue {
     pub contract_version: u32,
+    /// Every known extension, including disabled ones.
+    pub extensions: Vec<ExtensionInfo>,
+    /// Contributions of enabled extensions only.
     pub contributions: Vec<Contribution>,
 }
 
@@ -156,6 +178,7 @@ fn valid_id(id: &str) -> bool {
 
 #[derive(Debug, Clone, Default)]
 pub struct ExtensionRegistry {
+    extensions: Vec<ExtensionInfo>,
     entries: Vec<Contribution>,
 }
 
@@ -191,6 +214,35 @@ impl ExtensionRegistry {
         Ok(())
     }
 
+    /// Records an extension. A disabled one is listed but contributes nothing.
+    pub fn declare(&mut self, extension: ExtensionInfo) -> Result<(), AtlasError> {
+        if !valid_id(&format!("owner.{}", extension.id))
+            || text(&extension.title, 40, false)? != extension.title
+            || (!extension.optional && !extension.enabled)
+        {
+            return Err(invalid());
+        }
+        if self.extensions.iter().any(|e| e.id == extension.id) {
+            return Err(AtlasError::new(ErrorCode::Conflict));
+        }
+        self.extensions.push(extension);
+        Ok(())
+    }
+
+    /// Confirms an extension is present and enabled; its commands call this
+    /// first, so a disabled extension's commands do nothing.
+    pub fn require(&self, extension: &str) -> Result<(), AtlasError> {
+        if self
+            .extensions
+            .iter()
+            .any(|e| e.id == extension && e.enabled)
+        {
+            Ok(())
+        } else {
+            Err(AtlasError::new(ErrorCode::NotFound))
+        }
+    }
+
     pub fn get(&self, id: &str) -> Option<&Contribution> {
         self.entries.iter().find(|entry| entry.id == id)
     }
@@ -220,6 +272,7 @@ impl ExtensionRegistry {
         contributions.sort_by(|a, b| (a.point, a.order, &a.id).cmp(&(b.point, b.order, &b.id)));
         ExtensionCatalogue {
             contract_version: CONTRACT_VERSION,
+            extensions: self.extensions.clone(),
             contributions,
         }
     }
@@ -265,12 +318,53 @@ pub fn operation_entry(inspection: &Inspection) -> (&'static str, Capability) {
     }
 }
 
-/// Everything compiled into InfraWerf, registered through the same contract a
-/// plugin will use.
+/// Which built-in extension owns a built-in contribution.
+fn builtin_owner(id: &str) -> &'static str {
+    match id {
+        "builtin.tab.apps"
+        | "builtin.operation.application-discovery"
+        | OPERATION_LOOPBACK_TUNNEL => REMOTE_APPS_OWNER,
+        _ => BUILTIN_OWNER,
+    }
+}
+
+/// Extension IDs from a comma-separated list, as given in
+/// `ATLAS_DISABLED_EXTENSIONS`. Unknown IDs and the core are ignored by
+/// `builtin_with`.
+pub fn parse_disabled(value: &str) -> Vec<String> {
+    value
+        .split(',')
+        .map(str::trim)
+        .filter(|id| !id.is_empty())
+        .map(str::to_owned)
+        .collect()
+}
+
+/// Everything compiled into InfraWerf with every extension enabled.
 pub fn builtin() -> ExtensionRegistry {
+    builtin_with(&[])
+}
+
+/// Everything compiled into InfraWerf, registered through the same contract a
+/// plugin will use, leaving out the contributions of each disabled optional
+/// extension. The core cannot be disabled.
+pub fn builtin_with(disabled: &[String]) -> ExtensionRegistry {
     use Capability::*;
     use ExtensionPoint::*;
     let mut registry = ExtensionRegistry::new();
+    for (id, title, optional) in [
+        (BUILTIN_OWNER, "InfraWerf core", false),
+        (REMOTE_APPS_OWNER, "Remote applications", true),
+    ] {
+        registry
+            .declare(ExtensionInfo {
+                id: id.into(),
+                title: title.into(),
+                enabled: !optional || !disabled.iter().any(|d| d == id),
+                optional,
+            })
+            .expect("built-in extensions are valid and unique");
+    }
     let entries: &[(&str, ExtensionPoint, &str, u16, &[Capability])] = &[
         // Workspace tabs. Titles are the visible labels and must stay stable.
         (
@@ -567,12 +661,16 @@ pub fn builtin() -> ExtensionRegistry {
         ),
     ];
     for (id, point, title, order, capabilities) in entries {
+        let owner = builtin_owner(id);
+        if registry.require(owner).is_err() {
+            continue;
+        }
         registry
             .register(Contribution {
                 id: (*id).into(),
                 point: *point,
                 title: (*title).into(),
-                owner: BUILTIN_OWNER.into(),
+                owner: owner.into(),
                 order: *order,
                 capabilities: capabilities.to_vec(),
             })
@@ -585,6 +683,7 @@ pub fn typescript_contracts(config: &Config) -> String {
     [
         ExtensionPoint::decl(config),
         Capability::decl(config),
+        ExtensionInfo::decl(config),
         Contribution::decl(config),
         ExtensionCatalogue::decl(config),
     ]
@@ -671,7 +770,93 @@ mod tests {
                 .catalogue()
                 .contributions
                 .iter()
-                .all(|c| c.owner == BUILTIN_OWNER && !c.capabilities.is_empty())
+                .all(|c| registry.require(&c.owner).is_ok() && !c.capabilities.is_empty())
+        );
+    }
+
+    #[test]
+    fn disabling_remote_applications_removes_only_its_contributions() {
+        let full = builtin();
+        let ids = |registry: &ExtensionRegistry| -> BTreeSet<String> {
+            registry
+                .catalogue()
+                .contributions
+                .into_iter()
+                .map(|c| c.id)
+                .collect()
+        };
+        let owned: BTreeSet<String> = full
+            .catalogue()
+            .contributions
+            .into_iter()
+            .filter(|c| c.owner == REMOTE_APPS_OWNER)
+            .map(|c| c.id)
+            .collect();
+        assert_eq!(
+            owned.iter().map(String::as_str).collect::<Vec<_>>(),
+            [
+                "builtin.operation.application-discovery",
+                OPERATION_LOOPBACK_TUNNEL,
+                "builtin.tab.apps"
+            ]
+        );
+        full.require(REMOTE_APPS_OWNER).unwrap();
+
+        // The core is not optional; an unknown ID changes nothing.
+        let disabled = builtin_with(&parse_disabled(
+            " builtin.remote-apps, builtin ,unknown.extension,",
+        ));
+        let remaining = ids(&disabled);
+        assert_eq!(
+            ids(&full)
+                .difference(&remaining)
+                .cloned()
+                .collect::<BTreeSet<_>>(),
+            owned
+        );
+        assert!(remaining.is_subset(&ids(&full)));
+        disabled.require(BUILTIN_OWNER).unwrap();
+        assert_eq!(
+            disabled.require(REMOTE_APPS_OWNER).unwrap_err().code,
+            ErrorCode::NotFound
+        );
+        assert_eq!(
+            disabled
+                .authorize(OPERATION_LOOPBACK_TUNNEL, Capability::LoopbackTunnel)
+                .unwrap_err()
+                .code,
+            ErrorCode::NotFound
+        );
+        let (discovery, capability) = operation_entry(&Inspection::ApplicationDiscovery {});
+        assert_eq!(
+            disabled.authorize(discovery, capability).unwrap_err().code,
+            ErrorCode::NotFound
+        );
+        // It is still listed, as disabled, so the interface can say so.
+        let listed = disabled.catalogue().extensions;
+        assert_eq!(
+            listed
+                .iter()
+                .map(|e| (e.id.as_str(), e.enabled, e.optional))
+                .collect::<Vec<_>>(),
+            [
+                (BUILTIN_OWNER, true, false),
+                (REMOTE_APPS_OWNER, false, true)
+            ]
+        );
+        // The core cannot be declared disabled.
+        let mut registry = ExtensionRegistry::new();
+        assert_eq!(
+            registry
+                .declare(ExtensionInfo {
+                    id: "example".into(),
+                    title: "Example".into(),
+                    enabled: false,
+                    optional: false,
+                })
+                .unwrap_err()
+                .code,
+            ErrorCode::InvalidInput
         );
     }
 

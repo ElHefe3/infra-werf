@@ -115,6 +115,13 @@ impl Workspace {
     pub fn new(paths: Paths) -> Arc<Self> {
         let store = paths.open();
         let broker = OperationBroker::default();
+        // Optional built-in extensions can be left out at start-up (T038).
+        let disabled = std::env::var(atlas_core::extensions::DISABLED_EXTENSIONS_ENV)
+            .map(|value| atlas_core::extensions::parse_disabled(&value))
+            .unwrap_or_default();
+        broker
+            .set_extensions(atlas_core::extensions::builtin_with(&disabled))
+            .expect("fresh local broker registry");
         let authority = broker
             .issue_backend_authority()
             .expect("fresh local broker authority");
@@ -147,6 +154,10 @@ impl Workspace {
     /// Registered extension points for the interface (S12/F18).
     pub fn extensions(&self) -> atlas_core::extensions::ExtensionCatalogue {
         self.broker.extensions().catalogue()
+    }
+    /// Refuses a command whose extension is disabled.
+    pub fn require_extension(&self, extension: &str) -> Result<(), AtlasError> {
+        self.broker.extensions().require(extension)
     }
     pub fn status(&self) -> Result<WorkspaceStatus, AtlasError> {
         Ok(WorkspaceStatus {

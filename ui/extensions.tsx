@@ -1,6 +1,6 @@
 import React, { createContext, lazy, Suspense, useContext } from "react";
 import type { ExtensionCatalogue, MapServer, MapState } from "./contracts.gen";
-import { bind, type Bound } from "./extensions-model";
+import { bind, forEnabled, type Bound } from "./extensions-model";
 import { SshConnection } from "./ssh-connection";
 import { FileBrowser } from "./file-browser";
 import { TransferQueue, type useTransfers } from "./transfer-queue";
@@ -58,6 +58,9 @@ const tabs: Record<string, TabRenderer> = {
   "builtin.tab.transfers": { render: c => <TransferQueue rows={c.transfers.rows.filter(row => row.server_id === c.server.id)} failure={c.transfers.failure} retry={() => c.openTab(TAB.files)} /> },
 };
 
+/** Renderers that belong to an optional built-in extension rather than the core (T038). */
+const RENDERER_OWNERS: Record<string, string> = { "builtin.tab.apps": "builtin.remote-apps" };
+
 const settings: Record<string, SettingsRenderer> = {
   "builtin.settings.map-details": c => <><h3>Map details</h3><dl className="system-grid"><div><dt>Name</dt><dd>{c.server.name}</dd></div><div><dt>Host</dt><dd>{c.server.host}</dd></div></dl><button className="primary" disabled={c.busy} onClick={c.edit}>Edit server details</button></>,
   "builtin.settings.ssh-connection": c => <SshConnection key={`${c.server.id}:${c.server.host}`} server={c.server} disabled={c.busy} onBusy={value => c.reportBusy("ssh", value)} />,
@@ -87,7 +90,7 @@ export type BoundExtensions = { tabs: Bound<TabRenderer>[]; settings: Bound<Sett
 
 /** Pairs the core's catalogue with the built-in renderers; throws on any mismatch. */
 export function bindExtensions(catalogue: ExtensionCatalogue): BoundExtensions {
-  return { tabs: bind(catalogue, "workspace_tab", tabs), settings: bind(catalogue, "settings_section", settings), appSettings: bind(catalogue, "app_settings_section", appSettings), badges: bind(catalogue, "server_badge", badges), menu: groupMenu(bind(catalogue, "menu_item", menu)) };
+  return { tabs: bind(catalogue, "workspace_tab", forEnabled(catalogue, tabs, RENDERER_OWNERS)), settings: bind(catalogue, "settings_section", settings), appSettings: bind(catalogue, "app_settings_section", appSettings), badges: bind(catalogue, "server_badge", badges), menu: groupMenu(bind(catalogue, "menu_item", menu)) };
 }
 
 export const ExtensionsContext = createContext<BoundExtensions | null>(null);

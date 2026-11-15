@@ -137,6 +137,15 @@ export type WorkloadDetail = { label: string, value: string, };
 export type WorkloadInspection = { contract_version: number, workload_id: string, inspected_at: string, state: WorkloadState, details: Array<WorkloadDetail>, logs_state: WorkloadLogState, logs: string, logs_truncated: boolean, };
 export type ExtensionPoint = "workspace_tab" | "server_badge" | "settings_section" | "app_settings_section" | "menu_item" | "collector" | "health_check" | "operation";
 export type Capability = "read_saved_state" | "edit_map" | "network_probe" | "ssh_session" | "run_approved_command" | "read_files" | "write_files" | "transfer_files" | "interactive_terminal" | "elevate" | "control_workloads" | "loopback_tunnel";
+export type ExtensionInfo = {
+/**
+ * The owner ID its contributions carry.
+ */
+id: string, title: string, enabled: boolean,
+/**
+ * Whether it can be disabled. The core cannot.
+ */
+optional: boolean, };
 export type Contribution = {
 /**
  * Stable dotted identifier, for example `builtin.tab.files`.
@@ -150,4 +159,12 @@ title: string, owner: string,
  * Position among contributions at the same point.
  */
 order: number, capabilities: Array<Capability>, };
-export type ExtensionCatalogue = { contract_version: number, contributions: Array<Contribution>, };
+export type ExtensionCatalogue = { contract_version: number,
+/**
+ * Every known extension, including disabled ones.
+ */
+extensions: Array<ExtensionInfo>,
+/**
+ * Contributions of enabled extensions only.
+ */
+contributions: Array<Contribution>, };

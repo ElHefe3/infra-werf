@@ -18,6 +18,16 @@ export function contributionsAt(catalogue: ExtensionCatalogue, point: ExtensionP
 }
 
 /**
+ * Leaves out the renderers of extensions that are switched off, so a disabled
+ * built-in extension simply contributes nothing. `owners` maps a renderer's
+ * contribution ID to its extension; anything not listed belongs to the core.
+ */
+export function forEnabled<R>(catalogue: ExtensionCatalogue, renderers: Readonly<Record<string, R>>, owners: Readonly<Record<string, string>>): Record<string, R> {
+  const off = new Set(catalogue.extensions.filter(extension => !extension.enabled).map(extension => extension.id));
+  return Object.fromEntries(Object.entries(renderers).filter(([id]) => !(Object.hasOwn(owners, id) && off.has(owners[id]))));
+}
+
+/**
  * Pairs each registered contribution at a point with its renderer.
  * Nothing is rendered that the core did not register, and a registered
  * contribution without a renderer is an error rather than a silent gap.
