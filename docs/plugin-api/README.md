@@ -4,7 +4,7 @@ A plugin is a folder with one file that describes it: `infrawerf-plugin.json`. T
 
 A valid manifest grants nothing. It states what the plugin adds and what it asks for; the owner of each InfraWerf instance decides what to allow. Validating a manifest never runs anything the plugin ships.
 
-This is the reference. The author guide and a worked example come with the next ticket (T040).
+This is the reference. To write a plugin step by step, start with the [author guide](guide.md); the finished example is in [`examples/backup-overview`](../../examples/backup-overview).
 
 ## Example
 

@@ -52,13 +52,20 @@ fn check(path: &Path, json: bool) -> ExitCode {
                     serde_json::json!({ "valid": true, "api_version": manifest.api_version, "id": manifest.id, "version": manifest.version, "issues": [] })
                 );
             } else {
+                let count = |n: usize, one: &str, many: &str| {
+                    format!("{n} {}", if n == 1 { one } else { many })
+                };
                 println!(
-                    "{} {} is valid for plugin API v{} ({} contributions, {} capabilities requested).",
+                    "{} {} is valid for plugin API v{} ({}, {} requested).",
                     manifest.id,
                     manifest.version,
                     manifest.api_version,
-                    manifest.contributions.len(),
-                    manifest.capabilities.len()
+                    count(
+                        manifest.contributions.len(),
+                        "contribution",
+                        "contributions"
+                    ),
+                    count(manifest.capabilities.len(), "capability", "capabilities")
                 );
             }
             ExitCode::SUCCESS
