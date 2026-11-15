@@ -16,7 +16,7 @@ Context: Other people will write plugins for their own instances, so the contrac
 
 ## T039 — Define and validate the plugin manifest and API version
 
-<!-- atlas-ticket: {"id":"T039","feature":"F19","status":"todo","depends_on":["T038"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T039","feature":"F19","status":"done","depends_on":["T038"],"evidence":"../evidence/T039-acceptance.md"} -->
 
 ### Outcome and included work
 
@@ -34,10 +34,10 @@ Choose one manifest format and publish its JSON Schema generated from the Rust t
 
 ### Acceptance criteria
 
-- [ ] A valid manifest loads; each invalid fixture is rejected with a specific, stable error code.
-- [ ] The published schema is generated from the same types the core validates with.
-- [ ] A manifest that requires a newer API version is refused with a clear message.
-- [ ] The compatibility rule for API changes is written down.
+- [x] A valid manifest loads; each invalid fixture is rejected with a specific, stable error code.
+- [x] The published schema is generated from the same types the core validates with.
+- [x] A manifest that requires a newer API version is refused with a clear message.
+- [x] The compatibility rule for API changes is written down.
 
 ### Verification
 
@@ -45,7 +45,7 @@ Fixture manifests (valid and one per rejection rule) in unit tests; schema gener
 
 ### Evidence and closure
 
-None yet.
+Accepted on `8c908f4`: [T039 acceptance](../evidence/T039-acceptance.md). All four criteria are met. Native suites were not run because no application behaviour changed; the record says so. No separate review pass was run.
 
 ### Stop conditions
 
