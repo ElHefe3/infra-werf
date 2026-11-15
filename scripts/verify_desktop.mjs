@@ -87,6 +87,90 @@ try {
   expect(baseline.servers.every(s => s.reachability.state === 'unknown')).toBe(true);
   await fitViewport(1280, 720);
   await fitViewport(1440, 900);
+  // T053: categorised main menu, detachable category copies and a retractable menu.
+  const nav = page.getByRole('navigation', { name: 'Main navigation' });
+  for (const [category, items] of [['Map', ['Topology', 'Inventory']], ['Operations', ['Transfers', 'Activity']], ['Manage', ['Servers & monitoring', 'Settings']]]) {
+    const region = nav.getByRole('region', { name: category, exact: true });
+    await expect(region.getByRole('listitem')).toHaveCount(items.length);
+    for (const item of items) await expect(region.getByRole('button', { name: item, exact: true })).toBeVisible();
+  }
+  await expect(nav.locator('ul ul')).toHaveCount(0);
+  const mapRegion = nav.getByRole('region', { name: 'Map', exact: true });
+  await mapRegion.getByRole('button', { name: 'Map category', exact: true }).click();
+  await expect(mapRegion.getByRole('listitem')).toHaveCount(0);
+  await mapRegion.getByRole('button', { name: 'Map category', exact: true }).click();
+  await expect(mapRegion.getByRole('listitem')).toHaveCount(2);
+  // Detach: a copy floats, the main menu keeps the category, both drive the same view.
+  await nav.getByRole('button', { name: 'Detach Map menu', exact: true }).click();
+  const mapPanel = page.getByRole('dialog', { name: 'Map menu', exact: true });
+  await expect(mapPanel).toBeVisible();
+  await expect(mapRegion.getByRole('listitem')).toHaveCount(2);
+  await mapPanel.getByRole('button', { name: 'Inventory', exact: true }).click();
+  await expect(mapPanel.getByRole('button', { name: 'Inventory', exact: true })).toHaveAttribute('aria-current', 'page');
+  await expect(mapRegion.getByRole('button', { name: 'Inventory', exact: true })).toHaveAttribute('aria-current', 'page');
+  await mapPanel.getByRole('button', { name: 'Topology', exact: true }).click();
+  await expect(page.locator('.server-card')).toHaveCount(4);
+  // Drag by the title bar; the panel follows, stays inside the window and snaps to its edges.
+  const dragPanel = async (panel, toX, toY) => { const box = await panel.boundingBox(); await page.mouse.move(box.x + 40, box.y + 12); await page.mouse.down(); await page.mouse.move(toX, toY, { steps: 8 }); await page.mouse.up(); return box; };
+  const start = await dragPanel(mapPanel, 640, 312);
+  await expect.poll(async () => { const b = await mapPanel.boundingBox(); return [Math.round(b.x), Math.round(b.y)]; }).toEqual([600, 300]);
+  expect(start.x).not.toBe(600);
+  await dragPanel(mapPanel, 1439, 899);
+  await expect.poll(async () => { const b = await mapPanel.boundingBox(); return [Math.round(b.x + b.width), Math.round(b.y + b.height)]; }).toEqual([1440, 900]);
+  await mapPanel.getByLabel('Move Map menu', { exact: true }).focus();
+  const edge = await mapPanel.boundingBox();
+  await page.keyboard.press('ArrowLeft'); await page.keyboard.press('ArrowUp');
+  await expect.poll(async () => { const b = await mapPanel.boundingBox(); return [Math.round(edge.x - b.x), Math.round(edge.y - b.y)]; }).toEqual([16, 16]);
+  await dragPanel(mapPanel, 440, 212);
+  const placed = await mapPanel.boundingBox();
+  // Hide the main menu: the floating copy keeps working and one button brings the menu back.
+  await page.getByRole('button', { name: 'Hide menu', exact: true }).click();
+  await expect(nav).toHaveCount(0);
+  expect((await page.locator('.app-main').boundingBox()).x).toBe(0);
+  await expect(page.getByRole('button', { name: 'Show menu', exact: true })).toBeVisible();
+  await mapPanel.getByRole('button', { name: 'Inventory', exact: true }).click();
+  await expect(mapPanel.getByRole('button', { name: 'Inventory', exact: true })).toHaveAttribute('aria-current', 'page');
+  // The layout is remembered across a renderer reload.
+  await page.reload();
+  await expect(page.locator('.server-card')).toHaveCount(4);
+  await expect(mapPanel).toBeVisible();
+  await expect(nav).toHaveCount(0);
+  expect(await mapPanel.boundingBox()).toEqual(placed);
+  await page.keyboard.press('Control+b');
+  await expect(nav).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Hide menu', exact: true })).toBeVisible();
+  // Roll up and down.
+  await mapPanel.getByRole('button', { name: 'Roll up Map menu', exact: true }).click();
+  await expect(mapPanel.getByRole('listitem')).toHaveCount(0);
+  await mapPanel.getByRole('button', { name: 'Unroll Map menu', exact: true }).click();
+  await expect(mapPanel.getByRole('listitem')).toHaveCount(2);
+  // Tear a category off by dragging its detach button; the newest panel is in front until another is used.
+  const tearButton = nav.getByRole('button', { name: 'Detach Manage menu', exact: true });
+  const tearBox = await tearButton.boundingBox();
+  await page.mouse.move(tearBox.x + tearBox.width / 2, tearBox.y + tearBox.height / 2); await page.mouse.down(); await page.mouse.move(800, 400, { steps: 8 }); await page.mouse.up();
+  const managePanel = page.getByRole('dialog', { name: 'Manage menu', exact: true });
+  await expect.poll(async () => { const b = await managePanel.boundingBox(); return b && [Math.round(b.x), Math.round(b.y)]; }).toEqual([710, 384]);
+  await expect(nav.getByRole('button', { name: 'Dock Manage menu', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  const depth = panel => panel.evaluate(element => Number(getComputedStyle(element).zIndex));
+  expect(await depth(managePanel)).toBeGreaterThan(await depth(mapPanel));
+  await mapPanel.getByLabel('Move Map menu', { exact: true }).click({ position: { x: 30, y: 10 } });
+  await expect.poll(async () => await depth(mapPanel) > await depth(managePanel)).toBe(true);
+  // Escape closes the focused panel; docking and Settings close the rest.
+  await mapPanel.getByLabel('Move Map menu', { exact: true }).focus();
+  await page.keyboard.press('Escape');
+  await expect(mapPanel).toHaveCount(0);
+  await expect(nav.getByRole('button', { name: 'Detach Map menu', exact: true })).toHaveAttribute('aria-pressed', 'false');
+  await managePanel.getByRole('button', { name: 'Settings', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Menu layout', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Hide menu', exact: true }).click();
+  await page.getByRole('button', { name: 'Reset menu layout', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Menu layout reset.');
+  await expect(page.locator('.menu-panel')).toHaveCount(0);
+  await expect(nav).toBeVisible();
+  await nav.getByRole('button', { name: 'Topology', exact: true }).click();
+  await expect(page.locator('.server-card')).toHaveCount(4);
+  expect(errors).toEqual([]);
+  results.push('main menu groups items in one-level categories; a category detaches as a draggable, edge-snapping, roll-up copy that is remembered; the menu hides and the floating button or Ctrl+B restores it; Settings resets the layout');
   await page.getByRole('button', { name: 'Inventory', exact: true }).first().click();
   await page.getByRole('textbox', { name: 'Find a server or workload' }).fill('unit-539');
   await expect(page.getByText('unit-539.service', { exact: true })).toBeVisible();

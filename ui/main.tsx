@@ -11,6 +11,8 @@ import { MonitoringHub, activeMap, liveStatus } from "./live-monitoring";
 import { bindExtensions, DEFAULT_TAB_FOOTER, ExtensionsContext, ServerBadges, TAB, useExtensions, type BoundExtensions, type WorkspaceContext } from "./extensions";
 import { date, memory, Notice, SavedInventory } from "./workspace-parts";
 import { SettingsScreen } from "./app-settings";
+import { MenuSystem, useMenu } from "./menu";
+import type { View } from "./menu-model";
 import type { MonitoringState } from "./contracts.gen";
 import type { MapServer, MapState, Relationship, WorkspaceStatus } from "./contracts.gen";
 import { errorMessage, matches, observedLabel, reachabilityLabel, workloads } from "./map-model";
@@ -143,7 +145,8 @@ function App() {
   const busyRef = useRef(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [view, setView] = useState<"topology" | "inventory" | "activity" | "transfers" | "servers" | "settings">("topology");
+  const [view, setView] = useState<View>("topology");
+  const menu = useMenu();
   const [inspector, setInspector] = useState(true);
   const [inspectorTab, setInspectorTab] = useState("Overview");
   const [modal, setModalState] = useState<Modal | null>(null);
@@ -200,8 +203,8 @@ function App() {
     if (modal?.kind === "edit") void mutate(() => client.update(modal.id, { name: value("name"), host: value("host") }), "Server details saved.", true);
     if (modal?.kind === "relationship") void mutate(() => client.connect({ source: value("source"), target: value("target"), label: value("label") }), "Relationship documented. No server configuration changed.", true);
   }
-  return <ExtensionsContext.Provider value={extensions}><div className="app-shell">
-    <aside className="rail"><BrandMark /><nav aria-label="Main navigation">{([["topology", "⬡", "Topology"], ["inventory", "▤", "Inventory"], ["transfers", "⇅", "Transfers"], ["activity", "◷", "Activity"], ["servers", "▥", "Servers & monitoring"], ["settings", "⚙", "Settings"]] as const).map(([name, icon, label]) => <button key={name} className={view === name ? "active" : ""} aria-label={label} title={label} aria-current={view === name ? "page" : undefined} onClick={() => setView(name)}>{icon}</button>)}</nav><div className="rail-bottom"><button className="icon-button quit-button" aria-label="Quit InfraWerf" title="Quit InfraWerf" onClick={() => { if (isTauri()) void getCurrentWindow().close().catch(e => setError(errorMessage(e))); }}>⏻</button><span className="local-avatar" title="Local workspace">L</span></div></aside>
+  return <ExtensionsContext.Provider value={extensions}><div className={`app-shell ${menu.layout.open ? "" : "menu-hidden"}`}>
+    <MenuSystem groups={extensions?.menu ?? []} view={view} go={setView} menu={menu} quit={() => { if (isTauri()) void getCurrentWindow().close().catch(e => setError(errorMessage(e))); }} />
     <div className="app-main"><header className="topbar"><div><strong className="wordmark">InfraWerf</strong><span>/</span> Homelab</div><span className="local-badge"><i /> LOCAL WORKSPACE</span></header>
       <main className="desktop-main"><section className="intro"><div><p className="eyebrow">YOUR INFRASTRUCTURE, CONNECTED</p><h1>A little clarity. <span>Across every server.</span></h1><p>Your infrastructure, thoughtfully mapped. One place to see how it all connects.</p></div><button className="primary" disabled={!available} onClick={() => setModal({ kind: "add" })}><span>＋</span> Add server</button></section>
         <section className="metrics" aria-label="Workspace summary"><div><span>Servers</span><strong>{state ? state.servers.length : "—"}</strong><small>{visibleState?.servers.length ?? 0} active on map</small></div><div><span>Observed workloads</span><strong>{state ? countWorkloads.toLocaleString() : "—"}</strong><small>Services & containers</small></div><div><span>Needs an observation</span><strong>{state ? state.servers.filter(s => s.freshness !== "saved").length : "—"}</strong><small>Stale or not yet observed</small></div><div><span>Saved inventories</span><strong>{state ? state.servers.filter(s => s.inventory).length : "—"}</strong><small>{visibleState?.servers.filter(s=>["offline","unreachable"].includes(liveStatus(s).kind)).length ?? 0} offline / unreachable</small></div></section>
@@ -211,9 +214,9 @@ function App() {
             {!state ? <div className="loading-state"><BrandMark /><h2>{error ? "Your workspace couldn’t be opened." : "Opening your workspace…"}</h2><p>{error ? "Resolve the message above, then retry. Your saved data has not been replaced." : "Reading the native Rust store on this PC."}</p></div> : <>
               {view === "topology" && <ReactFlowProvider><MapCanvas state={visibleState!} selected={selected} query={query} busy={busy} select={setSelected} open={open} move={(id, x, y) => mutate(() => client.update(id, { x, y }), "Map position saved.")} connect={c => relationship(c.source, c.target)} /></ReactFlowProvider>}
               {view === "servers" && <MonitoringHub state={state} monitoring={monitoring} client={client} reload={reloadLive} remove={id=>setModal({kind:"remove-server",id})} open={open} openSettings={()=>setView("settings")} />}
-              {view === "settings" && extensions && <SettingsScreen sections={extensions.appSettings} monitoring={monitoring} client={client} reload={reloadLive} />}
+              {view === "settings" && extensions && <SettingsScreen sections={extensions.appSettings} monitoring={monitoring} client={client} reload={reloadLive} resetMenu={menu.reset} />}
               {view === "inventory" && <SavedInventory state={state} query={query} open={open} />}
-              {view === "activity" && <div className="activity-view"><h2>Workspace activity</h2><p>Timestamped reachability, inventory and lifecycle changes. Use Servers & monitoring to set history retention.</p><ActivityList state={state} /></div>}
+              {view === "activity" && <div className="activity-view"><h2>Workspace activity</h2><p>Timestamped reachability, inventory and lifecycle changes. Use Settings to set history retention.</p><ActivityList state={state} /></div>}
               {view === "transfers" && <TransferQueue rows={transfers.rows} failure={transfers.failure} retry={id => { setWorkspaceTab(TAB.files); setSelected(id); setWorkspace(id); }} />}
             </>}
             <footer className="map-footer"><div><span><i className="legend-dot saved" /> Inventory observation</span><span><i className="legend-dot stale" /> Stale / unknown</span></div><button className="text-button" onClick={()=>setView("servers")}>Servers & monitoring</button><button className="text-button" disabled={!available || !status?.report_import_available} title={status?.report_import_available ? "Import newer approved saved reports" : "No report directory configured for this native workspace"} onClick={() => void mutate(client.importReports, "Approved report import finished.")}>↻ Import newer reports</button></footer>

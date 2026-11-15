@@ -87,13 +87,13 @@ switch ($Action) {
             Run-AtlasCommand 'cargo' @('run', '-p', 'atlas-core', '--bin', 'export-contracts', '--locked', '--', '--check')
             Run-AtlasCommand 'pnpm' @('check')
             Run-AtlasCommand 'node' @('--test', 'ui/remote-apps-model.test.ts')
-        } elseif ($Feature -in @('F18', 'T037')) {
+        } elseif ($Feature -in @('F18', 'T037', 'T052', 'T053')) {
             Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-core', '--lib', 'extensions::', '--locked')
             Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-core', '--lib', 'operations::', '--locked')
             Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-native', '--lib', '--locked')
             Run-AtlasCommand 'cargo' @('run', '-p', 'atlas-core', '--bin', 'export-contracts', '--locked', '--', '--check')
             Run-AtlasCommand 'pnpm' @('check')
-            Run-AtlasCommand 'node' @('--test', 'ui/extensions-model.test.ts', 'ui/client.test.ts', 'ui/map-model.test.ts', 'ui/live-model.test.ts', 'ui/remote-apps-model.test.ts')
+            Run-AtlasCommand 'node' @('--test', 'ui/extensions-model.test.ts', 'ui/menu-model.test.ts', 'ui/client.test.ts', 'ui/map-model.test.ts', 'ui/live-model.test.ts', 'ui/remote-apps-model.test.ts')
         } elseif ($Feature -eq 'T022') {
             Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-core', '--lib', 'workloads::', '--locked')
             Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-core', '--test', 'inventory', '--locked')

@@ -16,6 +16,8 @@ export type AppSettingsContext = {
   busy: boolean;
   /** Runs a change, then reloads and reports the outcome in the screen's status line. */
   act: (action: () => Promise<unknown>, message: string) => Promise<void>;
+  /** Docks every floating menu, shows the main menu and expands its categories. */
+  resetMenu: () => void;
 };
 export type AppSettingsRenderer = (context: AppSettingsContext) => React.ReactNode;
 
@@ -30,9 +32,13 @@ export const appSettings: Record<string, AppSettingsRenderer> = {
     <p className="muted">Discovery reads literal aliases from your primary SSH configuration every minute. Includes and wildcard aliases are excluded. Candidates are not contacted until you activate monitoring. Addresses are never used to merge server identities.</p>
     <button disabled={busy} onClick={() => void act(client.discoverServers, "SSH configuration checked for new candidates.")}>Discover configured servers</button>
   </>,
+  "builtin.app-settings.menu-layout": ({ busy, act, resetMenu }) => <>
+    <p className="muted">Detach a menu category with its ⧉ button, or drag that button out of the menu, to keep a floating copy anywhere in the window. Hide or show the main menu with the button in its corner or Ctrl+B. The layout is remembered on this PC.</p>
+    <button disabled={busy} onClick={() => void act(async () => resetMenu(), "Menu layout reset.")}>Reset menu layout</button>
+  </>,
 };
 
-export function SettingsScreen({ sections, monitoring, client, reload }: { sections: Bound<AppSettingsRenderer>[]; monitoring: MonitoringState | null; client: WorkspaceClient; reload: () => Promise<void> }) {
+export function SettingsScreen({ sections, monitoring, client, reload, resetMenu }: { sections: Bound<AppSettingsRenderer>[]; monitoring: MonitoringState | null; client: WorkspaceClient; reload: () => Promise<void>; resetMenu: () => void }) {
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState("");
   const [message, setMessage] = useState("");
@@ -42,7 +48,7 @@ export function SettingsScreen({ sections, monitoring, client, reload }: { secti
     catch (e) { setFailure(errorMessage(e)); }
     finally { setBusy(false); }
   }
-  const context: AppSettingsContext = { monitoring, client, busy, act };
+  const context: AppSettingsContext = { monitoring, client, busy, act, resetMenu };
   return <div className="settings-screen"><div className="section-heading"><div><h2>Settings</h2><p>Settings for InfraWerf itself. Settings for one server are in that server’s workspace.</p></div></div>
     {failure && <p className="form-error" role="alert">{failure}</p>}{message && <p role="status">{message}</p>}
     {sections.map(({ contribution, renderer }) => <section className="settings-section" key={contribution.id} aria-label={contribution.title}><h3>{contribution.title}</h3>{renderer(context)}</section>)}

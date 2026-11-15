@@ -11,6 +11,7 @@ import { RemoteApps } from "./remote-apps";
 import { liveStatus } from "./live-monitoring";
 import { appSettings, type AppSettingsRenderer } from "./app-settings";
 import { observedLabel, workloads } from "./map-model";
+import { groupMenu, type MenuGroup, type MenuRenderer } from "./menu-model";
 import { date, memory, Notice, SavedInventory } from "./workspace-parts";
 
 // Built-in renderers for the interface extension points (S12/F18). The Rust
@@ -72,11 +73,21 @@ const badges: Record<string, BadgeRenderer> = {
   } },
 };
 
-export type BoundExtensions = { tabs: Bound<TabRenderer>[]; settings: Bound<SettingsRenderer>[]; appSettings: Bound<AppSettingsRenderer>[]; badges: Bound<BadgeRenderer>[] };
+// Main menu items (T053). The core registers each item; this says which category it sits in and which view it opens.
+const menu: Record<string, MenuRenderer> = {
+  "builtin.menu.topology": { category: "map", icon: "⬡", view: "topology" },
+  "builtin.menu.inventory": { category: "map", icon: "▤", view: "inventory" },
+  "builtin.menu.transfers": { category: "operations", icon: "⇅", view: "transfers" },
+  "builtin.menu.activity": { category: "operations", icon: "◷", view: "activity" },
+  "builtin.menu.servers": { category: "manage", icon: "▥", view: "servers" },
+  "builtin.menu.settings": { category: "manage", icon: "⚙", view: "settings" },
+};
+
+export type BoundExtensions = { tabs: Bound<TabRenderer>[]; settings: Bound<SettingsRenderer>[]; appSettings: Bound<AppSettingsRenderer>[]; badges: Bound<BadgeRenderer>[]; menu: MenuGroup[] };
 
 /** Pairs the core's catalogue with the built-in renderers; throws on any mismatch. */
 export function bindExtensions(catalogue: ExtensionCatalogue): BoundExtensions {
-  return { tabs: bind(catalogue, "workspace_tab", tabs), settings: bind(catalogue, "settings_section", settings), appSettings: bind(catalogue, "app_settings_section", appSettings), badges: bind(catalogue, "server_badge", badges) };
+  return { tabs: bind(catalogue, "workspace_tab", tabs), settings: bind(catalogue, "settings_section", settings), appSettings: bind(catalogue, "app_settings_section", appSettings), badges: bind(catalogue, "server_badge", badges), menu: groupMenu(bind(catalogue, "menu_item", menu)) };
 }
 
 export const ExtensionsContext = createContext<BoundExtensions | null>(null);

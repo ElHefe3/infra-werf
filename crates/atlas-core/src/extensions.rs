@@ -32,6 +32,8 @@ pub enum ExtensionPoint {
     SettingsSection,
     /// A section of the application-wide Settings screen (D055, T052).
     AppSettingsSection,
+    /// An entry in the main menu that opens one application view (T053).
+    MenuItem,
     Collector,
     HealthCheck,
     Operation,
@@ -89,7 +91,7 @@ impl ExtensionPoint {
                 ControlWorkloads,
                 LoopbackTunnel,
             ],
-            Self::ServerBadge => &[ReadSavedState],
+            Self::ServerBadge | Self::MenuItem => &[ReadSavedState],
             // Application-wide settings change what InfraWerf stores on this
             // PC; they never contact a server.
             Self::AppSettingsSection => &[ReadSavedState, EditMap],
@@ -392,6 +394,56 @@ pub fn builtin() -> ExtensionRegistry {
             20,
             &[ReadSavedState, EditMap],
         ),
+        (
+            "builtin.app-settings.menu-layout",
+            AppSettingsSection,
+            "Menu layout",
+            30,
+            &[ReadSavedState],
+        ),
+        // Main menu items. The interface places each in a category (T053).
+        (
+            "builtin.menu.topology",
+            MenuItem,
+            "Topology",
+            10,
+            &[ReadSavedState],
+        ),
+        (
+            "builtin.menu.inventory",
+            MenuItem,
+            "Inventory",
+            20,
+            &[ReadSavedState],
+        ),
+        (
+            "builtin.menu.transfers",
+            MenuItem,
+            "Transfers",
+            30,
+            &[ReadSavedState],
+        ),
+        (
+            "builtin.menu.activity",
+            MenuItem,
+            "Activity",
+            40,
+            &[ReadSavedState],
+        ),
+        (
+            "builtin.menu.servers",
+            MenuItem,
+            "Servers & monitoring",
+            50,
+            &[ReadSavedState],
+        ),
+        (
+            "builtin.menu.settings",
+            MenuItem,
+            "Settings",
+            60,
+            &[ReadSavedState],
+        ),
         // Collectors and health checks.
         (
             COLLECTOR_BASELINE_INVENTORY,
@@ -564,6 +616,7 @@ mod tests {
             ExtensionPoint::ServerBadge,
             ExtensionPoint::SettingsSection,
             ExtensionPoint::AppSettingsSection,
+            ExtensionPoint::MenuItem,
             ExtensionPoint::Collector,
             ExtensionPoint::HealthCheck,
             ExtensionPoint::Operation,
@@ -575,7 +628,26 @@ mod tests {
             .iter()
             .map(|c| c.title.as_str())
             .collect();
-        assert_eq!(app_settings, ["History retention", "SSH alias discovery"]);
+        assert_eq!(
+            app_settings,
+            ["History retention", "SSH alias discovery", "Menu layout"]
+        );
+        let menu: Vec<&str> = registry
+            .at(ExtensionPoint::MenuItem)
+            .iter()
+            .map(|c| c.title.as_str())
+            .collect();
+        assert_eq!(
+            menu,
+            [
+                "Topology",
+                "Inventory",
+                "Transfers",
+                "Activity",
+                "Servers & monitoring",
+                "Settings"
+            ]
+        );
         let tabs: Vec<&str> = registry
             .at(ExtensionPoint::WorkspaceTab)
             .iter()
@@ -704,6 +776,8 @@ mod tests {
                 ExtensionPoint::AppSettingsSection,
                 &[Capability::SshSession][..],
             ),
+            // A menu item only opens a view.
+            (ExtensionPoint::MenuItem, &[Capability::EditMap][..]),
             (ExtensionPoint::HealthCheck, &[Capability::Elevate][..]),
             (ExtensionPoint::Collector, &[Capability::WriteFiles][..]),
         ] {
