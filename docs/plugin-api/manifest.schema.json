@@ -1,0 +1,230 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "InfraWerf plugin manifest (API v1)",
+  "description": "The contents of `infrawerf-plugin.json` for plugin API v1.",
+  "type": "object",
+  "properties": {
+    "api_version": {
+      "description": "The InfraWerf plugin API version the plugin was written for.",
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "author": {
+      "description": "Author or maintainer, 80 characters at most.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "capabilities": {
+      "description": "Every capability the plugin asks the owner for. Each must be used by\nat least one contribution.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Capability"
+      }
+    },
+    "contributions": {
+      "description": "What the plugin adds, between 1 and 64 entries.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ManifestContribution"
+      }
+    },
+    "description": {
+      "description": "One-line description, 280 characters at most.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "homepage": {
+      "description": "An `https://` address for the plugin, 200 characters at most.\nInfraWerf shows it and never fetches it.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "id": {
+      "description": "Reverse-domain identifier, for example `org.example.backup-overview`:\nat least three lower-case segments of letters, digits and hyphens,\neach starting with a letter, 63 characters at most. It never changes\nbetween versions of the same plugin.",
+      "type": "string"
+    },
+    "license": {
+      "description": "Licence, preferably an SPDX identifier, 64 characters at most.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "name": {
+      "description": "Display name, 40 characters at most.",
+      "type": "string"
+    },
+    "version": {
+      "description": "The plugin's own version, as Semantic Versioning 2.0.0.",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "name",
+    "version",
+    "api_version",
+    "capabilities",
+    "contributions"
+  ],
+  "$defs": {
+    "Capability": {
+      "description": "What a contribution may use. A contribution must declare every capability\nit relies on; `ExtensionRegistry::authorize` refuses anything undeclared.",
+      "oneOf": [
+        {
+          "description": "Read the saved map, approved inventory and activity on this PC.",
+          "type": "string",
+          "const": "read_saved_state"
+        },
+        {
+          "description": "Change map entries on this PC. Never changes a server.",
+          "type": "string",
+          "const": "edit_map"
+        },
+        {
+          "description": "Unauthenticated TCP/HTTP reachability checks.",
+          "type": "string",
+          "const": "network_probe"
+        },
+        {
+          "description": "Verify and use the owner's existing OpenSSH access.",
+          "type": "string",
+          "const": "ssh_session"
+        },
+        {
+          "description": "Run a fixed, approved read-only command in an authenticated session.",
+          "type": "string",
+          "const": "run_approved_command"
+        },
+        {
+          "description": "Read remote files and metadata over SFTP.",
+          "type": "string",
+          "const": "read_files"
+        },
+        {
+          "description": "Create, rename, move or delete remote files after confirmation.",
+          "type": "string",
+          "const": "write_files"
+        },
+        {
+          "description": "Upload and download between this PC and a server.",
+          "type": "string",
+          "const": "transfer_files"
+        },
+        {
+          "description": "The owner's interactive terminal in an authenticated session.",
+          "type": "string",
+          "const": "interactive_terminal"
+        },
+        {
+          "description": "Ask for sudo for one named action.",
+          "type": "string",
+          "const": "elevate"
+        },
+        {
+          "description": "Start, stop or restart a discovered workload after confirmation.",
+          "type": "string",
+          "const": "control_workloads"
+        },
+        {
+          "description": "Open a loopback-only SSH forward to a server's own localhost.",
+          "type": "string",
+          "const": "loopback_tunnel"
+        }
+      ]
+    },
+    "ExtensionPoint": {
+      "description": "Where a contribution attaches.",
+      "oneOf": [
+        {
+          "description": "A tab in a server's workspace.",
+          "type": "string",
+          "const": "workspace_tab"
+        },
+        {
+          "description": "A badge on a server's card on the map.",
+          "type": "string",
+          "const": "server_badge"
+        },
+        {
+          "description": "A section of a server's Settings tab (settings about one server).",
+          "type": "string",
+          "const": "settings_section"
+        },
+        {
+          "description": "A section of the application-wide Settings screen.",
+          "type": "string",
+          "const": "app_settings_section"
+        },
+        {
+          "description": "An entry in the main menu that opens one application view.",
+          "type": "string",
+          "const": "menu_item"
+        },
+        {
+          "description": "Collects approved inventory from a server.",
+          "type": "string",
+          "const": "collector"
+        },
+        {
+          "description": "An unauthenticated reachability check.",
+          "type": "string",
+          "const": "health_check"
+        },
+        {
+          "description": "A brokered operation on a server.",
+          "type": "string",
+          "const": "operation"
+        }
+      ]
+    },
+    "ManifestContribution": {
+      "description": "One thing a plugin adds at an extension point.",
+      "type": "object",
+      "properties": {
+        "capabilities": {
+          "description": "The capabilities this contribution uses: at least one, each\nrequested by the manifest and permitted at this extension point.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Capability"
+          }
+        },
+        "id": {
+          "description": "Name within the plugin: lower-case letters, digits and hyphens,\nstarting with a letter, 32 characters at most. The full identifier\nis the plugin ID, a dot, then this.",
+          "type": "string"
+        },
+        "order": {
+          "description": "Position among contributions at the same point. Defaults to 1000,\nafter everything built in.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "point": {
+          "$ref": "#/$defs/ExtensionPoint"
+        },
+        "title": {
+          "description": "Display name, 40 characters at most.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "point",
+        "title",
+        "capabilities"
+      ]
+    }
+  }
+}

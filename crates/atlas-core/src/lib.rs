@@ -7,6 +7,7 @@ pub mod health;
 pub mod inventory;
 pub mod monitoring;
 pub mod operations;
+pub mod plugin;
 mod sftp;
 pub mod ssh;
 pub mod store;

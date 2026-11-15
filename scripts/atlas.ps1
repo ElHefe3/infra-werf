@@ -38,6 +38,7 @@ switch ($Action) {
     'doctor' { Invoke-AtlasDoctor }
     'check' {
         Run-AtlasCommand 'cargo' @('run', '-p', 'atlas-core', '--bin', 'export-contracts', '--locked', '--', '--check')
+        Run-AtlasCommand 'cargo' @('run', '-p', 'atlas-core', '--bin', 'infrawerf-plugin', '--locked', '--', 'schema', '--check')
         Run-AtlasCommand 'pnpm' @('check')
         Run-AtlasCommand 'cargo' @('fmt', '--all', '--', '--check')
         Run-AtlasCommand 'cargo' @('check', '--workspace', '--locked')
@@ -87,6 +88,10 @@ switch ($Action) {
             Run-AtlasCommand 'cargo' @('run', '-p', 'atlas-core', '--bin', 'export-contracts', '--locked', '--', '--check')
             Run-AtlasCommand 'pnpm' @('check')
             Run-AtlasCommand 'node' @('--test', 'ui/remote-apps-model.test.ts')
+        } elseif ($Feature -in @('F19', 'T039')) {
+            Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-core', '--test', 'plugin_manifest', '--locked')
+            Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-core', '--lib', 'extensions::', '--locked')
+            Run-AtlasCommand 'cargo' @('run', '-p', 'atlas-core', '--bin', 'infrawerf-plugin', '--locked', '--', 'schema', '--check')
         } elseif ($Feature -in @('F18', 'T037', 'T052', 'T053')) {
             Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-core', '--lib', 'extensions::', '--locked')
             Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-core', '--lib', 'operations::', '--locked')

@@ -16,6 +16,7 @@
 use crate::health::ProbeKind;
 use crate::operations::Inspection;
 use crate::*;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use ts_rs::{Config, TS};
@@ -29,25 +30,34 @@ pub const DISABLED_EXTENSIONS_ENV: &str = "ATLAS_DISABLED_EXTENSIONS";
 pub const MAX_CONTRIBUTIONS: usize = 512;
 
 /// Where a contribution attaches.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, TS)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, TS, JsonSchema,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum ExtensionPoint {
+    /// A tab in a server's workspace.
     WorkspaceTab,
+    /// A badge on a server's card on the map.
     ServerBadge,
     /// A section of a server's Settings tab (settings about one server).
     SettingsSection,
-    /// A section of the application-wide Settings screen (D055, T052).
+    /// A section of the application-wide Settings screen.
     AppSettingsSection,
-    /// An entry in the main menu that opens one application view (T053).
+    /// An entry in the main menu that opens one application view.
     MenuItem,
+    /// Collects approved inventory from a server.
     Collector,
+    /// An unauthenticated reachability check.
     HealthCheck,
+    /// A brokered operation on a server.
     Operation,
 }
 
 /// What a contribution may use. A contribution must declare every capability
 /// it relies on; `ExtensionRegistry::authorize` refuses anything undeclared.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, TS)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, TS, JsonSchema,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum Capability {
     /// Read the saved map, approved inventory and activity on this PC.
