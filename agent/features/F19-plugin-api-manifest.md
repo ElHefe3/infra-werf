@@ -53,7 +53,7 @@ Stop if the manifest needs to grant a capability that SCOPE.md forbids; raise it
 
 ## T040 — Write the plugin author guide and example pack
 
-<!-- atlas-ticket: {"id":"T040","feature":"F19","status":"todo","depends_on":["T039"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T040","feature":"F19","status":"in_progress","depends_on":["T039"],"evidence":null} -->
 
 ### Outcome and included work
 
@@ -71,8 +71,8 @@ Keep the guide in the repository next to the schema. The example plugin lives un
 
 ### Acceptance criteria
 
-- [ ] The guide documents every manifest field and extension point in API v1.
-- [ ] The example plugin validates and loads in an automated test.
+- [x] The guide documents every manifest field and extension point in API v1.
+- [x] The example plugin validates and loads in an automated test.
 - [ ] A person who has not seen the code can build the example from the guide alone (recorded walkthrough).
 
 ### Verification
@@ -81,7 +81,18 @@ Automated load of the example; one recorded cold-read walkthrough of the guide.
 
 ### Evidence and closure
 
-None yet.
+In progress. Not closed: the third criterion needs a person who has not seen the code.
+
+Done on `2c6671c`:
+
+- Guide: `docs/plugin-api/guide.md`. Example: `examples/backup-overview`. The reference from T039 now links to both.
+- `tests/plugin_manifest.rs` validates the example and registers it in the extension registry; runs every manifest step in the guide (the deliberately wrong step must fail with the code and the exact output the guide quotes); requires the guide's last step to equal the example; and fails if the guide or the reference omits any manifest field, extension point or capability, or the reference omits any error code.
+- `mise run check` passes; `cargo test --workspace` passes with 104 passed and 2 ignored.
+
+Open:
+
+- **Cold-read walkthrough.** Someone who has not seen the code follows the guide from an empty folder to a valid manifest, and what they did and where they hesitated is recorded here. The author of the guide cannot do this.
+- **"The review a user sees".** The ticket asks the guide to cover it, but the in-app review is not built (F20), and the stop condition forbids describing behaviour that is not implemented. The guide says so, describes only today's check output, and lists the manifest fields the review will be based on. Revisit this section when T041 lands.
 
 ### Stop conditions
 
