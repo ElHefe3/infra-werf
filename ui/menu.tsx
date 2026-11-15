@@ -30,8 +30,6 @@ function Items({ group, view, go }: { group: MenuGroup; view: View; go: (view: V
 export function MenuSystem({ groups, view, go, menu, quit }: { groups: MenuGroup[]; view: View; go: (view: View) => void; menu: MenuController; quit: () => void }) {
   const { layout, update } = menu;
   const elements = useRef(new Map<string, HTMLElement>());
-  const drag = useRef<{ category: string; dx: number; dy: number } | null>(null);
-  const tear = useRef<{ category: string; x: number; y: number; torn: boolean } | null>(null);
   const suppressClick = useRef(false);
   const sizeOf = (category: string): Size => { const box = elements.current.get(category)?.getBoundingClientRect(); return box ? { width: box.width, height: box.height } : FALLBACK; };
   const moveTo = (category: string, x: number, y: number) => { const next = place(x, y, sizeOf(category), viewport()); update(current => movePanel(current, category, next.x, next.y)); };
@@ -60,36 +58,31 @@ export function MenuSystem({ groups, view, go, menu, quit }: { groups: MenuGroup
     update(current => { if (current.panels.some(panel => panel.category === category)) return closePanel(current, category); const spot = cascade(current.panels.length, current.open); return detach(current, category, spot.x, spot.y); });
   }
 
+  // A drag is followed on the window, not on the element under the pointer,
+  // so it survives re-renders and the pointer leaving the title bar.
+  function track(move: (event: PointerEvent) => void, end: () => void) {
+    const stop = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", stop); window.removeEventListener("pointercancel", stop); end(); };
+    window.addEventListener("pointermove", move); window.addEventListener("pointerup", stop); window.addEventListener("pointercancel", stop);
+  }
+
   // Dragging the detach button out of the menu tears the category off under the pointer.
   function tearDown(event: React.PointerEvent<HTMLButtonElement>, category: string) {
     if (event.button !== 0 || detached(category)) return;
-    event.currentTarget.setPointerCapture(event.pointerId);
-    tear.current = { category, x: event.clientX, y: event.clientY, torn: false };
-  }
-  function tearMove(event: React.PointerEvent<HTMLButtonElement>) {
-    const state = tear.current; if (!state) return;
-    if (!state.torn && Math.hypot(event.clientX - state.x, event.clientY - state.y) < 6) return;
-    const x = event.clientX - GRIP.x, y = event.clientY - GRIP.y;
-    if (!state.torn) { state.torn = true; const spot = place(x, y, FALLBACK, viewport()); update(current => detach(current, state.category, spot.x, spot.y)); }
-    else moveTo(state.category, x, y);
-  }
-  function tearUp(event: React.PointerEvent<HTMLButtonElement>) {
-    if (tear.current?.torn) suppressClick.current = true;
-    tear.current = null;
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    const state = { x: event.clientX, y: event.clientY, torn: false };
+    track(move => {
+      if (!state.torn && Math.hypot(move.clientX - state.x, move.clientY - state.y) < 6) return;
+      const x = move.clientX - GRIP.x, y = move.clientY - GRIP.y;
+      if (!state.torn) { state.torn = true; const spot = place(x, y, FALLBACK, viewport()); update(current => detach(current, category, spot.x, spot.y)); }
+      else moveTo(category, x, y);
+    }, () => { if (state.torn) { suppressClick.current = true; window.setTimeout(() => { suppressClick.current = false; }, 0); } });
   }
 
   function titleDown(event: React.PointerEvent<HTMLElement>, panel: Panel) {
     if (event.button !== 0 || (event.target as HTMLElement).closest("button")) return;
-    event.currentTarget.setPointerCapture(event.pointerId);
-    drag.current = { category: panel.category, dx: event.clientX - panel.x, dy: event.clientY - panel.y };
-  }
-  function titleMove(event: React.PointerEvent<HTMLElement>) {
-    const state = drag.current; if (state) moveTo(state.category, event.clientX - state.dx, event.clientY - state.dy);
-  }
-  function titleUp(event: React.PointerEvent<HTMLElement>) {
-    drag.current = null;
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    // No text selection or native drag may take the pointer away mid-move.
+    event.preventDefault(); event.currentTarget.focus();
+    const dx = event.clientX - panel.x, dy = event.clientY - panel.y;
+    track(move => moveTo(panel.category, move.clientX - dx, move.clientY - dy), () => {});
   }
   function titleKey(event: React.KeyboardEvent<HTMLElement>, panel: Panel) {
     if (event.target !== event.currentTarget) return;
@@ -103,7 +96,7 @@ export function MenuSystem({ groups, view, go, menu, quit }: { groups: MenuGroup
     {layout.open && <aside className="rail" id="main-menu"><div className="rail-head"><BrandMark /></div>
       <nav aria-label="Main navigation">{groups.map(group => { const collapsed = layout.collapsed.includes(group.id); const floating = detached(group.id); return <section className="menu-category" key={group.id} aria-label={group.title}>
         <div className="menu-category-head"><button className="menu-category-toggle" aria-label={`${group.title} category`} aria-expanded={!collapsed} onClick={() => update(current => toggleCollapsed(current, group.id))}><span aria-hidden>{collapsed ? "▸" : "▾"}</span>{group.title}</button>
-          <button className="menu-detach" aria-label={`${floating ? "Dock" : "Detach"} ${group.title} menu`} title={floating ? `Dock the floating ${group.title} menu` : `Detach ${group.title} as a floating menu (click or drag out)`} aria-pressed={floating} onPointerDown={event => tearDown(event, group.id)} onPointerMove={tearMove} onPointerUp={tearUp} onPointerCancel={tearUp} onClick={() => { if (suppressClick.current) { suppressClick.current = false; return; } toggleDetached(group.id); }}>⧉</button></div>
+          <button className="menu-detach" aria-label={`${floating ? "Dock" : "Detach"} ${group.title} menu`} title={floating ? `Dock the floating ${group.title} menu` : `Detach ${group.title} as a floating menu (click or drag out)`} aria-pressed={floating} onPointerDown={event => tearDown(event, group.id)} onClick={() => { if (suppressClick.current) { suppressClick.current = false; return; } toggleDetached(group.id); }}>⧉</button></div>
         {!collapsed && <Items group={group} view={view} go={go} />}
       </section>; })}</nav>
       <div className="rail-bottom"><button className="quit-button" aria-label="Quit InfraWerf" title="Quit InfraWerf" onClick={quit}><span className="menu-icon" aria-hidden>⏻</span>Quit</button><span className="local-avatar" title="Local workspace">L</span></div>
@@ -112,7 +105,7 @@ export function MenuSystem({ groups, view, go, menu, quit }: { groups: MenuGroup
       ref={element => { if (element) elements.current.set(panel.category, element); else elements.current.delete(panel.category); }}
       onPointerDownCapture={() => update(current => raise(current, panel.category))}
       onKeyDown={event => { if (event.key === "Escape") { event.stopPropagation(); update(current => closePanel(current, panel.category)); } }}>
-      <header className="menu-panel-title" tabIndex={0} aria-label={`Move ${group.title} menu`} aria-roledescription="draggable title bar" title="Drag to move · double-click to roll up · arrow keys move" onPointerDown={event => titleDown(event, panel)} onPointerMove={titleMove} onPointerUp={titleUp} onPointerCancel={titleUp} onDoubleClick={event => { if (!(event.target as HTMLElement).closest("button")) update(current => toggleShade(current, panel.category)); }} onKeyDown={event => titleKey(event, panel)}>
+      <header className="menu-panel-title" tabIndex={0} aria-label={`Move ${group.title} menu`} aria-roledescription="draggable title bar" title="Drag to move · double-click to roll up · arrow keys move" onPointerDown={event => titleDown(event, panel)} onDragStart={event => event.preventDefault()} onDoubleClick={event => { if (!(event.target as HTMLElement).closest("button")) update(current => toggleShade(current, panel.category)); }} onKeyDown={event => titleKey(event, panel)}>
         <span>{group.title}</span>
         <button aria-label={`${panel.shaded ? "Unroll" : "Roll up"} ${group.title} menu`} aria-expanded={!panel.shaded} title={panel.shaded ? "Unroll" : "Roll up"} onClick={() => update(current => toggleShade(current, panel.category))}>{panel.shaded ? "▾" : "▴"}</button>
         <button aria-label={`Close ${group.title} menu`} title="Close (Esc)" onClick={() => update(current => closePanel(current, panel.category))}>×</button>
