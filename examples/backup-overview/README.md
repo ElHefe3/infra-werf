@@ -7,5 +7,6 @@ Plugin API v1 defines the manifest only, so this folder holds just `infrawerf-pl
 Check it:
 
 ```
-mise run exec -- cargo run -p atlas-core --bin infrawerf-plugin -- check examples/backup-overview
+mise run exec -- cargo build -p atlas-core --bin infrawerf-plugin
+target\debug\infrawerf-plugin.exe check examples\backup-overview
 ```

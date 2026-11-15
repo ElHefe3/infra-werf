@@ -15,13 +15,23 @@ Read this first, so you know what you are building.
 
 You need the InfraWerf repository checked out and its tools installed (`mise run doctor` passes). All commands below run from the repository root.
 
-The check command is:
+Build the check tool once:
 
 ```
-mise run exec -- cargo run -p atlas-core --bin infrawerf-plugin -- check <folder>
+mise run exec -- cargo build -p atlas-core --bin infrawerf-plugin
 ```
 
-It only reads the manifest. It never runs anything in your plugin folder.
+Then check a manifest with:
+
+```
+target\debug\infrawerf-plugin.exe check <path>
+```
+
+`<path>` is either the manifest file or the folder that holds it. Your plugin folder can be anywhere; it does not have to be inside the repository. If you give the file itself, its name is not checked, so make sure the file is called `infrawerf-plugin.json` before you share the plugin.
+
+The tool only reads the manifest. It never runs anything in your plugin folder.
+
+You can also run it without building first, as `mise run exec -- cargo run -p atlas-core --bin infrawerf-plugin -- check <path>`. That works the same, but when a manifest is refused it adds two lines of its own after the tool's output (`error: process didn't exit successfully` and `ERROR task failed`). Those only mean the tool reported problems; they are not a second error.
 
 ## Step 1 — Identity and a first contribution
 
@@ -61,7 +71,7 @@ What each part means:
 Check it:
 
 ```
-mise run exec -- cargo run -p atlas-core --bin infrawerf-plugin -- check path/to/your-plugin
+target\debug\infrawerf-plugin.exe check path\to\your-plugin
 ```
 
 ```
@@ -98,7 +108,7 @@ Now add a Backups tab to each server's workspace. It needs to run an approved re
 }
 ```
 
-Check it again. This time it is refused:
+Replace the file's contents with this and check it again. This time it is refused, which is expected:
 
 ```
 Not a valid manifest for plugin API v1: 2 problems.
@@ -118,7 +128,7 @@ The rule you hit: the top-level `capabilities` list is the complete list of what
 
 ## Step 3 — Finish the manifest
 
-Add the two capabilities to the top-level list, describe the plugin and set the version for release:
+Add the two capabilities to the top-level list, describe the plugin and set the version for release. Check it once more:
 
 ```json
 {

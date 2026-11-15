@@ -40,10 +40,11 @@ This is the reference. To write a plugin step by step, start with the [author gu
 ## Checking a manifest
 
 ```
-mise run exec -- cargo run -p atlas-core --bin infrawerf-plugin -- check path/to/plugin
+mise run exec -- cargo build -p atlas-core --bin infrawerf-plugin
+target\debug\infrawerf-plugin.exe check path\to\plugin
 ```
 
-The path is the manifest or the folder that holds it. Add `--json` for machine-readable output.
+The path is the manifest or the folder that holds it. Add `--json` for machine-readable output. Build once; after that only the second line is needed.
 
 | Exit code | Meaning |
 | --- | --- |
