@@ -20,7 +20,7 @@ The open desktop tickets (T034, T035) are still to be closed or re-scoped; F18 b
 
 | Feature | Tickets | Journey |
 | --- | --- | --- |
-| [F18](../features/F18-extension-points.md) | T037, T038, T052 | Open InfraWerf → every workspace tab, server-card badge, collector and operation is listed in a registry → remote applications still works, now registered as a built-in extension. |
+| [F18](../features/F18-extension-points.md) | T037, T038, T052, T053 | Open InfraWerf → every workspace tab, server-card badge, collector and operation is listed in a registry → remote applications still works, now registered as a built-in extension. |
 | [F19](../features/F19-plugin-api-manifest.md) | T039, T040 | An author reads the guide → writes a manifest → runs the validator → sees exactly which rule failed or that the plugin is valid for API v1. |
 | [F20](../features/F20-plugin-permissions.md) | T041, T042 | Install a plugin → review its requested capabilities per server → enable, optionally granting trusted automation → later open the activity log → disable the plugin with one action. |
 | [F21](../features/F21-declarative-packs.md) | T043, T044 | Drop a pack into the plugins folder → review and enable it → new checks, collectors and badges appear for the granted servers. |

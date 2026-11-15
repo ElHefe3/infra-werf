@@ -124,3 +124,41 @@ Accepted on `19d1672`: [T052 acceptance](../evidence/T052-acceptance.md). All fo
 
 Stop if moving an option would change its stored value or its command contract.
 
+
+## T053 — Categorised main menu with detachable category copies
+
+<!-- atlas-ticket: {"id":"T053","feature":"F18","status":"done","depends_on":["T052"],"evidence":"../evidence/T053-acceptance.md"} -->
+
+### Outcome and included work
+
+The main navigation becomes a labelled menu whose items sit in categories exactly one level deep ([D056](../discovery/D056-categorised-detachable-main-menu.md)). Each category can be detached as a floating copy that is dragged anywhere inside the application window. The main menu can be hidden, and one button that is always present brings it back. Menu items are registered contributions at a new `menu_item` extension point.
+
+### Exclusions
+
+Separate operating-system windows; floating anything other than menu categories; nested menus; plugin-defined categories (a plugin item is placed in an existing category when F19 defines how); restyling the rest of the application.
+
+### Implementation and contracts
+
+Add `menu_item` to `ExtensionPoint` (only `read_saved_state` permitted) and register the six built-in items. The interface binds them like other points and assigns each a category, icon and view; an unknown category is a binding error. Layout state (menu shown or hidden, collapsed categories, detached panels with position, roll-up state and stacking order) is validated when read from local storage. Existing item names stay stable so the native suites keep finding them.
+
+**Ticket dependencies:** [T052](F18-extension-points.md).
+
+### Acceptance criteria
+
+- [x] Every main-menu item is a registry entry and appears under exactly one category; no menu is more than one level deep.
+- [x] A category detaches as a copy while the main menu keeps it; the copy can be dragged anywhere inside the window and never leaves it.
+- [x] The main menu hides and one always-present button brings it back; detached copies keep working while it is hidden.
+- [x] Detached copies come to the front when used, roll up, close, move with the keyboard and are remembered across a restart of the interface; Settings resets the layout.
+- [x] All native suites pass with the new menu.
+
+### Verification
+
+Unit tests for the extension point, grouping, layout validation, placement and stacking; a native journey in the desktop suite that detaches, drags, hides, reloads, rolls up, tears off, closes and resets.
+
+### Evidence and closure
+
+Accepted on `81192ef`: [T053 acceptance](../evidence/T053-acceptance.md). All five criteria are met and all twelve native suites pass in one run. No separate review pass was run; the record says so.
+
+### Stop conditions
+
+Stop if the menu would need a second level, or if a detached copy would have to become a separate operating-system window.
