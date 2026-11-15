@@ -8,6 +8,7 @@ pub mod inventory;
 pub mod monitoring;
 pub mod operations;
 pub mod plugin;
+pub mod plugin_host;
 mod sftp;
 pub mod ssh;
 pub mod store;

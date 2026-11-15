@@ -75,6 +75,8 @@ fn initialise(db: &Connection) -> Result<(), AtlasError> {
     db.execute_batch(SCHEMA).map_err(sql_error)?;
     db.execute_batch(crate::monitoring::SCHEMA)
         .map_err(sql_error)?;
+    db.execute_batch(crate::plugin_host::SCHEMA)
+        .map_err(sql_error)?;
     db.pragma_update(None, "application_id", APPLICATION_ID)
         .map_err(sql_error)?;
     db.pragma_update(None, "user_version", SCHEMA_VERSION)
@@ -95,6 +97,7 @@ pub(crate) fn delete_server_rows(db: &Connection, id: &ServerId) -> Result<bool,
         "DELETE FROM events WHERE server_id=?1",
         "DELETE FROM edges WHERE source=?1 OR target=?1",
         "DELETE FROM monitoring WHERE server_id=?1",
+        "DELETE FROM plugin_grant WHERE server_id=?1",
     ] {
         db.execute(statement, [id.as_str()]).map_err(sql_error)?;
     }
@@ -168,6 +171,10 @@ impl Store {
                 .map_err(sql_error)?;
             db.execute_batch("COMMIT;").map_err(sql_error)?;
         }
+        // Plugin tables are additive and need no version change, so a file
+        // this version has opened still opens in the previous release.
+        db.execute_batch(crate::plugin_host::SCHEMA)
+            .map_err(sql_error)?;
         Ok(Self { db })
     }
 

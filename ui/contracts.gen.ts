@@ -168,3 +168,34 @@ extensions: Array<ExtensionInfo>,
  * Contributions of enabled extensions only.
  */
 contributions: Array<Contribution>, };
+export type TrustLevel = "read_only" | "confirm_changes" | "trusted_automation";
+export type CapabilityKind = "read" | "change" | "elevation";
+export type PluginStatus = "disabled" | "enabled" | "changed_since_review";
+export type Refusal = "unknown_plugin" | "plugin_disabled" | "changed_since_review" | "unknown_server" | "not_requested" | "not_granted" | "trust_too_low" | "no_elevation_exception";
+export type PluginDecision = { contract_version: number, allowed: boolean,
+/**
+ * Allowed only after the owner confirms this one change.
+ */
+needs_confirmation: boolean, refusal: Refusal | null, };
+export type RequestedCapability = { capability: Capability, kind: CapabilityKind, summary: string,
+/**
+ * Titles of the contributions that use it.
+ */
+used_by: Array<string>, };
+export type PluginContributionView = { id: string, title: string, point: ExtensionPoint, capabilities: Array<Capability>, };
+export type ServerGrant = { server_id: ServerId, capabilities: Array<Capability>, };
+export type PluginView = { id: string, name: string, version: string, api_version: number, description: string | null, author: string | null, license: string | null, homepage: string | null,
+/**
+ * The folder it was found in, inside the plugins directory.
+ */
+folder: string, status: PluginStatus,
+/**
+ * Set only while the plugin is enabled.
+ */
+trust: TrustLevel | null, capabilities: Array<RequestedCapability>, contributions: Array<PluginContributionView>,
+/**
+ * Servers with at least one granted capability.
+ */
+grants: Array<ServerGrant>, };
+export type InvalidPlugin = { folder: string, problems: Array<string>, };
+export type PluginsState = { contract_version: number, directory: string, plugins: Array<PluginView>, invalid: Array<InvalidPlugin>, };

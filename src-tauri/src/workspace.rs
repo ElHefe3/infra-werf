@@ -155,6 +155,65 @@ impl Workspace {
     pub fn extensions(&self) -> atlas_core::extensions::ExtensionCatalogue {
         self.broker.extensions().catalogue()
     }
+    /// Where plugins are looked for: beside the workspace database.
+    fn plugins_directory(&self) -> PathBuf {
+        std::env::var_os(atlas_core::plugin_host::PLUGINS_DIR_ENV)
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                self.paths
+                    .database
+                    .parent()
+                    .unwrap_or_else(|| std::path::Path::new("."))
+                    .join("plugins")
+            })
+    }
+    pub fn plugins_state(&self) -> Result<atlas_core::plugin_host::PluginsState, AtlasError> {
+        let directory = self.plugins_directory();
+        self.with_store(|store| store.plugins_state(&directory))
+    }
+    pub fn plugin_enable(
+        &self,
+        plugin: &str,
+        trust: atlas_core::plugin_host::TrustLevel,
+    ) -> Result<atlas_core::plugin_host::PluginsState, AtlasError> {
+        let directory = self.plugins_directory();
+        self.with_store(|store| {
+            store.plugin_enable(&directory, plugin, trust)?;
+            store.plugins_state(&directory)
+        })
+    }
+    pub fn plugin_disable(
+        &self,
+        plugin: &str,
+    ) -> Result<atlas_core::plugin_host::PluginsState, AtlasError> {
+        let directory = self.plugins_directory();
+        self.with_store(|store| {
+            store.plugin_disable(&directory, plugin)?;
+            store.plugins_state(&directory)
+        })
+    }
+    pub fn plugin_set_grant(
+        &self,
+        plugin: &str,
+        server: &ServerId,
+        capabilities: &[atlas_core::extensions::Capability],
+    ) -> Result<atlas_core::plugin_host::PluginsState, AtlasError> {
+        let directory = self.plugins_directory();
+        self.with_store(|store| {
+            store.plugin_set_grant(&directory, plugin, server, capabilities)?;
+            store.plugins_state(&directory)
+        })
+    }
+    /// The enforcement point for a plugin's use of a capability (T041).
+    pub fn plugin_authorize(
+        &self,
+        plugin: &str,
+        server: &ServerId,
+        capability: atlas_core::extensions::Capability,
+    ) -> Result<atlas_core::plugin_host::PluginDecision, AtlasError> {
+        let directory = self.plugins_directory();
+        self.with_store(|store| store.plugin_authorize(&directory, plugin, server, capability))
+    }
     /// Refuses a command whose extension is disabled.
     pub fn require_extension(&self, extension: &str) -> Result<(), AtlasError> {
         self.broker.extensions().require(extension)
