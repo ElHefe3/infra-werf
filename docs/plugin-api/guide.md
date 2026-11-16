@@ -1,14 +1,14 @@
-# Writing an InfraWerf plugin — author guide (plugin API v1)
+# Writing an InfraWerf plugin — author guide
 
 This guide takes you from an empty folder to a plugin manifest that InfraWerf accepts. It builds the example in [`examples/backup-overview`](../../examples/backup-overview). The exact rules for every field are in the [manifest reference](README.md).
 
-## What plugin API v1 covers
+## What the plugin API covers
 
 Read this first, so you know what you are building.
 
-- **v1 defines the manifest.** A plugin is a folder with one file, `infrawerf-plugin.json`, that says who the plugin is, what it adds to InfraWerf and what it asks permission to use.
-- **v1 does not yet define plugin content.** There is no way in v1 to ship the code or data behind a tab or a check. That arrives in later API versions. A v1 manifest is the stable base those versions build on.
-- **InfraWerf finds plugins and lets the owner review them.** A plugin folder placed in the owner's plugins folder is listed in Settings, where the owner reads what it asks for and decides what to allow. Because v1 has no plugin content, an allowed plugin does not yet add anything visible. Installing from a file or an address is not built yet.
+- **The manifest comes first.** A plugin is a folder with one file, `infrawerf-plugin.json`, that says who the plugin is, what it adds to InfraWerf and what it asks permission to use.
+- **Content so far is commands.** From API v2 a `collector` or a `health_check` can carry a read-only `command`; that is a pack, described in [packs](packs.md). There is not yet a way to ship the code or data behind a tab, a badge or a menu entry. This guide builds a v1 manifest, the base every later version builds on.
+- **InfraWerf finds plugins and lets the owner review them.** A plugin folder placed in the owner's plugins folder is listed in Settings, where the owner reads what it asks for and decides what to allow. A plugin without a `command` does not yet add anything visible once allowed; a pack's commands appear in each allowed server's Plugin data tab. Installing from a file or an address is not built yet.
 - **A manifest grants nothing.** It is a request. Each owner decides what their own InfraWerf allows.
 
 ## Before you start
@@ -185,8 +185,8 @@ A contribution's `point` decides where it appears and which capabilities it may 
 | `server_badge` | A badge on a server's card on the map. | `read_saved_state` |
 | `menu_item` | An entry in the main menu. | `read_saved_state` |
 | `app_settings_section` | A section of the application Settings screen. | `read_saved_state`, `edit_map` |
-| `collector` | Collects approved inventory from a server. | `ssh_session`, `run_approved_command` |
-| `health_check` | An unauthenticated reachability check. | `network_probe` |
+| `collector` | Reads something from a server with a `command` ([packs](packs.md)). | `ssh_session`, `run_approved_command` |
+| `health_check` | A check of a server: an unauthenticated probe, or from API v2 a `command`. | `network_probe`; from v2 also `ssh_session`, `run_approved_command` |
 | `operation` | A brokered operation on a server. | `ssh_session`, `run_approved_command`, `read_files`, `write_files`, `transfer_files`, `elevate`, `control_workloads`, `loopback_tunnel` |
 
 Using a capability a point does not allow is refused with `capability_not_permitted`. A badge, for example, may only read saved state; it cannot contact a server.
@@ -218,7 +218,7 @@ The manifest is written for two readers: InfraWerf and the person deciding wheth
 In InfraWerf, **Settings → Plugins** lists every plugin folder found in the owner's plugins folder (the path is shown there). A folder whose manifest is not valid is listed separately with the same codes the check command prints. Each valid plugin has one page, and that page shows:
 
 - your `name`, `version`, `description`, `author`, `license`, `homepage` and `id`;
-- **What it adds:** each contribution's `title` and where its `point` puts it;
+- **What it adds:** each contribution's `title` and where its `point` puts it, and for a pack the exact `command` it runs;
 - **What it asks for:** each capability as a sentence, marked as reading, changing or sudo, with the titles of the contributions that use it;
 - **Trust level:** read-only, changes with confirmation, or trusted automation. The owner must pick one to enable the plugin; nothing is preselected. Read-only refuses every changing capability even if it was allowed on a server;
 - **Servers:** for each server on the owner's map, which of your capabilities are allowed there. Nothing is allowed until the owner ticks it.

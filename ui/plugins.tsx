@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useState } from "react";
 import type { Capability, CapabilityKind, ExtensionPoint, MapServer, PluginActivity, PluginActivityLog, PluginsState, PluginStatus, PluginView, Refusal, TrustLevel } from "./contracts.gen";
 import { date } from "./workspace-parts";
+import { commandLine } from "./plugin-data";
+import type { PackCommand } from "./contracts.gen";
 import { createWorkspaceClient } from "./workspace-client";
 import { errorMessage } from "./map-model";
 
@@ -31,8 +33,18 @@ const OWNER_ACTION: Record<string, string> = {
   enable: "Enabled by you", disable: "Disabled by you", set_permissions: "Permissions set by you", revoke_trusted_automation: "Trusted automation revoked by you",
   all_plugins_off: "All plugins turned off by you", all_plugins_on: "Plugins turned back on by you",
 };
+const RUN_OUTCOME: Record<string, string> = { done: "Finished", cancelled: "Cancelled: its permissions changed while it ran", failed: "Failed: nothing was read", refused: "Refused: the plugin is not installed" };
+/** How a pack command's output is read, in a sentence for the owner. */
+export function describeExtract(command: PackCommand): string {
+  const extract = command.extract;
+  const read = extract.kind === "line" ? `Reads line ${extract.line ?? 1} of the output as one value`
+    : extract.kind === "json" ? `Reads the value at ${extract.path} from JSON output`
+    : `Reads the output as a table with the columns ${extract.columns.join(", ")}`;
+  return command.healthy ? `${read}. Healthy when it is ${command.healthy.join(" or ")}.` : `${read}.`;
+}
 /** One log entry as two phrases: what happened and how it ended. */
 export function describeActivity(entry: PluginActivity): { action: string; outcome: string } {
+  if (entry.action === "run_command") return { action: entry.outcome === "refused" ? "Asked to run a command" : `Ran its command "${entry.detail}"`, outcome: RUN_OUTCOME[entry.outcome] ?? entry.outcome };
   const owner = OWNER_ACTION[entry.action];
   if (owner) return { action: owner, outcome: entry.action === "enable" ? trustLabel(entry.detail as TrustLevel) : entry.action === "set_permissions" ? (entry.detail || "Everything withdrawn") : entry.action === "revoke_trusted_automation" ? "Now: changes with confirmation" : "" };
   const outcome = entry.outcome === "allowed" ? "Allowed" : entry.outcome === "needs_confirmation" ? "Allowed after your confirmation" : `Refused: ${REFUSAL[entry.detail as Refusal] ?? entry.detail}`;
@@ -67,7 +79,8 @@ function PluginPage({ plugin, servers, busy, run, back, allOff, activity }: { pl
     <p className={`plugin-status ${plugin.status}`}><strong>Status:</strong> {statusLabel(plugin.status, plugin.trust, allOff)}</p>
 
     <h5>What it adds</h5>
-    <ul className="plugin-adds">{plugin.contributions.map(entry => <li key={entry.id}><strong>{entry.title}</strong>: {POINT[entry.point]}</li>)}</ul>
+    <ul className="plugin-adds">{plugin.contributions.map(entry => <li key={entry.id}><strong>{entry.title}</strong>: {POINT[entry.point]}{entry.command && <span className="pack-shown">Runs exactly this on a server, only when you press Run: <code aria-label={`${entry.title} command`}>{commandLine(entry.command.argv)}</code>
+        {entry.command.parameters?.map(parameter => <small key={parameter.name}>{`{${parameter.name}}`} is a {parameter.source} you choose from that server’s inventory.</small>)}<small>{describeExtract(entry.command)} No shell reads the command, and it cannot use sudo.</small></span>}</li>)}</ul>
 
     <h5>What it asks for</h5>
     <p className="muted">This is everything the plugin can ever use. It can use each item only on the servers where you allow it below.</p>

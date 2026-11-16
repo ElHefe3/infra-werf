@@ -52,6 +52,8 @@ pub const ACTION_SET_PERMISSIONS: &str = "set_permissions";
 pub const ACTION_REVOKE_TRUSTED: &str = "revoke_trusted_automation";
 pub const ACTION_ALL_OFF: &str = "all_plugins_off";
 pub const ACTION_ALL_ON: &str = "all_plugins_on";
+/// One run of a pack command; the log's detail is the contribution's ID.
+pub const ACTION_RUN_COMMAND: &str = "run_command";
 
 /// How far an enabled plugin may act. Chosen by the owner each time a plugin
 /// is enabled; there is no default.
@@ -150,8 +152,13 @@ pub enum ActivityOutcome {
     Allowed,
     NeedsConfirmation,
     Refused,
-    /// A change the owner made on a plugin's page.
+    /// A change the owner made on a plugin's page, or a pack command that
+    /// ran to the end.
     Done,
+    /// A pack command stopped because its permission changed while it ran.
+    Cancelled,
+    /// A pack command that could not be run or read.
+    Failed,
 }
 
 /// One line of the plugin activity log.
@@ -209,6 +216,17 @@ pub struct PluginContributionView {
     pub title: String,
     pub point: ExtensionPoint,
     pub capabilities: Vec<Capability>,
+    /// The exact read-only command a pack contribution runs, if any.
+    pub command: Option<crate::plugin::PackCommand>,
+}
+
+/// A pack command the owner's settings admit right now.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PackRun {
+    pub plugin_id: String,
+    pub plugin_name: String,
+    pub contribution: crate::plugin::ManifestContribution,
+    pub command: crate::plugin::PackCommand,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -542,6 +560,7 @@ impl Store {
                         title: c.title.clone(),
                         point: c.point,
                         capabilities: c.capabilities.clone(),
+                        command: c.command.clone(),
                     })
                     .collect(),
                 grants: granted(&self.db, &manifest.id)?
@@ -791,6 +810,129 @@ impl Store {
             &detail,
         )?;
         transaction.commit().map_err(sql_error)
+    }
+
+    /// Every pack command that may run on a server right now: the plugin is
+    /// enabled and unchanged, plugins are not all off, and the owner allowed
+    /// each capability the command uses on this server. Nothing is logged.
+    pub fn pack_commands(
+        &self,
+        directory: &Path,
+        server: &ServerId,
+    ) -> Result<Vec<PackRun>, AtlasError> {
+        let (installed, _) = discover(directory);
+        let mut found = Vec::new();
+        for plugin in &installed {
+            for contribution in &plugin.manifest.contributions {
+                let Some(command) = &contribution.command else {
+                    continue;
+                };
+                let mut admitted = true;
+                for capability in &contribution.capabilities {
+                    admitted &= decide(
+                        &self.db,
+                        &installed,
+                        &plugin.manifest.id,
+                        server,
+                        *capability,
+                    )? == Ok(false);
+                }
+                if admitted {
+                    found.push(PackRun {
+                        plugin_id: plugin.manifest.id.clone(),
+                        plugin_name: plugin.manifest.name.clone(),
+                        contribution: contribution.clone(),
+                        command: command.clone(),
+                    });
+                }
+            }
+        }
+        Ok(found)
+    }
+
+    /// The check before one run of a pack command (T043). The manifest is
+    /// read once, so the command returned is the one that was authorised.
+    /// Each capability the command uses is decided and logged exactly as
+    /// `plugin_authorize` does; the first refusal ends the run.
+    pub fn plugin_begin_run(
+        &mut self,
+        directory: &Path,
+        plugin: &str,
+        server: &ServerId,
+        contribution: &str,
+    ) -> Result<Result<PackRun, Refusal>, AtlasError> {
+        let (installed, _) = discover(directory);
+        let Some(found) = installed.iter().find(|p| p.manifest.id == plugin) else {
+            record(
+                &self.db,
+                ("", "Unknown plugin"),
+                None,
+                ACTION_RUN_COMMAND,
+                ActivityOutcome::Refused,
+                &name(Refusal::UnknownPlugin),
+            )?;
+            return Ok(Err(Refusal::UnknownPlugin));
+        };
+        let entry = found
+            .manifest
+            .contributions
+            .iter()
+            .find(|c| c.id == contribution)
+            .ok_or_else(|| AtlasError::new(ErrorCode::NotFound))?;
+        let command = entry
+            .command
+            .clone()
+            .ok_or_else(|| AtlasError::new(ErrorCode::NotFound))?;
+        let label = (found.manifest.id.as_str(), found.manifest.name.as_str());
+        let known = server_exists(&self.db, server)?;
+        for capability in &entry.capabilities {
+            let outcome = decide(&self.db, &installed, plugin, server, *capability)?;
+            // A read-only command never waits for a confirmation; a
+            // capability that would need one is not a read and is refused.
+            let outcome = match outcome {
+                Ok(false) => Ok(()),
+                Ok(true) => Err(Refusal::TrustTooLow),
+                Err(refusal) => Err(refusal),
+            };
+            record(
+                &self.db,
+                label,
+                known.then(|| server.as_str()),
+                &name(*capability),
+                if outcome.is_ok() {
+                    ActivityOutcome::Allowed
+                } else {
+                    ActivityOutcome::Refused
+                },
+                &outcome.err().map(name).unwrap_or_default(),
+            )?;
+            if let Err(refusal) = outcome {
+                return Ok(Err(refusal));
+            }
+        }
+        Ok(Ok(PackRun {
+            plugin_id: found.manifest.id.clone(),
+            plugin_name: found.manifest.name.clone(),
+            contribution: entry.clone(),
+            command,
+        }))
+    }
+
+    /// Log how a pack command's run ended: done, cancelled or failed.
+    pub fn plugin_finish_run(
+        &mut self,
+        run: &PackRun,
+        server: &ServerId,
+        outcome: ActivityOutcome,
+    ) -> Result<(), AtlasError> {
+        record(
+            &self.db,
+            (&run.plugin_id, &run.plugin_name),
+            server_exists(&self.db, server)?.then(|| server.as_str()),
+            ACTION_RUN_COMMAND,
+            outcome,
+            &run.contribution.id,
+        )
     }
 
     /// The enforcement point. Admits a plugin's use of one capability on one

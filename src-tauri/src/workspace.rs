@@ -5,6 +5,7 @@ use atlas_core::files::{
 };
 use atlas_core::*;
 mod monitoring;
+mod packs;
 mod tunnels;
 use atlas_core::{
     files::{
@@ -109,6 +110,7 @@ pub struct Workspace {
     live: Mutex<monitoring::LiveScheduler>,
     live_contact: Mutex<()>,
     tunnels: Mutex<tunnels::Tunnels>,
+    packs: packs::Packs,
 }
 
 impl Workspace {
@@ -145,6 +147,7 @@ impl Workspace {
             live: Mutex::new(monitoring::LiveScheduler::default()),
             live_contact: Mutex::new(()),
             tunnels: Mutex::new(tunnels::Tunnels::default()),
+            packs: packs::Packs::default(),
         })
     }
 
@@ -177,20 +180,24 @@ impl Workspace {
         trust: atlas_core::plugin_host::TrustLevel,
     ) -> Result<atlas_core::plugin_host::PluginsState, AtlasError> {
         let directory = self.plugins_directory();
-        self.with_store(|store| {
+        let state = self.with_store(|store| {
             store.plugin_enable(&directory, plugin, trust)?;
             store.plugins_state(&directory)
-        })
+        });
+        self.plugins_changed();
+        state
     }
     pub fn plugin_disable(
         &self,
         plugin: &str,
     ) -> Result<atlas_core::plugin_host::PluginsState, AtlasError> {
         let directory = self.plugins_directory();
-        self.with_store(|store| {
+        let state = self.with_store(|store| {
             store.plugin_disable(&directory, plugin)?;
             store.plugins_state(&directory)
-        })
+        });
+        self.plugins_changed();
+        state
     }
     pub fn plugin_set_grant(
         &self,
@@ -199,10 +206,12 @@ impl Workspace {
         capabilities: &[atlas_core::extensions::Capability],
     ) -> Result<atlas_core::plugin_host::PluginsState, AtlasError> {
         let directory = self.plugins_directory();
-        self.with_store(|store| {
+        let state = self.with_store(|store| {
             store.plugin_set_grant(&directory, plugin, server, capabilities)?;
             store.plugins_state(&directory)
-        })
+        });
+        self.plugins_changed();
+        state
     }
     pub fn plugin_activity(
         &self,
@@ -216,20 +225,24 @@ impl Workspace {
         off: bool,
     ) -> Result<atlas_core::plugin_host::PluginsState, AtlasError> {
         let directory = self.plugins_directory();
-        self.with_store(|store| {
+        let state = self.with_store(|store| {
             store.plugins_set_all_off(off)?;
             store.plugins_state(&directory)
-        })
+        });
+        self.plugins_changed();
+        state
     }
     pub fn plugin_revoke_trusted(
         &self,
         plugin: &str,
     ) -> Result<atlas_core::plugin_host::PluginsState, AtlasError> {
         let directory = self.plugins_directory();
-        self.with_store(|store| {
+        let state = self.with_store(|store| {
             store.plugin_revoke_trusted(&directory, plugin)?;
             store.plugins_state(&directory)
-        })
+        });
+        self.plugins_changed();
+        state
     }
     /// The enforcement point for a plugin's use of a capability (T041).
     pub fn plugin_authorize(

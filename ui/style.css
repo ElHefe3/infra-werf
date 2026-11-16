@@ -362,6 +362,13 @@ form label { display: grid; gap: 7px; margin-top: 18px; color: #86987a; font-siz
 .plugin-server header{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px}.plugin-server header span{color:#8a9884;font-size:11px}.plugin-server header .count{margin-left:auto}.plugin-server header button{padding:3px 8px;font-size:11px}
 .plugin-invalid li{display:grid;gap:3px;font-size:12px}.plugin-invalid code{font-size:10px;color:#a36150;overflow-wrap:anywhere}
 .server-plugins{margin-top:26px}
+.pack-shown{display:grid;gap:3px;margin:4px 0 0}.pack-shown code,.pack-argv{font-family:ui-monospace,Consolas,monospace;font-size:12px;background:#f3f6ef;border:1px solid var(--border);border-radius:6px;padding:4px 8px;overflow-wrap:anywhere;display:block}
+.pack-plugin{margin:14px 0}.pack-plugin > header{display:flex;align-items:center;gap:12px}.pack-plugin h4{margin:0;font-size:14px}
+.pack-command{border:1px solid var(--border);border-radius:8px;background:white;padding:10px 12px;margin:8px 0;display:grid;gap:8px}
+.pack-command > header{display:flex;align-items:center;gap:10px;font-size:13px}.pack-command .kind{font-size:10px;color:#7c8b78;border:1px solid var(--border);border-radius:10px;padding:1px 8px}.pack-command > header button{margin-left:auto}
+.pack-command label{display:grid;gap:4px;font-size:11px;color:#5d6d59}.pack-command select{max-width:320px}
+.pack-result{display:grid;gap:6px}.pack-value{margin:0;font-size:13px;font-weight:600;overflow-wrap:anywhere}.pack-value.healthy{color:var(--green)}.pack-value.unhealthy{color:#a36150}.pack-value.unknown{color:#7c8b78;font-weight:400}
+.pack-result table{font-size:11px}.pack-result th{position:static;text-transform:capitalize}.pack-result small{color:#8a9884}
 .plugin-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:8px 0}
 .plugin-activity{width:100%;border-collapse:collapse;margin:10px 0;font-size:11px;background:white;border:1px solid var(--border)}
 .plugin-activity th{position:static;padding:6px 8px;text-align:left}.plugin-activity td{padding:6px 8px;border-top:1px solid #eef2e9;vertical-align:top;overflow-wrap:anywhere}

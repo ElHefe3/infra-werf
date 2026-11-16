@@ -18,9 +18,10 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeSet;
+use ts_rs::TS;
 
 /// The plugin API this InfraWerf implements.
-pub const PLUGIN_API_VERSION: u32 = 1;
+pub const PLUGIN_API_VERSION: u32 = 2;
 /// The oldest plugin API this InfraWerf still accepts.
 pub const MIN_PLUGIN_API_VERSION: u32 = 1;
 pub const MANIFEST_FILE: &str = "infrawerf-plugin.json";
@@ -29,10 +30,10 @@ pub const MAX_PLUGIN_CONTRIBUTIONS: usize = 64;
 /// First ID segments a plugin may not use.
 pub const RESERVED_ID_PREFIXES: [&str; 2] = ["builtin", "infrawerf"];
 
-/// The contents of `infrawerf-plugin.json` for plugin API v1.
+/// The contents of `infrawerf-plugin.json` for plugin API v2.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-#[schemars(title = "InfraWerf plugin manifest (API v1)")]
+#[schemars(title = "InfraWerf plugin manifest (API v2)")]
 pub struct PluginManifest {
     /// Reverse-domain identifier, for example `org.example.backup-overview`:
     /// at least three lower-case segments of letters, digits and hyphens,
@@ -83,6 +84,422 @@ pub struct ManifestContribution {
     /// The capabilities this contribution uses: at least one, each
     /// requested by the manifest and permitted at this extension point.
     pub capabilities: Vec<Capability>,
+    /// A read-only command this contribution runs, for a `collector` or a
+    /// `health_check` (API v2). It needs `ssh_session` and
+    /// `run_approved_command`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command: Option<PackCommand>,
+}
+
+/// One read-only command a pack contribution runs, and how its output is
+/// read (plugin API v2). It is an argument vector, never a shell string.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct PackCommand {
+    /// The program, then its arguments: 1 to 16 entries. An entry holds
+    /// only letters, digits and `_ . , : / = + @ % -`, or is exactly
+    /// `{name}` for a declared parameter. The program is a plain name or an
+    /// absolute path and is never a shell, an interpreter or `sudo`.
+    pub argv: Vec<String>,
+    /// Values filled in from what InfraWerf discovered on the server, at
+    /// most 4. Each must be used by `argv`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub parameters: Vec<PackParameter>,
+    /// How the output is read.
+    pub extract: Extractor,
+    /// For a health check: the values that mean healthy, 1 to 8. Any other
+    /// value means unhealthy; no readable value means unknown. Required at
+    /// `health_check`, not allowed at `collector`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub healthy: Option<Vec<String>>,
+}
+
+/// A value InfraWerf fills in. The owner picks it from what an authenticated
+/// session discovered; a pack cannot supply it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct PackParameter {
+    /// Lower-case letters, digits and underscores, starting with a letter,
+    /// 32 characters at most. Written in `argv` as `{name}`.
+    pub name: String,
+    pub source: ParameterSource,
+}
+
+/// Where a parameter's value comes from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ParameterSource {
+    /// The name of a systemd service found in the server's inventory.
+    Service,
+    /// The name of a container found in the server's inventory.
+    Container,
+}
+
+/// How a command's output becomes a value or a table.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum Extractor {
+    /// One line of the output as a single value.
+    Line {
+        /// Which line, counting from 1. Defaults to 1; 1000 at most.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        line: Option<u16>,
+    },
+    /// Each line as a row of named columns. At most 100 rows are kept.
+    Table {
+        /// 1 to 12 column names: lower-case letters, digits and
+        /// underscores, starting with a letter. The last column takes the
+        /// rest of the line.
+        columns: Vec<String>,
+        /// Lines to skip before the first row, 100 at most. Defaults to 0.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        skip_lines: Option<u16>,
+        /// What separates columns. Defaults to `whitespace`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        separator: Option<Separator>,
+    },
+    /// One text, number or true/false value from JSON output.
+    Json {
+        /// Dotted names with optional `[index]`, for example
+        /// `pool.disks[0].state`; 200 characters at most.
+        path: String,
+    },
+}
+
+/// What separates the columns of a table.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum Separator {
+    /// Any run of spaces or tabs.
+    Whitespace,
+    /// One tab character.
+    Tab,
+    /// One comma.
+    Comma,
+}
+
+pub const MAX_PACK_ARGUMENTS: usize = 16;
+pub const MAX_PACK_PARAMETERS: usize = 4;
+/// The API version that introduced pack commands.
+pub const PACK_API_VERSION: u32 = 2;
+/// Programs a pack may not name, by file name: shells, interpreters and
+/// wrappers that run other programs, ways to become another user, network
+/// clients, and the common programs whose purpose is to change a system.
+/// This catches mistakes and the obvious abuses. It cannot prove that a
+/// program only reads, which is why the owner is shown the exact command.
+pub const FORBIDDEN_PROGRAMS: &[&str] = &[
+    "sh",
+    "bash",
+    "dash",
+    "zsh",
+    "ksh",
+    "csh",
+    "tcsh",
+    "fish",
+    "ash",
+    "busybox",
+    "env",
+    "sudo",
+    "su",
+    "doas",
+    "pkexec",
+    "runuser",
+    "perl",
+    "ruby",
+    "node",
+    "php",
+    "lua",
+    "awk",
+    "gawk",
+    "mawk",
+    "sed",
+    "xargs",
+    "find",
+    "eval",
+    "exec",
+    "nohup",
+    "timeout",
+    "nice",
+    "ionice",
+    "strace",
+    "watch",
+    "ssh",
+    "scp",
+    "sftp",
+    "rsync",
+    "curl",
+    "wget",
+    "nc",
+    "ncat",
+    "socat",
+    "telnet",
+    "rm",
+    "mv",
+    "cp",
+    "dd",
+    "tee",
+    "chmod",
+    "chown",
+    "kill",
+    "pkill",
+    "killall",
+    "reboot",
+    "shutdown",
+    "poweroff",
+    "halt",
+    "mkfs",
+    "mount",
+    "umount",
+    "truncate",
+    "ln",
+    "mkdir",
+    "rmdir",
+    "touch",
+    "install",
+    "tar",
+    "systemd-run",
+    "at",
+    "crontab",
+];
+
+fn forbidden_program(program: &str) -> bool {
+    let name = program.rsplit('/').next().unwrap_or(program);
+    FORBIDDEN_PROGRAMS.contains(&name) || name.starts_with("python")
+}
+
+fn field_name(name: &str) -> bool {
+    name.len() <= 32
+        && name.as_bytes().first().is_some_and(u8::is_ascii_lowercase)
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+}
+
+fn json_path_ok(path: &str) -> bool {
+    let segments: Vec<&str> = path.split('.').collect();
+    !path.is_empty()
+        && path.len() <= 200
+        && segments.len() <= 16
+        && segments.iter().all(|segment| {
+            let (name, indexes) = match segment.find('[') {
+                Some(at) => (&segment[..at], &segment[at..]),
+                None => (*segment, ""),
+            };
+            let named = name
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-');
+            let indexed = indexes.is_empty()
+                || (indexes.ends_with(']')
+                    && indexes.split_terminator(']').all(|index| {
+                        index.strip_prefix('[').is_some_and(|digits| {
+                            !digits.is_empty()
+                                && digits.len() <= 4
+                                && digits.bytes().all(|b| b.is_ascii_digit())
+                        })
+                    }));
+            named && indexed && !(name.is_empty() && indexes.is_empty())
+        })
+}
+
+/// Checks one pack command. `at` is the field path of the command.
+fn check_command(
+    command: &PackCommand,
+    contribution: &ManifestContribution,
+    api_version: u32,
+    at: &str,
+    issues: &mut Issues,
+) {
+    use crate::pack::{placeholder, safe_argument};
+    let health = contribution.point == ExtensionPoint::HealthCheck;
+    if api_version < PACK_API_VERSION {
+        issues.add(
+            ManifestRule::CommandNotSupported,
+            at,
+            format!("Commands need \"api_version\": {PACK_API_VERSION} or newer."),
+        );
+    }
+    if !health && contribution.point != ExtensionPoint::Collector {
+        issues.add(
+            ManifestRule::CommandNotSupported,
+            at,
+            "Only a collector or a health_check contribution may have a command.",
+        );
+    }
+    for needed in [Capability::SshSession, Capability::RunApprovedCommand] {
+        if !contribution.capabilities.contains(&needed) {
+            issues.add(
+                ManifestRule::CommandNeedsCapability,
+                at,
+                format!(
+                    "A contribution with a command lists \"{}\" in its capabilities.",
+                    capability_name(needed)
+                ),
+            );
+        }
+    }
+    if command.argv.is_empty() || command.argv.len() > MAX_PACK_ARGUMENTS {
+        issues.add(
+            ManifestRule::UnsafeArgument,
+            format!("{at}.argv"),
+            format!("A command is a program and its arguments: 1 to {MAX_PACK_ARGUMENTS} entries."),
+        );
+    }
+    let mut names = BTreeSet::new();
+    if command.parameters.len() > MAX_PACK_PARAMETERS {
+        issues.add(
+            ManifestRule::InvalidParameter,
+            format!("{at}.parameters"),
+            format!("A command has at most {MAX_PACK_PARAMETERS} parameters."),
+        );
+    }
+    for (index, parameter) in command.parameters.iter().enumerate() {
+        if !field_name(&parameter.name) || !names.insert(parameter.name.as_str()) {
+            issues.add(
+                ManifestRule::InvalidParameter,
+                format!("{at}.parameters[{index}].name"),
+                "Use a name of lower-case letters, digits and underscores, starting with a letter, 32 characters at most, and use it once.",
+            );
+        }
+    }
+    let mut used = BTreeSet::new();
+    for (index, argument) in command.argv.iter().enumerate() {
+        let field = format!("{at}.argv[{index}]");
+        if let Some(name) = placeholder(argument) {
+            if index == 0 {
+                issues.add(
+                    ManifestRule::UnsafeArgument,
+                    field,
+                    "The program cannot be a parameter.",
+                );
+            } else if names.contains(name) {
+                used.insert(name);
+            } else {
+                issues.add(
+                    ManifestRule::UndeclaredParameter,
+                    field,
+                    format!("\"{name}\" is not in this command's parameters list."),
+                );
+            }
+            continue;
+        }
+        if !safe_argument(argument) {
+            issues.add(
+                ManifestRule::UnsafeArgument,
+                field,
+                "An argument is 1 to 200 characters of letters, digits and _ . , : / = + @ % - only. Spaces, quotes, pipes, redirects, $ and other shell characters are not allowed: a command is not run by a shell.",
+            );
+        } else if index == 0 {
+            let path = argument.contains('/');
+            if argument.starts_with('-') || (path && !argument.starts_with('/')) {
+                issues.add(
+                    ManifestRule::UnsafeArgument,
+                    field,
+                    "The program is a plain name such as df, or an absolute path such as /usr/bin/df.",
+                );
+            } else if forbidden_program(argument) {
+                issues.add(
+                    ManifestRule::ForbiddenProgram,
+                    field,
+                    format!("A pack may not run \"{argument}\": no shells, interpreters, sudo, network clients or programs that change a server."),
+                );
+            }
+        }
+    }
+    for (index, parameter) in command.parameters.iter().enumerate() {
+        if names.contains(parameter.name.as_str()) && !used.contains(parameter.name.as_str()) {
+            issues.add(
+                ManifestRule::UnusedParameter,
+                format!("{at}.parameters[{index}]"),
+                format!("\"{}\" is declared but argv never uses it.", parameter.name),
+            );
+        }
+    }
+    let extract = format!("{at}.extract");
+    match &command.extract {
+        Extractor::Line { line } => {
+            if line.is_some_and(|line| line == 0 || line > 1000) {
+                issues.add(
+                    ManifestRule::InvalidExtractor,
+                    format!("{extract}.line"),
+                    "Lines count from 1, up to 1000.",
+                );
+            }
+        }
+        Extractor::Table {
+            columns,
+            skip_lines,
+            ..
+        } => {
+            let mut seen = BTreeSet::new();
+            if columns.is_empty()
+                || columns.len() > 12
+                || !columns
+                    .iter()
+                    .all(|column| field_name(column) && seen.insert(column.as_str()))
+            {
+                issues.add(
+                    ManifestRule::InvalidExtractor,
+                    format!("{extract}.columns"),
+                    "Give 1 to 12 different column names of lower-case letters, digits and underscores, each starting with a letter.",
+                );
+            }
+            if skip_lines.is_some_and(|skip| skip > 100) {
+                issues.add(
+                    ManifestRule::InvalidExtractor,
+                    format!("{extract}.skip_lines"),
+                    "At most 100 lines can be skipped.",
+                );
+            }
+        }
+        Extractor::Json { path } => {
+            if !json_path_ok(path) {
+                issues.add(
+                    ManifestRule::InvalidExtractor,
+                    format!("{extract}.path"),
+                    "Use dotted names with optional [index], for example pool.disks[0].state.",
+                );
+            }
+        }
+    }
+    let healthy = format!("{at}.healthy");
+    match (&command.healthy, health) {
+        (None, true) => issues.add(
+            ManifestRule::InvalidHealthRule,
+            healthy,
+            "A health check lists the values that mean healthy.",
+        ),
+        (Some(_), false) => issues.add(
+            ManifestRule::InvalidHealthRule,
+            healthy,
+            "Only a health_check contribution has \"healthy\" values.",
+        ),
+        (Some(values), true) => {
+            if matches!(command.extract, Extractor::Table { .. }) {
+                issues.add(
+                    ManifestRule::InvalidHealthRule,
+                    healthy,
+                    "A health check reads one value: use a line or json extractor.",
+                );
+            } else if values.is_empty()
+                || values.len() > 8
+                || !values.iter().all(|value| tidy(value, 64))
+            {
+                issues.add(
+                    ManifestRule::InvalidHealthRule,
+                    healthy,
+                    "List 1 to 8 values of 1 to 64 characters each.",
+                );
+            }
+        }
+        (None, false) => {}
+    }
+}
+
+impl std::fmt::Display for PackCommand {
+    /// The command as the owner reads it: the arguments separated by spaces.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.argv.join(" "))
+    }
 }
 
 pub const DEFAULT_PLUGIN_ORDER: u16 = 1000;
@@ -147,10 +564,34 @@ pub enum ManifestRule {
     CapabilityNotRequested,
     /// A contribution uses a capability its extension point does not permit.
     CapabilityNotPermitted,
+    /// A command has an unknown field, a missing field or a wrong type.
+    InvalidCommand,
+    /// A command where none is possible: the wrong extension point, or a
+    /// manifest written for API v1.
+    CommandNotSupported,
+    /// A contribution with a command does not list the two capabilities a
+    /// command uses.
+    CommandNeedsCapability,
+    /// An argument holds a character outside the safe set, or the command
+    /// has no program or too many arguments.
+    UnsafeArgument,
+    /// The program is a shell, an interpreter, sudo or another program a
+    /// pack may not run.
+    ForbiddenProgram,
+    /// `argv` uses a `{name}` that the command does not declare.
+    UndeclaredParameter,
+    /// A declared parameter that `argv` never uses.
+    UnusedParameter,
+    /// A parameter name is malformed or repeated, or there are too many.
+    InvalidParameter,
+    /// A line number, column list or JSON path is malformed.
+    InvalidExtractor,
+    /// The healthy values are missing, misplaced or malformed.
+    InvalidHealthRule,
 }
 
 impl ManifestRule {
-    pub const ALL: [ManifestRule; 26] = [
+    pub const ALL: [ManifestRule; 36] = [
         Self::MalformedJson,
         Self::TooLarge,
         Self::WrongType,
@@ -177,6 +618,16 @@ impl ManifestRule {
         Self::ContributionWithoutCapability,
         Self::CapabilityNotRequested,
         Self::CapabilityNotPermitted,
+        Self::InvalidCommand,
+        Self::CommandNotSupported,
+        Self::CommandNeedsCapability,
+        Self::UnsafeArgument,
+        Self::ForbiddenProgram,
+        Self::UndeclaredParameter,
+        Self::UnusedParameter,
+        Self::InvalidParameter,
+        Self::InvalidExtractor,
+        Self::InvalidHealthRule,
     ];
 
     /// The stable code, as written in output and documentation.
@@ -233,6 +684,7 @@ enum Kind {
     Capabilities,
     Point,
     Contributions,
+    Command,
 }
 impl Kind {
     fn expects(self) -> &'static str {
@@ -241,6 +693,7 @@ impl Kind {
             Kind::Integer => "a whole number",
             Kind::Capabilities => "a list of capability names",
             Kind::Contributions => "a list of contributions",
+            Kind::Command => "a command object",
         }
     }
 }
@@ -265,6 +718,7 @@ const CONTRIBUTION_FIELDS: &[(&str, Kind, bool)] = &[
     ("title", Kind::Text, true),
     ("order", Kind::Integer, false),
     ("capabilities", Kind::Capabilities, true),
+    ("command", Kind::Command, false),
 ];
 
 /// Field names and required flags, for the schema consistency test.
@@ -397,6 +851,20 @@ fn shape(value: &Value, path: &str, fields: &[(&str, Kind, bool)], issues: &mut 
                     }
                 }
             },
+            Kind::Command => {
+                if !found.is_object() {
+                    wrong(issues, field);
+                } else if let Err(error) = serde_json::from_value::<PackCommand>(found.clone()) {
+                    // serde names the unknown or missing field or the wrong type.
+                    let reason = error.to_string();
+                    let reason = reason.split(" at line ").next().unwrap_or_default();
+                    issues.add(
+                        ManifestRule::InvalidCommand,
+                        field,
+                        format!("The command is not written as plugin API v{PLUGIN_API_VERSION} describes: {reason}."),
+                    );
+                }
+            }
             Kind::Contributions => match found.as_array() {
                 None => wrong(issues, field),
                 Some(list) => {
@@ -686,13 +1154,26 @@ pub fn validate_manifest(bytes: &[u8]) -> Result<PluginManifest, Vec<ManifestIss
                     format!("\"{name}\" is not in the manifest's capabilities list."),
                 );
             }
-            if !contribution.point.permitted().contains(capability) {
+            // API v1 allowed a health check only an unauthenticated probe.
+            let v1_health = manifest.api_version < PACK_API_VERSION
+                && contribution.point == ExtensionPoint::HealthCheck
+                && *capability != Capability::NetworkProbe;
+            if v1_health || !contribution.point.permitted().contains(capability) {
                 issues.add(
                     ManifestRule::CapabilityNotPermitted,
                     field,
                     format!("\"{name}\" cannot be used at this extension point."),
                 );
             }
+        }
+        if let Some(command) = &contribution.command {
+            check_command(
+                command,
+                contribution,
+                manifest.api_version,
+                &format!("{at}.command"),
+                &mut issues,
+            );
         }
     }
     for (index, capability) in manifest.capabilities.iter().enumerate() {

@@ -738,3 +738,172 @@ fn trusted_automation_can_be_revoked_without_disabling_and_takes_effect_on_the_n
             .any(|e| e.action == "revoke_trusted_automation" && e.detail == "confirm_changes")
     );
 }
+
+const PACK: &str = "org.example.host-basics";
+
+fn pack_fixture() -> Fixture {
+    let f = fixture();
+    let example = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../examples/host-basics/infrawerf-plugin.json");
+    install(
+        &f.plugins,
+        "host-basics",
+        &std::fs::read_to_string(example).unwrap(),
+    );
+    f
+}
+
+fn run_log(f: &Fixture) -> Vec<(String, ActivityOutcome, String)> {
+    let mut entries = f.store.plugin_activity(500).unwrap().entries;
+    entries.reverse();
+    entries
+        .into_iter()
+        .filter(|e| e.plugin_id == PACK || e.plugin_id.is_empty())
+        .map(|e| (e.action, e.outcome, e.detail))
+        .collect()
+}
+
+#[test]
+fn a_pack_command_is_listed_and_admitted_only_where_the_owner_allowed_it() {
+    let mut f = pack_fixture();
+    let both = [Capability::SshSession, Capability::RunApprovedCommand];
+    let listed = |f: &Fixture, server: &ServerId| -> Vec<String> {
+        f.store
+            .pack_commands(&f.plugins, server)
+            .unwrap()
+            .into_iter()
+            .map(|run| run.contribution.id)
+            .collect()
+    };
+    // The page shows the exact command before anything is enabled.
+    let state = f.store.plugins_state(&f.plugins).unwrap();
+    let view = state.plugins.iter().find(|p| p.id == PACK).unwrap();
+    let shown: Vec<String> = view
+        .contributions
+        .iter()
+        .map(|c| c.command.as_ref().unwrap().to_string())
+        .collect();
+    assert!(shown.contains(&"systemctl is-active {unit}".to_owned()));
+    // Found but not enabled: nothing is listed and a run is refused.
+    assert!(listed(&f, &f.alpha).is_empty());
+    let alpha = f.alpha.clone();
+    let beta = f.beta.clone();
+    assert_eq!(
+        f.store
+            .plugin_begin_run(&f.plugins, PACK, &alpha, "kernel")
+            .unwrap()
+            .unwrap_err(),
+        Refusal::PluginDisabled
+    );
+    // Enabled read-only with one of the two permissions: still nothing.
+    f.store
+        .plugin_enable(&f.plugins, PACK, TrustLevel::ReadOnly)
+        .unwrap();
+    f.store
+        .plugin_set_grant(&f.plugins, PACK, &alpha, &[Capability::SshSession])
+        .unwrap();
+    assert!(listed(&f, &alpha).is_empty());
+    assert_eq!(
+        f.store
+            .plugin_begin_run(&f.plugins, PACK, &alpha, "kernel")
+            .unwrap()
+            .unwrap_err(),
+        Refusal::NotGranted
+    );
+    // Both permissions on one server: every command there, none elsewhere.
+    f.store
+        .plugin_set_grant(&f.plugins, PACK, &alpha, &both)
+        .unwrap();
+    assert_eq!(
+        listed(&f, &alpha),
+        ["disk-usage", "kernel", "system-state", "service-active"]
+    );
+    assert!(listed(&f, &beta).is_empty());
+    let run = f
+        .store
+        .plugin_begin_run(&f.plugins, PACK, &alpha, "kernel")
+        .unwrap()
+        .unwrap();
+    assert_eq!(run.command.argv, ["uname", "-r"]);
+    assert_eq!(
+        f.store
+            .plugin_begin_run(&f.plugins, PACK, &beta, "kernel")
+            .unwrap()
+            .unwrap_err(),
+        Refusal::NotGranted
+    );
+    // Unknown contributions and unknown plugins run nothing.
+    assert!(
+        f.store
+            .plugin_begin_run(&f.plugins, PACK, &alpha, "absent")
+            .is_err()
+    );
+    assert_eq!(
+        f.store
+            .plugin_begin_run(&f.plugins, "org.example.absent", &alpha, "kernel")
+            .unwrap()
+            .unwrap_err(),
+        Refusal::UnknownPlugin
+    );
+    // A run's end is logged with the contribution only.
+    f.store
+        .plugin_finish_run(&run, &alpha, ActivityOutcome::Done)
+        .unwrap();
+    f.store
+        .plugin_finish_run(&run, &alpha, ActivityOutcome::Cancelled)
+        .unwrap();
+    let log = run_log(&f);
+    let tail: Vec<_> = log[log.len() - 2..].to_vec();
+    assert_eq!(
+        tail,
+        [
+            ("run_command".into(), ActivityOutcome::Done, "kernel".into()),
+            (
+                "run_command".into(),
+                ActivityOutcome::Cancelled,
+                "kernel".into()
+            ),
+        ]
+    );
+    // The admitted run logged one allowed entry per capability it uses.
+    assert!(log.contains(&(
+        "run_approved_command".into(),
+        ActivityOutcome::Allowed,
+        String::new()
+    )));
+    // The kill switch, a withdrawn permission and a changed manifest each
+    // empty the list and refuse the next run.
+    f.store.plugins_set_all_off(true).unwrap();
+    assert!(listed(&f, &alpha).is_empty());
+    assert_eq!(
+        f.store
+            .plugin_begin_run(&f.plugins, PACK, &alpha, "kernel")
+            .unwrap()
+            .unwrap_err(),
+        Refusal::AllPluginsOff
+    );
+    f.store.plugins_set_all_off(false).unwrap();
+    assert_eq!(listed(&f, &alpha).len(), 4);
+    f.store
+        .plugin_set_grant(&f.plugins, PACK, &alpha, &[])
+        .unwrap();
+    assert!(listed(&f, &alpha).is_empty());
+    f.store
+        .plugin_set_grant(&f.plugins, PACK, &alpha, &both)
+        .unwrap();
+    // The owner reviewed `uname -r`. A pack that now says something else
+    // is switched off until it is reviewed again.
+    let path = f.plugins.join("host-basics/infrawerf-plugin.json");
+    let changed = std::fs::read_to_string(&path)
+        .unwrap()
+        .replace("\"-r\"", "\"-a\"");
+    std::fs::write(&path, changed).unwrap();
+    assert!(listed(&f, &alpha).is_empty());
+    assert_eq!(
+        f.store
+            .plugin_begin_run(&f.plugins, PACK, &alpha, "kernel")
+            .unwrap()
+            .unwrap_err(),
+        Refusal::ChangedSinceReview
+    );
+}

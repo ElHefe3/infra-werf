@@ -34,11 +34,13 @@ fn codes(bytes: &[u8]) -> Vec<String> {
 #[test]
 fn valid_manifests_load_and_register_like_built_in_contributions() {
     let valid = fixtures("valid");
-    assert_eq!(valid.len(), 2);
+    assert_eq!(valid.len(), 3);
     for (name, bytes) in valid {
         let manifest =
             validate_manifest(&bytes).unwrap_or_else(|issues| panic!("{name}: {issues:?}"));
-        assert_eq!(manifest.api_version, PLUGIN_API_VERSION);
+        // Manifests written for API v1 are still accepted as they are.
+        assert_eq!(manifest.api_version, if name == "pack" { 2 } else { 1 });
+        assert!((MIN_PLUGIN_API_VERSION..=PLUGIN_API_VERSION).contains(&manifest.api_version));
         // The same registry that holds built-in contributions accepts them.
         let mut registry = builtin();
         registry
@@ -326,7 +328,7 @@ fn the_example_plugin_validates_and_loads() {
         std::fs::read(repository("examples/backup-overview/infrawerf-plugin.json")).unwrap();
     let manifest = validate_manifest(&bytes).unwrap();
     assert_eq!(manifest.id, "org.example.backup-overview");
-    assert_eq!(manifest.api_version, PLUGIN_API_VERSION);
+    assert_eq!(manifest.api_version, 1);
     // Loading: the registry that holds the built-in contributions takes it.
     let mut registry = builtin();
     let before = registry.catalogue().contributions.len();
@@ -393,7 +395,7 @@ fn the_guide_builds_the_example_and_its_steps_behave_as_written() {
 }
 
 #[test]
-fn the_guide_and_reference_document_everything_in_api_v1() {
+fn the_guide_and_reference_document_everything_in_the_api() {
     let guide = std::fs::read_to_string(repository("docs/plugin-api/guide.md")).unwrap();
     let reference = std::fs::read_to_string(repository("docs/plugin-api/README.md")).unwrap();
     let schema: serde_json::Value = serde_json::from_str(&manifest_schema()).unwrap();
@@ -434,4 +436,171 @@ fn the_guide_and_reference_document_everything_in_api_v1() {
         );
     }
     assert!(guide.contains("(README.md#error-codes)"));
+
+    // The pack reference documents every field and value of a command.
+    let packs = std::fs::read_to_string(repository("docs/plugin-api/packs.md")).unwrap();
+    let mut pack_names: BTreeSet<String> = BTreeSet::new();
+    let properties = |object: &serde_json::Value, into: &mut BTreeSet<String>| {
+        for name in object["properties"].as_object().unwrap().keys() {
+            into.insert(name.clone());
+        }
+    };
+    properties(&schema["$defs"]["PackCommand"], &mut pack_names);
+    properties(&schema["$defs"]["PackParameter"], &mut pack_names);
+    let kinds = schema["$defs"]["Extractor"]["oneOf"].as_array().unwrap();
+    assert_eq!(kinds.len(), 3);
+    for kind in kinds {
+        properties(kind, &mut pack_names);
+        pack_names.insert(kind["properties"]["kind"]["const"].as_str().unwrap().into());
+    }
+    for definition in ["ParameterSource", "Separator"] {
+        pack_names.extend(names(definition));
+    }
+    assert_eq!(pack_names.len(), 19, "{pack_names:?}");
+    for name in &pack_names {
+        assert!(
+            packs.contains(&format!("`{name}`")),
+            "packs.md lacks {name}"
+        );
+    }
+    for limit in [
+        MAX_PACK_ARGUMENTS.to_string(),
+        MAX_PACK_PARAMETERS.to_string(),
+        atlas_core::pack::MAX_PACK_ROWS.to_string(),
+        atlas_core::pack::MAX_PACK_VALUE_CHARS.to_string(),
+    ] {
+        assert!(packs.contains(&limit), "packs.md lacks the limit {limit}");
+    }
+}
+
+#[test]
+fn the_example_pack_is_the_documented_one_and_runs_only_what_it_shows() {
+    let example = std::fs::read(repository("examples/host-basics/infrawerf-plugin.json")).unwrap();
+    let manifest = validate_manifest(&example).unwrap();
+    assert_eq!(manifest.api_version, 2);
+    let packs = std::fs::read_to_string(repository("docs/plugin-api/packs.md")).unwrap();
+    let blocks = json_blocks(&packs);
+    assert_eq!(blocks.len(), 2);
+    assert_eq!(validate_manifest(blocks[0].1.as_bytes()).unwrap(), manifest);
+    let refused = validate_manifest(blocks[1].1.as_bytes()).unwrap_err();
+    assert_eq!(blocks[1].0.as_deref(), Some("unsafe_argument"));
+    assert!(
+        refused
+            .iter()
+            .all(|issue| issue.code == ManifestRule::UnsafeArgument)
+    );
+    // Every contribution is a command, shown as its arguments.
+    let shown: Vec<String> = manifest
+        .contributions
+        .iter()
+        .map(|c| c.command.as_ref().unwrap().to_string())
+        .collect();
+    assert_eq!(
+        shown,
+        [
+            "df -P -k",
+            "uname -r",
+            "systemctl is-system-running",
+            "systemctl is-active {unit}"
+        ]
+    );
+}
+
+#[test]
+fn unsafe_commands_are_refused_however_they_are_written() {
+    let base = String::from_utf8(
+        std::fs::read(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/fixtures/plugin-manifests/invalid/forbidden_program.json"),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let with = |argv: &[&str]| {
+        let mut value: serde_json::Value = serde_json::from_str(&base).unwrap();
+        value["contributions"][0]["command"]["argv"] = serde_json::json!(argv);
+        codes(&serde_json::to_vec(&value).unwrap())
+    };
+    // Shell metacharacters, in any argument.
+    for argument in [
+        "a;b",
+        "a|b",
+        "a&b",
+        "$(id)",
+        "`id`",
+        "$HOME",
+        "a>b",
+        "a<b",
+        "*",
+        "a b",
+        "a\tb",
+        "a\nb",
+        "'x'",
+        "\"x\"",
+        "\\",
+        "~",
+        "!",
+        "#",
+        "(x)",
+        "[a]",
+        "?",
+        "",
+        "caf\u{e9}",
+    ] {
+        assert_eq!(
+            with(&["cat", argument]),
+            ["unsafe_argument"],
+            "{argument:?}"
+        );
+    }
+    // Shells, interpreters, privilege, network and wrappers, by name or path.
+    for program in [
+        "sh",
+        "bash",
+        "/bin/sh",
+        "/usr/bin/env",
+        "sudo",
+        "/usr/bin/sudo",
+        "su",
+        "doas",
+        "python",
+        "python3",
+        "/usr/bin/python3.12",
+        "perl",
+        "awk",
+        "xargs",
+        "find",
+        "ssh",
+        "curl",
+        "rm",
+        "dd",
+        "tee",
+        "timeout",
+        "busybox",
+        "systemd-run",
+    ] {
+        assert_eq!(with(&[program, "x"]), ["forbidden_program"], "{program}");
+    }
+    // The program is a plain name or an absolute path, never an option or a parameter.
+    for program in ["-rf", "./local", "bin/tool", "../tool"] {
+        assert_eq!(with(&[program]), ["unsafe_argument"], "{program}");
+    }
+    assert_eq!(with(&["{unit}"]), ["unsafe_argument"]);
+    assert_eq!(with(&[]), ["unsafe_argument"]);
+    assert_eq!(with(&["echo"; 17]), ["unsafe_argument"]);
+    // A placeholder is a whole argument; inside one it is just unsafe text.
+    assert_eq!(with(&["cat", "/etc/{unit}"]), ["unsafe_argument"]);
+    assert_eq!(with(&["cat", "{unit}"]), ["undeclared_parameter"]);
+    assert_eq!(with(&["cat", "{a,b}"]), ["undeclared_parameter"]);
+    // Ordinary read-only commands pass.
+    for argv in [
+        &["df", "-P", "-k"][..],
+        &["/usr/bin/uptime"],
+        &["cat", "/etc/os-release"],
+        &["journalctl", "--since=-1h", "--no-pager", "-n", "20"],
+    ] {
+        let mut value: serde_json::Value = serde_json::from_str(&base).unwrap();
+        value["contributions"][0]["command"]["argv"] = serde_json::json!(argv);
+        validate_manifest(&serde_json::to_vec(&value).unwrap()).unwrap();
+    }
 }

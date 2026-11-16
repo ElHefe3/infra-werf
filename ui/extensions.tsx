@@ -13,6 +13,7 @@ import { appSettings, type AppSettingsRenderer } from "./app-settings";
 import { observedLabel, workloads } from "./map-model";
 import { groupMenu, type MenuGroup, type MenuRenderer } from "./menu-model";
 import { ServerPlugins } from "./plugins";
+import { PluginData } from "./plugin-data";
 import { date, memory, Notice, SavedInventory } from "./workspace-parts";
 
 // Built-in renderers for the interface extension points (S12/F18). The Rust
@@ -56,6 +57,7 @@ const tabs: Record<string, TabRenderer> = {
   "builtin.tab.files": { render: c => <FileBrowser key={`${c.server.id}:${c.server.host}`} server={c.server} onBusy={value => c.reportBusy("files", value)} />, footer: "File results stay in memory · Queued transfers continue until finished or locked" },
   "builtin.tab.terminal": { render: c => <Suspense fallback={<div className="unavailable"><p>Loading terminal controls…</p></div>}><TerminalPanel server={c.server} onBusy={value => c.reportBusy("terminal", value)} /></Suspense> },
   "builtin.tab.apps": { render: c => <RemoteApps key={`${c.server.id}:${c.server.host}`} server={c.server} disabled={c.busy} /> },
+  "builtin.tab.plugin-data": { render: c => <PluginData key={`${c.server.id}:${c.server.host}`} server={c.server} disabled={c.busy} onBusy={value => c.reportBusy("plugin-data", value)} openPlugin={c.openPlugin} />, footer: "Plugin results stay in memory · Each command runs only when you ask" },
   "builtin.tab.system": { render: c => <><div className="section-heading"><div><h3>Saved system inventory</h3><p>Approved host details, services and containers from the latest complete collection.</p></div><button className="primary" disabled={c.busy} onClick={() => void c.refreshInventory()}>{c.refreshing ? "Refreshing…" : "Refresh inventory"}</button></div>{c.server.inventory ? <><dl className="system-grid"><div><dt>Hostname</dt><dd>{c.server.inventory.hostname}</dd></div><div><dt>Logical CPUs</dt><dd>{c.server.inventory.cpus}</dd></div><div><dt>Total memory</dt><dd>{memory(c.server.inventory.memory_total_kib)}</dd></div><div><dt>Collected on host</dt><dd>{date(c.server.inventory.collected_at)}</dd></div></dl><Notice>These are saved hardware details. Live utilisation is not collected. Open Health for separate host and service checks.</Notice></> : <Notice>No saved system inventory is available for this server.</Notice>}</> },
   "builtin.tab.settings": { render: c => <>{c.settings.map(section => <React.Fragment key={section.contribution.id}>{section.renderer(c)}</React.Fragment>)}</> },
   "builtin.tab.transfers": { render: c => <TransferQueue rows={c.transfers.rows.filter(row => row.server_id === c.server.id)} failure={c.transfers.failure} retry={() => c.openTab(TAB.files)} /> },

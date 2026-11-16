@@ -7,6 +7,7 @@ pub mod health;
 pub mod inventory;
 pub mod monitoring;
 pub mod operations;
+pub mod pack;
 pub mod plugin;
 pub mod plugin_host;
 mod sftp;

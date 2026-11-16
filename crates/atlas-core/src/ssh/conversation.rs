@@ -326,7 +326,63 @@ impl Peer {
             .arg("--")
             .arg(&self.profile.alias)
             .args(["/bin/sh", "-c", &quote(&script)]);
-        conversation(command, &self.fingerprint, &gate, password, context, valid)
+        conversation(
+            command,
+            &self.fingerprint,
+            &gate,
+            password,
+            false,
+            context,
+            valid,
+        )
+    }
+
+    /// Like `run` without a password, for a command that must not outlive
+    /// its connection (plugin pack commands, F21/T043). OpenSSH does not
+    /// signal a remote command without a terminal when the client goes
+    /// away, so the remote shell supervises it: the command runs with no
+    /// input, and a watcher that holds the connection's input kills it as
+    /// soon as that input closes. InfraWerf keeps the input open until the
+    /// command ends, is cancelled or times out.
+    pub(crate) fn run_supervised(
+        &self,
+        args: &[&str],
+        context: &mut ExecutionContext,
+        valid: &dyn Fn() -> Result<(), AtlasError>,
+    ) -> Result<Reply, AtlasError> {
+        valid()?;
+        context.checkpoint()?;
+        let gate = format!("ATLAS_GATE_{}", OperationId::generate().as_str());
+        let remote_command = args
+            .iter()
+            .map(|value| quote(value))
+            .collect::<Vec<_>>()
+            .join(" ");
+        // A background job in a non-interactive shell reads /dev/null, so
+        // the watcher is given the real input on descriptor 3.
+        let script = format!(
+            "IFS= read -r atlas_gate && [ \"$atlas_gate\" = {} ] || exit 126; exec 3<&0; \
+             {remote_command} </dev/null 3<&- & atlas_pid=$!; \
+             {{ cat <&3; kill \"$atlas_pid\"; }} >/dev/null 2>&1 & atlas_watch=$!; \
+             wait \"$atlas_pid\"; atlas_code=$?; kill \"$atlas_watch\" 2>/dev/null; exit \"$atlas_code\"",
+            quote(&gate),
+        );
+        let mut command = self.options.command();
+        command.stdin(Stdio::piped());
+        self.pinned_options(&mut command);
+        command
+            .arg("--")
+            .arg(&self.profile.alias)
+            .args(["/bin/sh", "-c", &quote(&script)]);
+        conversation(
+            command,
+            &self.fingerprint,
+            &gate,
+            None,
+            true,
+            context,
+            valid,
+        )
     }
 }
 fn spawn_reader<R: Read + Send + 'static>(
@@ -366,6 +422,8 @@ fn conversation(
     fingerprint_expected: &str,
     gate: &str,
     password: Option<(&str, &Zeroizing<String>)>,
+    // Keep the remote input open for as long as this conversation lasts.
+    hold_input: bool,
     context: &mut ExecutionContext,
     valid: &dyn Fn() -> Result<(), AtlasError>,
 ) -> Result<Reply, AtlasError> {
@@ -438,7 +496,7 @@ fn conversation(
                 let pipe = input.as_mut().ok_or_else(|| fail(ErrorCode::IoFailure))?;
                 writeln!(pipe, "{gate}").map_err(|_| fail(ErrorCode::IoFailure))?;
                 admitted = true;
-                if password.is_none() {
+                if password.is_none() && !hold_input {
                     input.take();
                 }
             }

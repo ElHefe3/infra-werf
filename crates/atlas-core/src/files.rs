@@ -906,6 +906,91 @@ impl FileSessions {
         serde_json::from_str(&result.text).map_err(|_| error(ErrorCode::IoFailure))
     }
 
+    /// Run one pack command (F21/T043) over this authenticated, host-pinned
+    /// session, under the same output and time limits as a built-in
+    /// collector. `argv` was built by `pack::resolve` from a manifest the
+    /// owner reviewed; it is quoted argument by argument and never read by a
+    /// shell. `allowed` is asked throughout the run, so withdrawing the
+    /// plugin's permission stops it. Raw output is read here and only the
+    /// extracted result leaves.
+    pub fn run_pack_command(
+        &self,
+        target: &ServerTarget,
+        id: &SessionId,
+        command: crate::plugin::PackCommand,
+        argv: Vec<String>,
+        allowed: std::sync::Arc<dyn Fn() -> bool + Send + Sync>,
+    ) -> Result<crate::pack::PackResult, AtlasError> {
+        if argv.is_empty()
+            || !argv
+                .iter()
+                .all(|argument| crate::pack::safe_argument(argument))
+        {
+            return Err(error(ErrorCode::Denied));
+        }
+        let session = self.session(target, id)?;
+        let ticket = self.broker.prepare(
+            Some(&self.authority),
+            target,
+            InspectionRequest {
+                server_id: target.server_id().clone(),
+                session_id: id.clone(),
+                inspection: Inspection::PackCommand {},
+            },
+        )?;
+        let worker = session.clone();
+        let options = self.options.clone();
+        let profile = session.profile.clone();
+        let fingerprint = session.fingerprint.clone();
+        let host_key = session
+            .host_key
+            .clone()
+            .ok_or_else(|| error(ErrorCode::HostTrustFailure))?;
+        let policy = self.policy;
+        let reader = command.clone();
+        let result = self.broker.execute(
+            Some(&self.authority),
+            &ticket.operation_id,
+            target,
+            move |plan, context| {
+                if !matches!(plan, InspectionPlan::PackCommand) {
+                    return Err(error(ErrorCode::Denied));
+                }
+                let valid = || {
+                    if !allowed() {
+                        Err(error(ErrorCode::Cancelled))
+                    } else if worker.view_valid(policy) {
+                        Ok(())
+                    } else {
+                        Err(error(ErrorCode::ExpiredSession))
+                    }
+                };
+                valid()?;
+                let peer = options.pin_peer(&profile, &fingerprint, &host_key, context)?;
+                let arguments: Vec<&str> = argv.iter().map(String::as_str).collect();
+                let reply = peer.run_supervised(&arguments, context, &valid)?;
+                context.checkpoint()?;
+                valid()?;
+                let parsed = crate::pack::interpret(&reader, reply.success, &reply.stdout);
+                let encoded =
+                    serde_json::to_string(&parsed).map_err(|_| error(ErrorCode::IoFailure))?;
+                context.write(&encoded)?;
+                *lock(&worker.last_used)? = Instant::now();
+                Ok(())
+            },
+        );
+        match result {
+            Ok(value) => serde_json::from_str(&value.text).map_err(|_| error(ErrorCode::IoFailure)),
+            Err(failure) if failure.code == ErrorCode::OutputLimit => Ok(
+                crate::pack::PackResult::failed(&command, crate::pack::PackOutcome::OutputLimit),
+            ),
+            Err(failure) if failure.code == ErrorCode::TimedOut => Ok(
+                crate::pack::PackResult::failed(&command, crate::pack::PackOutcome::TimedOut),
+            ),
+            Err(failure) => Err(failure),
+        }
+    }
+
     /// Inspect one saved workload through its authenticated, host-pinned SSH
     /// session. The typed identity is reconstructed from trusted inventory at
     /// session open; no caller field is ever used as a remote command.

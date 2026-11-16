@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "InfraWerf plugin manifest (API v1)",
-  "description": "The contents of `infrawerf-plugin.json` for plugin API v1.",
+  "title": "InfraWerf plugin manifest (API v2)",
+  "description": "The contents of `infrawerf-plugin.json` for plugin API v2.",
   "type": "object",
   "properties": {
     "api_version": {
@@ -185,6 +185,97 @@
         }
       ]
     },
+    "Extractor": {
+      "description": "How a command's output becomes a value or a table.",
+      "oneOf": [
+        {
+          "description": "One line of the output as a single value.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "line"
+            },
+            "line": {
+              "description": "Which line, counting from 1. Defaults to 1; 1000 at most.",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "description": "Each line as a row of named columns. At most 100 rows are kept.",
+          "type": "object",
+          "properties": {
+            "columns": {
+              "description": "1 to 12 column names: lower-case letters, digits and\nunderscores, starting with a letter. The last column takes the\nrest of the line.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "kind": {
+              "type": "string",
+              "const": "table"
+            },
+            "separator": {
+              "description": "What separates columns. Defaults to `whitespace`.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Separator"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "skip_lines": {
+              "description": "Lines to skip before the first row, 100 at most. Defaults to 0.",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "columns"
+          ]
+        },
+        {
+          "description": "One text, number or true/false value from JSON output.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "json"
+            },
+            "path": {
+              "description": "Dotted names with optional `[index]`, for example\n`pool.disks[0].state`; 200 characters at most.",
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "path"
+          ]
+        }
+      ]
+    },
     "ManifestContribution": {
       "description": "One thing a plugin adds at an extension point.",
       "type": "object",
@@ -195,6 +286,17 @@
           "items": {
             "$ref": "#/$defs/Capability"
           }
+        },
+        "command": {
+          "description": "A read-only command this contribution runs, for a `collector` or a\n`health_check` (API v2). It needs `ssh_session` and\n`run_approved_command`.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PackCommand"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "id": {
           "description": "Name within the plugin: lower-case letters, digits and hyphens,\nstarting with a letter, 32 characters at most. The full identifier\nis the plugin ID, a dot, then this.",
@@ -224,6 +326,98 @@
         "point",
         "title",
         "capabilities"
+      ]
+    },
+    "PackCommand": {
+      "description": "One read-only command a pack contribution runs, and how its output is\nread (plugin API v2). It is an argument vector, never a shell string.",
+      "type": "object",
+      "properties": {
+        "argv": {
+          "description": "The program, then its arguments: 1 to 16 entries. An entry holds\nonly letters, digits and `_ . , : / = + @ % -`, or is exactly\n`{name}` for a declared parameter. The program is a plain name or an\nabsolute path and is never a shell, an interpreter or `sudo`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "extract": {
+          "description": "How the output is read.",
+          "$ref": "#/$defs/Extractor"
+        },
+        "healthy": {
+          "description": "For a health check: the values that mean healthy, 1 to 8. Any other\nvalue means unhealthy; no readable value means unknown. Required at\n`health_check`, not allowed at `collector`.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "parameters": {
+          "description": "Values filled in from what InfraWerf discovered on the server, at\nmost 4. Each must be used by `argv`.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PackParameter"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "argv",
+        "extract"
+      ]
+    },
+    "PackParameter": {
+      "description": "A value InfraWerf fills in. The owner picks it from what an authenticated\nsession discovered; a pack cannot supply it.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "Lower-case letters, digits and underscores, starting with a letter,\n32 characters at most. Written in `argv` as `{name}`.",
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/ParameterSource"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "source"
+      ]
+    },
+    "ParameterSource": {
+      "description": "Where a parameter's value comes from.",
+      "oneOf": [
+        {
+          "description": "The name of a systemd service found in the server's inventory.",
+          "type": "string",
+          "const": "service"
+        },
+        {
+          "description": "The name of a container found in the server's inventory.",
+          "type": "string",
+          "const": "container"
+        }
+      ]
+    },
+    "Separator": {
+      "description": "What separates the columns of a table.",
+      "oneOf": [
+        {
+          "description": "Any run of spaces or tabs.",
+          "type": "string",
+          "const": "whitespace"
+        },
+        {
+          "description": "One tab character.",
+          "type": "string",
+          "const": "tab"
+        },
+        {
+          "description": "One comma.",
+          "type": "string",
+          "const": "comma"
+        }
       ]
     }
   }

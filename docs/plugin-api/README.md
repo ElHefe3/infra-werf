@@ -1,10 +1,10 @@
-# InfraWerf plugin API v1 — manifest reference
+# InfraWerf plugin API v2 — manifest reference
 
-A plugin is a folder with one file that describes it: `infrawerf-plugin.json`. This page defines that file for plugin API version 1. The machine-readable form is [`manifest.schema.json`](manifest.schema.json), which is generated from the same Rust types InfraWerf validates with (`crates/atlas-core/src/plugin.rs`).
+A plugin is a folder with one file that describes it: `infrawerf-plugin.json`. This page defines that file for plugin API version 2. InfraWerf also accepts manifests written for version 1; [what changed](#changes-in-v2) is listed below. The machine-readable form is [`manifest.schema.json`](manifest.schema.json), which is generated from the same Rust types InfraWerf validates with (`crates/atlas-core/src/plugin.rs`).
 
 A valid manifest grants nothing. It states what the plugin adds and what it asks for; the owner of each InfraWerf instance decides what to allow. Validating a manifest never runs anything the plugin ships.
 
-This is the reference. To write a plugin step by step, start with the [author guide](guide.md); the finished example is in [`examples/backup-overview`](../../examples/backup-overview).
+This is the reference. To write a plugin step by step, start with the [author guide](guide.md); the finished example is in [`examples/backup-overview`](../../examples/backup-overview). Commands that a plugin runs on a server are defined in [packs](packs.md).
 
 ## Example
 
@@ -48,7 +48,7 @@ The path is the manifest or the folder that holds it. Add `--json` for machine-r
 
 | Exit code | Meaning |
 | --- | --- |
-| 0 | Valid for plugin API v1. |
+| 0 | Valid for the plugin API version the manifest declares. |
 | 1 | Not valid. Every problem is listed as `code  field  message`. |
 | 2 | Nothing was checked: wrong usage, or the file could not be read. |
 
@@ -61,7 +61,7 @@ Unknown fields are refused, so a field from a later API version is never silentl
 | `id` | yes | Reverse-domain identifier such as `org.example.backup-overview`. At least three segments separated by dots. Each segment is lower-case letters, digits and hyphens, starts with a letter and does not end with a hyphen. 63 characters at most. The first segment may not be `builtin` or `infrawerf`. The ID never changes between versions of a plugin. |
 | `name` | yes | Display name, 1 to 40 characters, no leading, trailing or control characters. |
 | `version` | yes | The plugin's version as [Semantic Versioning 2.0.0](https://semver.org/), for example `1.4.0` or `2.0.0-beta.1`. |
-| `api_version` | yes | The plugin API version the plugin was written for. A positive whole number; `1` today. |
+| `api_version` | yes | The plugin API version the plugin was written for. A positive whole number: `2` today, or `1` for a manifest that uses nothing added in v2. |
 | `description` | no | One line, 1 to 280 characters. |
 | `author` | no | 1 to 80 characters. |
 | `license` | no | 1 to 64 characters, preferably an SPDX identifier. |
@@ -78,6 +78,7 @@ Each contribution:
 | `title` | yes | Display name, 1 to 40 characters. |
 | `order` | no | Position among contributions at the same point, 0 to 65535. Defaults to 1000, after everything built in. |
 | `capabilities` | yes | The capabilities this contribution uses. At least one, no duplicates, each listed in the manifest's `capabilities` and permitted at its extension point. |
+| `command` | no | A read-only command for a `collector` or `health_check`, with `argv`, `parameters`, `extract` and `healthy`. Needs `api_version` 2. Defined in [packs](packs.md). |
 
 The file is UTF-8 JSON, 64 KiB at most.
 
@@ -92,11 +93,11 @@ A contribution may only use capabilities its extension point permits.
 | `server_badge` | A badge on a server's card on the map. | `read_saved_state` |
 | `menu_item` | An entry in the main menu that opens a view. | `read_saved_state` |
 | `app_settings_section` | A section of the application Settings screen. | `read_saved_state`, `edit_map` |
-| `collector` | Collects approved inventory from a server. | `ssh_session`, `run_approved_command` |
-| `health_check` | An unauthenticated reachability check. | `network_probe` |
+| `collector` | Reads something from a server with a `command`. | `ssh_session`, `run_approved_command` |
+| `health_check` | A check of a server: an unauthenticated probe, or from v2 a `command`. | `network_probe`; from v2 also `ssh_session`, `run_approved_command` |
 | `operation` | A brokered operation on a server. | `ssh_session`, `run_approved_command`, `read_files`, `write_files`, `transfer_files`, `elevate`, `control_workloads`, `loopback_tunnel` |
 
-API v1 defines what a manifest may declare. How a plugin supplies the content behind a contribution (data packs, views, sandboxed logic) is defined by later parts of the API and will raise the API version.
+API v2 defines content for two points: a `collector` and a `health_check` may each carry a `command` ([packs](packs.md)). The content behind the other points (views, sandboxed logic) is defined by later parts of the API and will raise the API version.
 
 ## Capabilities
 
@@ -148,6 +149,16 @@ Each problem has a code, the field it concerns and a sentence. Codes are part of
 | `contribution_without_capability` | A contribution lists no capability. |
 | `capability_not_requested` | A contribution uses a capability the manifest does not request. |
 | `capability_not_permitted` | A contribution uses a capability its extension point does not permit. |
+| `invalid_command` | A `command` has an unknown field, a missing field or a wrong type. |
+| `command_not_supported` | A `command` where none is possible: a point other than `collector` or `health_check`, or a manifest that declares API v1. |
+| `command_needs_capability` | A contribution with a `command` does not list `ssh_session` and `run_approved_command`. |
+| `unsafe_argument` | An `argv` entry has a character outside the safe set, the program is not a plain name or absolute path, or there are no entries or more than 16. |
+| `forbidden_program` | The program is a shell, an interpreter, sudo, a network client or a program that changes a server. |
+| `undeclared_parameter` | `argv` uses a `{name}` that `parameters` does not declare. |
+| `unused_parameter` | A declared parameter that `argv` never uses. |
+| `invalid_parameter` | A parameter name is malformed or repeated, or there are more than 4. |
+| `invalid_extractor` | A line number, column list, skip count or JSON path is malformed. |
+| `invalid_health_rule` | The `healthy` values are missing on a health check, present on a collector, used with a table, or malformed. |
 
 ## Compatibility rule
 
@@ -155,7 +166,15 @@ The plugin API version is one whole number.
 
 1. **When it increases.** The number goes up whenever a plugin written for the previous version could behave differently, or a manifest could mean something different. That includes every new manifest field, extension point or capability, because unknown names are refused rather than ignored.
 2. **What does not increase it.** Clearer wording of a message, a new InfraWerf feature that plugins cannot see, and fixes that make InfraWerf match this document.
-3. **What InfraWerf accepts.** Each InfraWerf release accepts every API version from its oldest supported version to its current one, and treats a manifest exactly as the version it declares defines. Today both are 1.
+3. **What InfraWerf accepts.** Each InfraWerf release accepts every API version from its oldest supported version to its current one, and treats a manifest exactly as the version it declares defines. Today that is versions 1 and 2.
 4. **Newer plugins.** A plugin that declares a newer API version than InfraWerf has is refused with `newer_api_version` and a message naming both versions. It is never loaded with unknown parts ignored.
 5. **Retiring a version.** Support for an old API version is dropped only in a release whose notes say so, and never in the same release that introduces its replacement.
 6. **The plugin's own version** (`version`) is separate. It follows Semantic Versioning and says nothing about API compatibility.
+
+## Changes in v2
+
+- A contribution may have a `command` ([packs](packs.md)), at the `collector` and `health_check` points only.
+- A `health_check` may use `ssh_session` and `run_approved_command`. In a v1 manifest it may still use only `network_probe`.
+- Ten new error codes, from `invalid_command` to `invalid_health_rule`.
+
+Nothing was removed and no v1 rule changed, so a v1 manifest means what it always did.

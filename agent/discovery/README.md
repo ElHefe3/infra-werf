@@ -68,3 +68,4 @@ Link important discoveries from affected feature packets and the checkpoint. Nev
 - [D054 Eight native suites fail at add_server since alias discovery](D054-native-suites-conflict-with-alias-discovery.md)
 - [D055 Plugin choices belong to each owner, in one Settings screen](D055-plugin-choices-belong-to-the-owner-in-settings.md)
 - [D056 A categorised main menu with detachable category copies](D056-categorised-detachable-main-menu.md)
+- [D057 Rule 6 widens to reviewed read-only pack commands](D057-reviewed-read-only-pack-commands.md)

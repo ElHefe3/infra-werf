@@ -52,7 +52,7 @@ export type ProtectedText = { session_id: SessionId, operation_id: OperationId, 
 export type LiveMetrics = { cpu_percent: number | null, memory_used_kib: number | null, disk_used_bytes: number | null, };
 export type OperationPhase = "queued" | "running" | "completed" | "failed" | "cancelled";
 export type OperationProgress = { operation_id: OperationId, session_id: SessionId, phase: OperationPhase, bytes_completed: number, bytes_total: number | null, };
-export type Inspection = { "kind": "system_summary", } | { "kind": "application_discovery", } | { "kind": "file_metadata", path: string, } | { "kind": "service_status", workload_id: string, } | { "kind": "workload_control", workload_id: string, } | { "kind": "sftp_read", resource_id: string, } | { "kind": "sftp_mutation", resource_id: string, } | { "kind": "sftp_transfer", resource_id: string, } | { "kind": "elevation_check", } | { "kind": "protected_placement", } | { "kind": "terminal_open", };
+export type Inspection = { "kind": "system_summary", } | { "kind": "application_discovery", } | { "kind": "pack_command", } | { "kind": "file_metadata", path: string, } | { "kind": "service_status", workload_id: string, } | { "kind": "workload_control", workload_id: string, } | { "kind": "sftp_read", resource_id: string, } | { "kind": "sftp_mutation", resource_id: string, } | { "kind": "sftp_transfer", resource_id: string, } | { "kind": "elevation_check", } | { "kind": "protected_placement", } | { "kind": "terminal_open", };
 export type InspectionRequest = { server_id: ServerId, session_id: SessionId, inspection: Inspection, };
 export type OperationTicket = { operation_id: OperationId, expires_at: string, };
 export type ServerLifecycle = "candidate" | "active" | "archived" | "ignored";
@@ -168,6 +168,117 @@ extensions: Array<ExtensionInfo>,
  * Contributions of enabled extensions only.
  */
 contributions: Array<Contribution>, };
+export type ParameterSource = "service" | "container";
+export type Separator = "whitespace" | "tab" | "comma";
+export type Extractor = { "kind": "line",
+/**
+ * Which line, counting from 1. Defaults to 1; 1000 at most.
+ */
+line?: number | null, } | { "kind": "table",
+/**
+ * 1 to 12 column names: lower-case letters, digits and
+ * underscores, starting with a letter. The last column takes the
+ * rest of the line.
+ */
+columns: Array<string>,
+/**
+ * Lines to skip before the first row, 100 at most. Defaults to 0.
+ */
+skip_lines?: number | null,
+/**
+ * What separates columns. Defaults to `whitespace`.
+ */
+separator?: Separator | null, } | { "kind": "json",
+/**
+ * Dotted names with optional `[index]`, for example
+ * `pool.disks[0].state`; 200 characters at most.
+ */
+path: string, };
+export type PackParameter = {
+/**
+ * Lower-case letters, digits and underscores, starting with a letter,
+ * 32 characters at most. Written in `argv` as `{name}`.
+ */
+name: string, source: ParameterSource, };
+export type PackCommand = {
+/**
+ * The program, then its arguments: 1 to 16 entries. An entry holds
+ * only letters, digits and `_ . , : / = + @ % -`, or is exactly
+ * `{name}` for a declared parameter. The program is a plain name or an
+ * absolute path and is never a shell, an interpreter or `sudo`.
+ */
+argv: Array<string>,
+/**
+ * Values filled in from what InfraWerf discovered on the server, at
+ * most 4. Each must be used by `argv`.
+ */
+parameters?: Array<PackParameter>,
+/**
+ * How the output is read.
+ */
+extract: Extractor,
+/**
+ * For a health check: the values that mean healthy, 1 to 8. Any other
+ * value means unhealthy; no readable value means unknown. Required at
+ * `health_check`, not allowed at `collector`.
+ */
+healthy?: Array<string> | null, };
+export type PackOutcome = "ok" | "command_failed" | "unreadable" | "output_limit" | "timed_out";
+export type PackHealth = "healthy" | "unhealthy" | "unknown";
+export type PackResult = { outcome: PackOutcome,
+/**
+ * A single value, from a `line` or `json` extractor.
+ */
+value: string | null,
+/**
+ * Column names, from a `table` extractor.
+ */
+columns: Array<string>, rows: Array<Array<string>>,
+/**
+ * More rows existed than are kept.
+ */
+truncated: boolean,
+/**
+ * Set for a health check only.
+ */
+health: PackHealth | null, };
+export type PackObservation = {
+/**
+ * When InfraWerf read the result, on this PC's clock.
+ */
+observed_at: string,
+/**
+ * False once the observation is older than the staleness limit.
+ */
+fresh: boolean,
+/**
+ * Which plugin contribution produced it, as `plugin-id.contribution`.
+ */
+source: string,
+/**
+ * Binding of the authenticated SSH profile and host key it came through.
+ */
+source_binding: string,
+/**
+ * Parameter name to the discovered workload it was run for.
+ */
+parameters: { [key in string]: string }, result: PackResult, };
+export type PackChoice = {
+/**
+ * The workload's ID; this is what a run is given, never a name.
+ */
+id: string, name: string, };
+export type PackParameterView = { name: string, source: ParameterSource,
+/**
+ * Workloads from the server's saved inventory that may be chosen.
+ */
+choices: Array<PackChoice>, };
+export type PackCommandView = { plugin_id: string, plugin_name: string, contribution_id: string, title: string, health_check: boolean,
+/**
+ * The exact command, with `{name}` where a parameter goes.
+ */
+argv: Array<string>, parameters: Array<PackParameterView>, observation: PackObservation | null, };
+export type PackServerState = { contract_version: number, server_id: ServerId, commands: Array<PackCommandView>, };
 export type TrustLevel = "read_only" | "confirm_changes" | "trusted_automation";
 export type CapabilityKind = "read" | "change" | "elevation";
 export type PluginStatus = "disabled" | "enabled" | "changed_since_review";
@@ -182,7 +293,11 @@ export type RequestedCapability = { capability: Capability, kind: CapabilityKind
  * Titles of the contributions that use it.
  */
 used_by: Array<string>, };
-export type PluginContributionView = { id: string, title: string, point: ExtensionPoint, capabilities: Array<Capability>, };
+export type PluginContributionView = { id: string, title: string, point: ExtensionPoint, capabilities: Array<Capability>,
+/**
+ * The exact read-only command a pack contribution runs, if any.
+ */
+command: PackCommand | null, };
 export type ServerGrant = { server_id: ServerId, capabilities: Array<Capability>, };
 export type PluginView = { id: string, name: string, version: string, api_version: number, description: string | null, author: string | null, license: string | null, homepage: string | null,
 /**
@@ -203,7 +318,7 @@ export type PluginsState = { contract_version: number, directory: string,
  * The owner has turned every plugin off; nothing is admitted.
  */
 all_off: boolean, plugins: Array<PluginView>, invalid: Array<InvalidPlugin>, };
-export type ActivityOutcome = "allowed" | "needs_confirmation" | "refused" | "done";
+export type ActivityOutcome = "allowed" | "needs_confirmation" | "refused" | "done" | "cancelled" | "failed";
 export type PluginActivity = { id: number, at: string,
 /**
  * Empty for an action on all plugins.

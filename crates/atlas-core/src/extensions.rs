@@ -112,7 +112,7 @@ impl ExtensionPoint {
             // PC; they never contact a server.
             Self::AppSettingsSection => &[ReadSavedState, EditMap],
             Self::Collector => &[SshSession, RunApprovedCommand],
-            Self::HealthCheck => &[NetworkProbe],
+            Self::HealthCheck => &[NetworkProbe, SshSession, RunApprovedCommand],
             Self::Operation => &[
                 SshSession,
                 RunApprovedCommand,
@@ -294,6 +294,8 @@ pub const COLLECTOR_BASELINE_INVENTORY: &str = "builtin.collector.baseline-inven
 pub const OPERATION_CONNECTION_CHECK: &str = "builtin.operation.connection-check";
 pub const OPERATION_SFTP_OPEN: &str = "builtin.operation.sftp-open";
 pub const OPERATION_LOOPBACK_TUNNEL: &str = "builtin.operation.loopback-tunnel";
+/// Runs one command a reviewed and enabled plugin pack declared (F21/T043).
+pub const OPERATION_PACK_COMMAND: &str = "builtin.operation.pack-command";
 
 /// Registry entry behind a health probe kind.
 pub fn health_check_id(kind: ProbeKind) -> &'static str {
@@ -312,6 +314,7 @@ pub fn operation_entry(inspection: &Inspection) -> (&'static str, Capability) {
             "builtin.operation.application-discovery",
             RunApprovedCommand,
         ),
+        Inspection::PackCommand {} => (OPERATION_PACK_COMMAND, RunApprovedCommand),
         Inspection::FileMetadata { .. } => ("builtin.operation.file-metadata", ReadFiles),
         Inspection::ServiceStatus { .. } => {
             ("builtin.operation.service-status", RunApprovedCommand)
@@ -417,6 +420,13 @@ pub fn builtin_with(disabled: &[String]) -> ExtensionRegistry {
             "Apps",
             50,
             &[SshSession, RunApprovedCommand, LoopbackTunnel],
+        ),
+        (
+            "builtin.tab.plugin-data",
+            WorkspaceTab,
+            "Plugin data",
+            55,
+            &[ReadSavedState, SshSession, RunApprovedCommand],
         ),
         (
             "builtin.tab.system",
@@ -621,6 +631,13 @@ pub fn builtin_with(disabled: &[String]) -> ExtensionRegistry {
             &[RunApprovedCommand],
         ),
         (
+            OPERATION_PACK_COMMAND,
+            Operation,
+            "Plugin pack command",
+            25,
+            &[RunApprovedCommand],
+        ),
+        (
             "builtin.operation.file-metadata",
             Operation,
             "File metadata",
@@ -797,6 +814,7 @@ mod tests {
                 "Files",
                 "Terminal",
                 "Apps",
+                "Plugin data",
                 "System",
                 "Settings",
                 "Transfers"

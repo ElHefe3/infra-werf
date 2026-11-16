@@ -32,6 +32,7 @@ fn lock<T>(value: &Mutex<T>) -> Result<std::sync::MutexGuard<'_, T>, AtlasError>
 pub enum Inspection {
     SystemSummary {},
     ApplicationDiscovery {},
+    PackCommand {},
     FileMetadata { path: String },
     ServiceStatus { workload_id: String },
     WorkloadControl { workload_id: String },
@@ -156,6 +157,7 @@ pub enum InspectionPlan {
     TerminalOpen,
     SystemSummary,
     ApplicationDiscovery,
+    PackCommand,
     FileMetadata(ScopedPath),
     ServiceStatus { workload_id: String },
     WorkloadControl { workload_id: String },
@@ -216,6 +218,7 @@ impl SessionScope {
             }
             Inspection::SystemSummary {} => InspectionPlan::SystemSummary,
             Inspection::ApplicationDiscovery {} => InspectionPlan::ApplicationDiscovery,
+            Inspection::PackCommand {} => InspectionPlan::PackCommand,
             Inspection::FileMetadata { path } => {
                 let path = absolute_path(&path)?;
                 let root = self

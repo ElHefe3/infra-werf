@@ -1,0 +1,31 @@
+{
+  "id": "org.example.host-basics",
+  "name": "Host basics",
+  "version": "1.0.0",
+  "api_version": 2,
+  "capabilities": [
+    "ssh_session",
+    "run_approved_command"
+  ],
+  "contributions": [
+    {
+      "id": "kernel",
+      "point": "collector",
+      "title": "Kernel version",
+      "capabilities": [
+        "ssh_session",
+        "run_approved_command"
+      ],
+      "command": {
+        "argv": [
+          "uname",
+          "-r"
+        ],
+        "extract": {
+          "kind": "line"
+        },
+        "shell": "uname -r | cat"
+      }
+    }
+  ]
+}
