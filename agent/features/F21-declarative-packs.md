@@ -22,6 +22,15 @@ Context: Data-only packs are the main public format: a reviewer can read exactly
 
 A pack can declare read-only commands with parsers for inventory and health, and describe additional workload kinds, all run through the existing authenticated session and bounded-output rules.
 
+### Carried in from F20
+
+Recorded when T041 and T042 closed; each must be met here because packs are the first plugin content that can run:
+
+- Show a pack's exact commands on the plugin's page in Settings (T041).
+- A scheduled or long-running pack job asks `plugin_authorize` before every run and is cancelled when refused, so revoking trust, withdrawing a permission, disabling the plugin or the kill switch leaves no work behind (T042).
+- Elevation exceptions: one plugin, one server, one named action, granted on the plugin's page, off by default (T042, D055).
+- Cancelled actions appear in the plugin activity log (T042).
+
 ### Exclusions
 
 Commands that change a server; shell features such as pipes or substitution supplied by the pack; unbounded output.

@@ -55,7 +55,7 @@ Stop if a requested capability cannot be enforced in the core.
 
 ## T042 — Activity log, trusted automation and kill switch
 
-<!-- atlas-ticket: {"id":"T042","feature":"F20","status":"todo","depends_on":["T041"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T042","feature":"F20","status":"done","depends_on":["T041"],"evidence":"../evidence/T042-acceptance.md"} -->
 
 ### Outcome and included work
 
@@ -73,10 +73,10 @@ The plugin activity log and the control that turns all plugins off are sections 
 
 ### Acceptance criteria
 
-- [ ] Each plugin action appears in the activity log with plugin, server, action and outcome.
-- [ ] Trusted automation can be granted and revoked per plugin, and revocation stops scheduled work.
-- [ ] The kill switch disables a running plugin and leaves no background work behind.
-- [ ] The log stays within its configured bound and contains no credentials.
+- [x] Each plugin action appears in the activity log with plugin, server, action and outcome.
+- [x] Trusted automation can be granted and revoked per plugin, and revocation stops scheduled work.
+- [x] The kill switch disables a running plugin and leaves no background work behind.
+- [x] The log stays within its configured bound and contains no credentials.
 
 ### Verification
 
@@ -84,7 +84,7 @@ Native journey with a fixture plugin performing allowed, refused and cancelled a
 
 ### Evidence and closure
 
-None yet.
+Accepted on `181dc7d`: [T042 acceptance](../evidence/T042-acceptance.md). All twelve native suites pass on the build, across two runs after one unrelated transient failure. Two criteria mention scheduled and background work, which does not exist in plugin API v1; the log, the switch and revocation are built and tested, and stopping real background work is carried to T043 together with elevation exceptions. No separate review pass was run.
 
 ### Stop conditions
 
