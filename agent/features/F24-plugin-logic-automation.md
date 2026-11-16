@@ -58,6 +58,14 @@ Stop if no runtime can enforce the limits on Windows.
 
 A sandboxed plugin can run declared changing actions and schedules. Without trusted automation each action uses the preview-and-confirm flow; with it, actions run unattended within the grant.
 
+### Carried in from T042 and T043
+
+Owner decision D057 allows only read-only pack commands that the owner starts. These need their own recorded decision before they are built:
+
+- Scheduled pack runs: each run asks `plugin_begin_run` first and is cancelled, and killed on the server, when refused. The cancel path exists (T043); the schedule does not.
+- Elevation exceptions: one plugin, one server, one named action, granted on the plugin's page, off by default (D055). Sudo is refused for every plugin today.
+- Cancelling is coarse today: any plugin permission change cancels every pack command in flight. Narrow it to the plugin and server concerned once runs can be unattended.
+
 ### Exclusions
 
 Jobs that run while the app is closed (needs a separate runtime decision); implied sudo; changes outside the granted servers.

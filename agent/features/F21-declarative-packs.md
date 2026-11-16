@@ -16,7 +16,7 @@ Context: Data-only packs are the main public format: a reviewer can read exactly
 
 ## T043 — Packs for collectors, health checks and workload kinds
 
-<!-- atlas-ticket: {"id":"T043","feature":"F21","status":"todo","depends_on":["T041"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T043","feature":"F21","status":"done","depends_on":["T041"],"evidence":"../evidence/T043-acceptance.md"} -->
 
 ### Outcome and included work
 
@@ -43,10 +43,10 @@ Commands are argument vectors, not shell strings, with declared parameters valid
 
 ### Acceptance criteria
 
-- [ ] A fixture pack adds a collector and a health check that appear for a granted server.
-- [ ] A pack command with shell metacharacters or undeclared parameters is rejected at validation.
-- [ ] Pack observations carry source, time and freshness and obey the retention rules.
-- [ ] Output and run time are bounded exactly as for built-in collectors.
+- [x] A fixture pack adds a collector and a health check that appear for a granted server.
+- [x] A pack command with shell metacharacters or undeclared parameters is rejected at validation.
+- [x] Pack observations carry source, time and freshness and obey the retention rules.
+- [x] Output and run time are bounded exactly as for built-in collectors.
 
 ### Verification
 
@@ -54,7 +54,7 @@ Loopback SSH fixture; rejection fixtures for unsafe commands; native journey sho
 
 ### Evidence and closure
 
-None yet.
+Accepted on `0202e8f`: [T043 acceptance](../evidence/T043-acceptance.md). Rule 6 was widened first by owner decision [D057](../discovery/D057-reviewed-read-only-pack-commands.md). All four criteria are met and proven on a real Linux container by the new `packs` native suite. Not done: workload kinds (moved to T044), scheduled runs and elevation exceptions (moved to T049). No separate review pass was run.
 
 ### Stop conditions
 
@@ -67,6 +67,10 @@ Stop if a pack needs protected data kept after the session ends.
 ### Outcome and included work
 
 A pack can add remote-application definitions for the Apps list, server-card badges driven by pack observations and named relationship kinds for the map.
+
+### Carried in from T043
+
+- A pack can describe an additional workload kind. T043 delivered collectors and health checks only; a kind that can only be listed would have been a table collector under another name, so it belongs with the other additions to existing screens here.
 
 ### Exclusions
 
