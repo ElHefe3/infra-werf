@@ -519,6 +519,13 @@ pub fn builtin_with(disabled: &[String]) -> ExtensionRegistry {
             40,
             &[ReadSavedState, EditMap],
         ),
+        (
+            "builtin.app-settings.plugin-activity",
+            AppSettingsSection,
+            "Plugin activity",
+            50,
+            &[ReadSavedState],
+        ),
         // Main menu items. The interface places each in a category (T053).
         (
             "builtin.menu.topology",
@@ -757,7 +764,8 @@ mod tests {
                 "History retention",
                 "SSH alias discovery",
                 "Menu layout",
-                "Plugins"
+                "Plugins",
+                "Plugin activity"
             ]
         );
         let menu: Vec<&str> = registry

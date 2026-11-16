@@ -204,6 +204,33 @@ impl Workspace {
             store.plugins_state(&directory)
         })
     }
+    pub fn plugin_activity(
+        &self,
+        limit: u32,
+    ) -> Result<atlas_core::plugin_host::PluginActivityLog, AtlasError> {
+        self.with_store(|store| store.plugin_activity(limit))
+    }
+    /// The kill switch: every plugin off, or back on (T042).
+    pub fn plugins_set_all_off(
+        &self,
+        off: bool,
+    ) -> Result<atlas_core::plugin_host::PluginsState, AtlasError> {
+        let directory = self.plugins_directory();
+        self.with_store(|store| {
+            store.plugins_set_all_off(off)?;
+            store.plugins_state(&directory)
+        })
+    }
+    pub fn plugin_revoke_trusted(
+        &self,
+        plugin: &str,
+    ) -> Result<atlas_core::plugin_host::PluginsState, AtlasError> {
+        let directory = self.plugins_directory();
+        self.with_store(|store| {
+            store.plugin_revoke_trusted(&directory, plugin)?;
+            store.plugins_state(&directory)
+        })
+    }
     /// The enforcement point for a plugin's use of a capability (T041).
     pub fn plugin_authorize(
         &self,

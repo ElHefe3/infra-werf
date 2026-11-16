@@ -712,6 +712,36 @@ fn plugin_set_grant(
     let _operation = workspace.inner().begin()?;
     workspace.plugin_set_grant(&plugin_id, &server_id, &capabilities)
 }
+#[tauri::command]
+fn plugin_activity(
+    window: tauri::WebviewWindow,
+    workspace: State<'_, Arc<Workspace>>,
+    limit: u32,
+) -> Result<atlas_core::plugin_host::PluginActivityLog, AtlasError> {
+    local_desktop(&window)?;
+    workspace.plugin_activity(limit)
+}
+/// The kill switch. Deliberately not behind `begin`: it must work while
+/// other work is in flight.
+#[tauri::command]
+fn plugins_set_all_off(
+    window: tauri::WebviewWindow,
+    workspace: State<'_, Arc<Workspace>>,
+    off: bool,
+) -> Result<atlas_core::plugin_host::PluginsState, AtlasError> {
+    local_desktop(&window)?;
+    workspace.plugins_set_all_off(off)
+}
+#[tauri::command]
+fn plugin_revoke_trusted(
+    window: tauri::WebviewWindow,
+    workspace: State<'_, Arc<Workspace>>,
+    plugin_id: String,
+) -> Result<atlas_core::plugin_host::PluginsState, AtlasError> {
+    local_desktop(&window)?;
+    let _operation = workspace.inner().begin()?;
+    workspace.plugin_revoke_trusted(&plugin_id)
+}
 /// Asks the core whether a plugin may use a capability on a server. This is
 /// the call a plugin runtime makes before acting; a refusal is logged.
 #[tauri::command]
@@ -900,7 +930,7 @@ pub fn run() {
             }
         }
     })
-    .invoke_handler(tauri::generate_handler![extensions_state, plugins_state, plugin_enable, plugin_disable, plugin_set_grant, plugin_authorize, apps::tunnel_open, apps::tunnel_discover, apps::tunnel_close, apps::tunnel_close_all, apps::tunnel_list, apps::tunnel_focus, monitoring_accept_identity, monitoring_state, monitoring_configure, monitoring_history_limit, monitoring_discover, foundation_status, workspace_status, map_state, retry_workspace, add_server, update_server, remove_server, add_relationship, remove_relationship, import_reports, ssh_prepare, ssh_verify, ssh_cancel, health_configure, health_status, health_cancel, inventory_refresh, files_prepare, files_open, files_read, workload_inspect, workload_control_preview, workload_control_confirm, files_lock, files_terminal_start, files_terminal_poll, files_terminal_write, files_terminal_resize, files_preview, files_commit, files_discard, files_release, files_pick_upload, files_pick_download, files_selection_discard, files_transfer, files_stage_protected, transfer_list, transfer_cancel, elevation_preview, elevation_confirm, elevation_cancel, protected_placement_preview, protected_placement_confirm, protected_placement_cancel])
+    .invoke_handler(tauri::generate_handler![extensions_state, plugins_state, plugin_enable, plugin_disable, plugin_set_grant, plugin_authorize, plugin_activity, plugins_set_all_off, plugin_revoke_trusted, apps::tunnel_open, apps::tunnel_discover, apps::tunnel_close, apps::tunnel_close_all, apps::tunnel_list, apps::tunnel_focus, monitoring_accept_identity, monitoring_state, monitoring_configure, monitoring_history_limit, monitoring_discover, foundation_status, workspace_status, map_state, retry_workspace, add_server, update_server, remove_server, add_relationship, remove_relationship, import_reports, ssh_prepare, ssh_verify, ssh_cancel, health_configure, health_status, health_cancel, inventory_refresh, files_prepare, files_open, files_read, workload_inspect, workload_control_preview, workload_control_confirm, files_lock, files_terminal_start, files_terminal_poll, files_terminal_write, files_terminal_resize, files_preview, files_commit, files_discard, files_release, files_pick_upload, files_pick_download, files_selection_discard, files_transfer, files_stage_protected, transfer_list, transfer_cancel, elevation_preview, elevation_confirm, elevation_cancel, protected_placement_preview, protected_placement_confirm, protected_placement_cancel])
     .run(tauri::generate_context!())
     .expect("InfraWerf native runtime failed");
 }

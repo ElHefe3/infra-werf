@@ -3,7 +3,7 @@ import type { MapServer, MonitoringState } from "./contracts.gen";
 import type { WorkspaceClient } from "./workspace-client";
 import type { Bound } from "./extensions-model";
 import { errorMessage } from "./map-model";
-import { PluginsSection } from "./plugins";
+import { PluginActivitySection, PluginsSection } from "./plugins";
 
 // Application-wide Settings (D055, T052): everything about InfraWerf itself
 // that is not tied to one server. The core registers each section at the
@@ -38,6 +38,7 @@ export const appSettings: Record<string, AppSettingsRenderer> = {
     <button disabled={busy} onClick={() => void act(client.discoverServers, "SSH configuration checked for new candidates.")}>Discover configured servers</button>
   </>,
   "builtin.app-settings.plugins": ({ servers, pluginFocus, setPluginFocus }) => <PluginsSection servers={servers} focus={pluginFocus} setFocus={setPluginFocus} />,
+  "builtin.app-settings.plugin-activity": ({ servers }) => <PluginActivitySection servers={servers} />,
   "builtin.app-settings.menu-layout": ({ busy, act, resetMenu }) => <>
     <p className="muted">Detach a menu category with its ⧉ button, or drag that button out of the menu, to keep a floating copy anywhere in the window. Hide or show the main menu with the button in its corner or Ctrl+B. The layout is remembered on this PC.</p>
     <button disabled={busy} onClick={() => void act(async () => resetMenu(), "Menu layout reset.")}>Reset menu layout</button>

@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { MonitoringState, MonitoringPolicy, TunnelInfo, TunnelRequest, AppDiscovery, ExtensionCatalogue, PluginsState, TrustLevel, Capability } from "./contracts.gen";
+import type { MonitoringState, MonitoringPolicy, TunnelInfo, TunnelRequest, AppDiscovery, ExtensionCatalogue, PluginsState, PluginActivityLog, TrustLevel, Capability } from "./contracts.gen";
 import { CONTRACT_VERSION, type AddRelationship, type AddServer, type MapState, type UpdateServer, type WorkspaceStatus, type OperationTicket, type SshVerification, type FileSession, type FileAction, type FileResult, type FileChange, type FileMutationPreview, type FileMutationReceipt, type LocalSelection, type TransferView, type ElevationPreview, type ElevationReceipt, type ProtectedPlacementRequest, type ProtectedPlacementStage, type ProtectedPlacementReceipt, type HealthProbeConfig, type HealthSnapshot, type InventoryRefreshResult, type TerminalPoll, type WorkloadInspection, type WorkloadAction, type WorkloadControlPreview, type WorkloadControlReceipt } from "./contracts.gen.ts";
 
 export type NativeTransport = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
@@ -26,6 +26,9 @@ export function createWorkspaceClient(transport: NativeTransport = invoke) {
     plugins: () => request<PluginsState>("plugins_state"),
     enablePlugin: (pluginId: string, trust: TrustLevel) => request<PluginsState>("plugin_enable", { pluginId, trust }),
     disablePlugin: (pluginId: string) => request<PluginsState>("plugin_disable", { pluginId }),
+    pluginActivity: (limit: number) => request<PluginActivityLog>("plugin_activity", { limit }),
+    setAllPluginsOff: (off: boolean) => request<PluginsState>("plugins_set_all_off", { off }),
+    revokeTrustedAutomation: (pluginId: string) => request<PluginsState>("plugin_revoke_trusted", { pluginId }),
     setPluginGrant: (pluginId: string, serverId: string, capabilities: Capability[]) => request<PluginsState>("plugin_set_grant", { pluginId, serverId, capabilities }),
     status: () => request<WorkspaceStatus>("workspace_status"),
     load: () => map("map_state"),

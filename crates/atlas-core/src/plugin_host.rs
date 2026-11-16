@@ -5,14 +5,18 @@
 //! trust level (nothing is preselected) and grants capabilities per server,
 //! always from the plugin's own page. `authorize` is the one place a plugin
 //! call is admitted or refused; it runs here in the core, never in the
-//! interface, and every refusal is written to the activity history.
+//! interface. Every call it answers, allowed or refused, and every change
+//! the owner makes is written to the plugin activity log (T042), which is
+//! bounded like the rest of the history and holds only identifiers, names
+//! of capabilities and outcomes: never output, arguments or credentials.
+//! One switch turns every plugin off at once.
 //!
 //! No grant reaches keys, passwords or an unrestricted shell: the manifest
 //! cannot request the interactive terminal, and elevation is refused until
 //! the owner can name an exception for one action (T042).
 use crate::extensions::{Capability, ExtensionPoint};
 use crate::plugin::{MANIFEST_FILE, MAX_MANIFEST_BYTES, PluginManifest, validate_manifest};
-use crate::store::{event, sql_error};
+use crate::store::sql_error;
 use crate::*;
 use chrono::Utc;
 use rusqlite::{Connection, params};
@@ -34,7 +38,20 @@ CREATE TABLE IF NOT EXISTS plugin_state (
 CREATE TABLE IF NOT EXISTS plugin_grant (
   plugin_id TEXT NOT NULL, server_id TEXT NOT NULL, capability TEXT NOT NULL,
   PRIMARY KEY(plugin_id, server_id, capability));
+CREATE TABLE IF NOT EXISTS plugin_activity (
+  id INTEGER PRIMARY KEY, at TEXT NOT NULL, plugin_id TEXT NOT NULL, plugin_name TEXT NOT NULL,
+  server_id TEXT, action TEXT NOT NULL, outcome TEXT NOT NULL, detail TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS plugin_switch (id INTEGER PRIMARY KEY CHECK(id=1), all_off INTEGER NOT NULL);
 ";
+/// The most log entries returned to the interface at once.
+pub const MAX_ACTIVITY_PAGE: u32 = 500;
+/// Actions in the log that are not a capability.
+pub const ACTION_ENABLE: &str = "enable";
+pub const ACTION_DISABLE: &str = "disable";
+pub const ACTION_SET_PERMISSIONS: &str = "set_permissions";
+pub const ACTION_REVOKE_TRUSTED: &str = "revoke_trusted_automation";
+pub const ACTION_ALL_OFF: &str = "all_plugins_off";
+pub const ACTION_ALL_ON: &str = "all_plugins_on";
 
 /// How far an enabled plugin may act. Chosen by the owner each time a plugin
 /// is enabled; there is no default.
@@ -122,21 +139,46 @@ pub enum Refusal {
     TrustTooLow,
     /// Sudo needs a named exception, and none exists.
     NoElevationException,
+    /// The owner has turned every plugin off.
+    AllPluginsOff,
 }
 
-impl Refusal {
-    fn sentence(self) -> &'static str {
-        match self {
-            Self::UnknownPlugin => "the plugin is not installed",
-            Self::PluginDisabled => "the plugin is not enabled",
-            Self::ChangedSinceReview => "the plugin changed after you reviewed it",
-            Self::UnknownServer => "the server is not on your map",
-            Self::NotRequested => "the plugin never asked for it",
-            Self::NotGranted => "it is not granted on this server",
-            Self::TrustTooLow => "the plugin is read-only",
-            Self::NoElevationException => "sudo needs an exception you have not given",
-        }
-    }
+/// How one logged action ended.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ActivityOutcome {
+    Allowed,
+    NeedsConfirmation,
+    Refused,
+    /// A change the owner made on a plugin's page.
+    Done,
+}
+
+/// One line of the plugin activity log.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct PluginActivity {
+    pub id: u32,
+    pub at: String,
+    /// Empty for an action on all plugins.
+    pub plugin_id: String,
+    pub plugin_name: String,
+    pub server_id: Option<ServerId>,
+    /// A capability name, or one of the owner actions such as `enable`.
+    pub action: String,
+    pub outcome: ActivityOutcome,
+    /// The refusal, the trust level or the permissions set; never output.
+    pub detail: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct PluginActivityLog {
+    pub contract_version: u32,
+    /// How many entries are kept: the history retention setting.
+    pub kept: u32,
+    /// Newest first.
+    pub entries: Vec<PluginActivity>,
 }
 
 /// The answer to one plugin call.
@@ -211,6 +253,8 @@ pub struct InvalidPlugin {
 pub struct PluginsState {
     pub contract_version: u32,
     pub directory: String,
+    /// The owner has turned every plugin off; nothing is admitted.
+    pub all_off: bool,
     pub plugins: Vec<PluginView>,
     pub invalid: Vec<InvalidPlugin>,
 }
@@ -382,6 +426,38 @@ fn server_exists(db: &Connection, server: &ServerId) -> Result<bool, AtlasError>
     .map_err(sql_error)
 }
 
+fn all_off(db: &Connection) -> Result<bool, AtlasError> {
+    db.query_row(
+        "SELECT COALESCE((SELECT all_off FROM plugin_switch WHERE id=1),0)",
+        [],
+        |row| row.get(0),
+    )
+    .map_err(sql_error)
+}
+
+/// Appends one entry and keeps the log within the history retention bound.
+/// Callers pass identifiers and fixed words only.
+fn record(
+    db: &Connection,
+    plugin: (&str, &str),
+    server: Option<&str>,
+    action: &str,
+    outcome: ActivityOutcome,
+    detail: &str,
+) -> Result<(), AtlasError> {
+    db.execute(
+        "INSERT INTO plugin_activity(at,plugin_id,plugin_name,server_id,action,outcome,detail) VALUES(?,?,?,?,?,?,?)",
+        params![Utc::now().to_rfc3339(), plugin.0, plugin.1, server, action, name(outcome), detail],
+    )
+    .map_err(sql_error)?;
+    db.execute(
+        "DELETE FROM plugin_activity WHERE id NOT IN (SELECT id FROM plugin_activity ORDER BY id DESC LIMIT (SELECT history_limit FROM monitoring_settings WHERE id=1))",
+        [],
+    )
+    .map_err(sql_error)?;
+    Ok(())
+}
+
 fn decide(
     db: &Connection,
     installed: &[Installed],
@@ -392,6 +468,9 @@ fn decide(
     let Some(found) = installed.iter().find(|p| p.manifest.id == plugin) else {
         return Ok(Err(Refusal::UnknownPlugin));
     };
+    if all_off(db)? {
+        return Ok(Err(Refusal::AllPluginsOff));
+    }
     let all = records(db)?;
     let trust = match (status(found, all.get(plugin)), all.get(plugin)) {
         (PluginStatus::Enabled, Some(record)) => record.trust,
@@ -484,9 +563,121 @@ impl Store {
         Ok(PluginsState {
             contract_version: CONTRACT_VERSION,
             directory: directory.to_string_lossy().into_owned(),
+            all_off: all_off(&self.db)?,
             plugins,
             invalid,
         })
+    }
+
+    /// The newest entries of the plugin activity log.
+    pub fn plugin_activity(&self, limit: u32) -> Result<PluginActivityLog, AtlasError> {
+        let kept: u32 = self
+            .db
+            .query_row(
+                "SELECT history_limit FROM monitoring_settings WHERE id=1",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(sql_error)?;
+        let mut statement = self
+            .db
+            .prepare("SELECT id,at,plugin_id,plugin_name,server_id,action,outcome,detail FROM plugin_activity ORDER BY id DESC LIMIT ?")
+            .map_err(sql_error)?;
+        let rows = statement
+            .query_map([limit.clamp(1, MAX_ACTIVITY_PAGE)], |row| {
+                Ok((
+                    row.get::<_, u32>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, Option<String>>(4)?,
+                    row.get::<_, String>(5)?,
+                    row.get::<_, String>(6)?,
+                    row.get::<_, String>(7)?,
+                ))
+            })
+            .map_err(sql_error)?;
+        let mut entries = Vec::new();
+        for row in rows {
+            let (id, at, plugin_id, plugin_name, server, action, outcome, detail) =
+                row.map_err(sql_error)?;
+            let Some(outcome) = parse::<ActivityOutcome>(&outcome) else {
+                continue;
+            };
+            entries.push(PluginActivity {
+                id,
+                at,
+                plugin_id,
+                plugin_name,
+                server_id: server.and_then(|server| ServerId::parse(&server).ok()),
+                action,
+                outcome,
+                detail,
+            });
+        }
+        Ok(PluginActivityLog {
+            contract_version: CONTRACT_VERSION,
+            kept,
+            entries,
+        })
+    }
+
+    /// The kill switch. While on, every plugin call is refused whatever
+    /// was granted. Turning it off again restores what the owner had set.
+    pub fn plugins_set_all_off(&mut self, off: bool) -> Result<(), AtlasError> {
+        if all_off(&self.db)? == off {
+            return Ok(());
+        }
+        self.db
+            .execute(
+                "INSERT INTO plugin_switch(id,all_off) VALUES(1,?1) ON CONFLICT(id) DO UPDATE SET all_off=?1",
+                [off],
+            )
+            .map_err(sql_error)?;
+        record(
+            &self.db,
+            ("", "All plugins"),
+            None,
+            if off { ACTION_ALL_OFF } else { ACTION_ALL_ON },
+            ActivityOutcome::Done,
+            "",
+        )
+    }
+
+    /// Takes trusted automation away from a plugin without disabling it:
+    /// from now on each change needs the owner's confirmation.
+    pub fn plugin_revoke_trusted(
+        &mut self,
+        directory: &Path,
+        plugin: &str,
+    ) -> Result<(), AtlasError> {
+        let changed = self
+            .db
+            .execute(
+                "UPDATE plugin_state SET trust=? WHERE plugin_id=? AND trust=?",
+                params![
+                    name(TrustLevel::ConfirmChanges),
+                    plugin,
+                    name(TrustLevel::TrustedAutomation)
+                ],
+            )
+            .map_err(sql_error)?;
+        if changed == 0 {
+            return Err(AtlasError::new(ErrorCode::Conflict));
+        }
+        let (installed, _) = discover(directory);
+        let label = installed
+            .iter()
+            .find(|p| p.manifest.id == plugin)
+            .map_or("A removed plugin", |p| p.manifest.name.as_str());
+        record(
+            &self.db,
+            (plugin, label),
+            None,
+            ACTION_REVOKE_TRUSTED,
+            ActivityOutcome::Done,
+            &name(TrustLevel::ConfirmChanges),
+        )
     }
 
     /// Enables a plugin at the trust level the owner chose, recording the
@@ -509,15 +700,13 @@ impl Store {
                 params![plugin, name(trust), found.hash, Utc::now().to_rfc3339()],
             )
             .map_err(sql_error)?;
-        let level = match trust {
-            TrustLevel::ReadOnly => "read-only",
-            TrustLevel::ConfirmChanges => "changes with confirmation",
-            TrustLevel::TrustedAutomation => "trusted automation",
-        };
-        event(
+        record(
             &self.db,
-            &format!("Plugin \"{}\" enabled: {level}.", found.manifest.name),
+            (plugin, &found.manifest.name),
             None,
+            ACTION_ENABLE,
+            ActivityOutcome::Done,
+            &name(trust),
         )
     }
 
@@ -536,7 +725,14 @@ impl Store {
             .iter()
             .find(|p| p.manifest.id == plugin)
             .map_or("A removed plugin", |p| p.manifest.name.as_str());
-        event(&self.db, &format!("Plugin \"{label}\" disabled."), None)
+        record(
+            &self.db,
+            (plugin, label),
+            None,
+            ACTION_DISABLE,
+            ActivityOutcome::Done,
+            "",
+        )
     }
 
     /// Replaces what a plugin may use on one server. An empty list withdraws
@@ -581,30 +777,29 @@ impl Store {
                 )
                 .map_err(sql_error)?;
         }
-        let message = if unique.is_empty() {
-            format!(
-                "Plugin \"{}\": all permissions on this server withdrawn.",
-                found.manifest.name
-            )
-        } else {
-            format!(
-                "Plugin \"{}\": permissions on this server set ({}).",
-                found.manifest.name,
-                unique
-                    .iter()
-                    .map(|capability| name(*capability))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            )
-        };
-        event(&transaction, &message, Some(server.as_str()))?;
+        let detail = unique
+            .iter()
+            .map(|capability| name(*capability))
+            .collect::<Vec<_>>()
+            .join(", ");
+        record(
+            &transaction,
+            (plugin, &found.manifest.name),
+            Some(server.as_str()),
+            ACTION_SET_PERMISSIONS,
+            ActivityOutcome::Done,
+            &detail,
+        )?;
         transaction.commit().map_err(sql_error)
     }
 
     /// The enforcement point. Admits a plugin's use of one capability on one
     /// server only if the plugin is enabled as reviewed, its manifest
     /// requested the capability, the owner granted it on that server and
-    /// the chosen trust level allows it. A refusal is logged.
+    /// the chosen trust level allows it. Nothing is cached: each call is
+    /// decided against what the owner allows now, so a withdrawal, a
+    /// revocation or the kill switch takes effect on the very next call.
+    /// Every answer is logged.
     pub fn plugin_authorize(
         &mut self,
         directory: &Path,
@@ -614,25 +809,28 @@ impl Store {
     ) -> Result<PluginDecision, AtlasError> {
         let (installed, _) = discover(directory);
         let outcome = decide(&self.db, &installed, plugin, server, capability)?;
-        if let Err(refusal) = outcome {
-            let label = installed
-                .iter()
-                .find(|p| p.manifest.id == plugin)
-                .map_or_else(
-                    || "An unknown plugin".to_owned(),
-                    |p| format!("Plugin \"{}\"", p.manifest.name),
-                );
-            let known = server_exists(&self.db, server)?;
-            event(
-                &self.db,
-                &format!(
-                    "{label} was refused {}: {}.",
-                    name(capability),
-                    refusal.sentence()
-                ),
-                known.then(|| server.as_str()),
-            )?;
-        }
+        // Only a real plugin's ID and name are written to the log; whatever
+        // an unknown caller sent as its ID is not.
+        let label = installed
+            .iter()
+            .find(|p| p.manifest.id == plugin)
+            .map_or(("", "Unknown plugin"), |p| {
+                (p.manifest.id.as_str(), p.manifest.name.as_str())
+            });
+        let known = server_exists(&self.db, server)?;
+        let (result, detail) = match outcome {
+            Ok(false) => (ActivityOutcome::Allowed, String::new()),
+            Ok(true) => (ActivityOutcome::NeedsConfirmation, String::new()),
+            Err(refusal) => (ActivityOutcome::Refused, name(refusal)),
+        };
+        record(
+            &self.db,
+            label,
+            known.then(|| server.as_str()),
+            &name(capability),
+            result,
+            &detail,
+        )?;
         Ok(PluginDecision {
             contract_version: CONTRACT_VERSION,
             allowed: outcome.is_ok(),
@@ -655,6 +853,9 @@ pub fn typescript_contracts(config: &Config) -> String {
         PluginView::decl(config),
         InvalidPlugin::decl(config),
         PluginsState::decl(config),
+        ActivityOutcome::decl(config),
+        PluginActivity::decl(config),
+        PluginActivityLog::decl(config),
     ]
     .into_iter()
     .map(|d| format!("export {d}\n"))

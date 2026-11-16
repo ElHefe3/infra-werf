@@ -41,6 +41,9 @@ export function FileBrowser({ server, onBusy }: { server: MapServer; onBusy: (va
   const [selected, setSelected] = useState<FileEntry | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(() => takeCarried(server.id));
+  // When a host edit remounts this view, React renders the new instance before the old one's
+  // cleanup has recorded the notice, so look once more after mounting.
+  useEffect(() => { const carriedNotice = takeCarried(server.id); if (carriedNotice) setNotice(current => current || carriedNotice); }, [server.id]);
   const [failure, setFailure] = useState("");
   const [pinned, setPinned] = useState<FileResource | null>(null);
   const [form, setForm] = useState<ChangeForm | null>(null);

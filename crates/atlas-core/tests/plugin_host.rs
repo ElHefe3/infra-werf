@@ -113,13 +113,13 @@ impl Fixture {
             .unwrap()
     }
     fn refusals_logged(&self) -> usize {
-        self.store
-            .snapshot()
-            .unwrap()
-            .events
+        self.log()
             .iter()
-            .filter(|event| event.message.contains("was refused"))
+            .filter(|entry| entry.outcome == ActivityOutcome::Refused)
             .count()
+    }
+    fn log(&self) -> Vec<PluginActivity> {
+        self.store.plugin_activity(500).unwrap().entries
     }
     fn grantable() -> Vec<Capability> {
         READ.iter().chain(CHANGE.iter()).copied().collect()
@@ -498,5 +498,243 @@ fn grants_survive_a_restart_and_the_file_keeps_its_schema_version() {
         store.plugins_state(&plugins).unwrap().plugins[0]
             .grants
             .is_empty()
+    );
+}
+
+#[test]
+fn every_action_is_logged_with_plugin_server_action_and_outcome_and_nothing_else() {
+    let mut f = fixture();
+    let (alpha, beta) = (f.alpha.clone(), f.beta.clone());
+    f.store
+        .plugin_enable(&f.plugins, PLUGIN, TrustLevel::ConfirmChanges)
+        .unwrap();
+    f.store
+        .plugin_set_grant(
+            &f.plugins,
+            PLUGIN,
+            &alpha,
+            &[Capability::ReadFiles, Capability::WriteFiles],
+        )
+        .unwrap();
+    assert!(f.ask(&alpha, Capability::ReadFiles).allowed);
+    assert!(f.ask(&alpha, Capability::WriteFiles).needs_confirmation);
+    assert_eq!(f.refusal(&beta, Capability::ReadFiles), Refusal::NotGranted);
+    // An unknown caller's ID is never written down.
+    f.store
+        .plugin_authorize(
+            &f.plugins,
+            "password=hunter2 -----BEGIN PRIVATE KEY-----",
+            &alpha,
+            Capability::ReadFiles,
+        )
+        .unwrap();
+    f.store.plugin_disable(&f.plugins, PLUGIN).unwrap();
+
+    let log = f.log();
+    let lines: Vec<(&str, Option<&ServerId>, &str, ActivityOutcome, &str)> = log
+        .iter()
+        .rev()
+        .map(|e| {
+            (
+                e.plugin_name.as_str(),
+                e.server_id.as_ref(),
+                e.action.as_str(),
+                e.outcome,
+                e.detail.as_str(),
+            )
+        })
+        .collect();
+    use ActivityOutcome::*;
+    assert_eq!(
+        lines,
+        [
+            ("Everything", None, "enable", Done, "confirm_changes"),
+            (
+                "Everything",
+                Some(&alpha),
+                "set_permissions",
+                Done,
+                "read_files, write_files"
+            ),
+            ("Everything", Some(&alpha), "read_files", Allowed, ""),
+            (
+                "Everything",
+                Some(&alpha),
+                "write_files",
+                NeedsConfirmation,
+                ""
+            ),
+            (
+                "Everything",
+                Some(&beta),
+                "read_files",
+                Refused,
+                "not_granted"
+            ),
+            (
+                "Unknown plugin",
+                Some(&alpha),
+                "read_files",
+                Refused,
+                "unknown_plugin"
+            ),
+            ("Everything", None, "disable", Done, ""),
+        ]
+    );
+    assert!(
+        log.iter()
+            .all(|e| e.plugin_id == PLUGIN || e.plugin_id.is_empty())
+    );
+    // Newest first, with increasing IDs and a timestamp on each.
+    assert!(log.windows(2).all(|pair| pair[0].id > pair[1].id));
+    assert!(log.iter().all(|e| e.at.contains('T')));
+    // Nothing a caller supplied as free text reaches the stored log.
+    let stored = serde_json::to_string(&log).unwrap().to_lowercase();
+    for secret in ["hunter2", "password", "private key", "begin"] {
+        assert!(!stored.contains(secret), "{secret}");
+    }
+    // The general activity history is not used for plugin calls any more.
+    assert!(
+        f.store
+            .snapshot()
+            .unwrap()
+            .events
+            .iter()
+            .all(|event| !event.message.contains("Everything"))
+    );
+}
+
+#[test]
+fn the_log_stays_within_the_history_retention_bound() {
+    let mut f = fixture();
+    let alpha = f.alpha.clone();
+    f.store.set_history_limit(200).unwrap();
+    for _ in 0..260 {
+        f.ask(&alpha, Capability::ReadFiles);
+    }
+    let log = f.store.plugin_activity(500).unwrap();
+    assert_eq!(log.kept, 200);
+    assert_eq!(log.entries.len(), 200);
+    // The newest are kept; a page is capped.
+    assert_eq!(log.entries[0].id, 260);
+    assert_eq!(f.store.plugin_activity(10).unwrap().entries.len(), 10);
+    f.store.set_history_limit(1000).unwrap();
+    assert_eq!(
+        f.store.plugin_activity(u32::MAX).unwrap().entries.len(),
+        200
+    );
+}
+
+#[test]
+fn the_kill_switch_refuses_everything_at_once_and_restores_exactly_what_was_set() {
+    let mut f = fixture();
+    let alpha = f.alpha.clone();
+    f.store
+        .plugin_enable(&f.plugins, PLUGIN, TrustLevel::TrustedAutomation)
+        .unwrap();
+    f.store
+        .plugin_set_grant(&f.plugins, PLUGIN, &alpha, &Fixture::grantable())
+        .unwrap();
+    assert!(f.ask(&alpha, Capability::WriteFiles).allowed);
+    let before = f.view();
+
+    f.store.plugins_set_all_off(true).unwrap();
+    assert!(f.store.plugins_state(&f.plugins).unwrap().all_off);
+    for capability in ALL {
+        assert_eq!(
+            f.refusal(&alpha, capability),
+            Refusal::AllPluginsOff,
+            "{capability:?}"
+        );
+    }
+    // Repeating it is not a second event.
+    f.store.plugins_set_all_off(true).unwrap();
+    let switches = |f: &Fixture| {
+        f.log()
+            .iter()
+            .filter(|e| e.action.starts_with("all_plugins_"))
+            .map(|e| e.action.clone())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(switches(&f), ["all_plugins_off"]);
+    // It survives a restart of the store.
+    let Fixture {
+        _directory,
+        database,
+        plugins,
+        store,
+        ..
+    } = f;
+    drop(store);
+    let mut store = Store::open(&database).unwrap();
+    assert!(store.plugins_state(&plugins).unwrap().all_off);
+    let decision = store
+        .plugin_authorize(&plugins, PLUGIN, &alpha, Capability::ReadFiles)
+        .unwrap();
+    assert_eq!(decision.refusal, Some(Refusal::AllPluginsOff));
+
+    // Turning plugins back on restores the owner's settings unchanged.
+    store.plugins_set_all_off(false).unwrap();
+    let state = store.plugins_state(&plugins).unwrap();
+    assert!(!state.all_off);
+    assert_eq!(state.plugins[0], before);
+    assert!(
+        store
+            .plugin_authorize(&plugins, PLUGIN, &alpha, Capability::WriteFiles)
+            .unwrap()
+            .allowed
+    );
+}
+
+#[test]
+fn trusted_automation_can_be_revoked_without_disabling_and_takes_effect_on_the_next_call() {
+    let mut f = fixture();
+    let alpha = f.alpha.clone();
+    f.store
+        .plugin_enable(&f.plugins, PLUGIN, TrustLevel::TrustedAutomation)
+        .unwrap();
+    f.store
+        .plugin_set_grant(&f.plugins, PLUGIN, &alpha, &Fixture::grantable())
+        .unwrap();
+    let decision = f.ask(&alpha, Capability::ControlWorkloads);
+    assert!(decision.allowed && !decision.needs_confirmation);
+
+    f.store.plugin_revoke_trusted(&f.plugins, PLUGIN).unwrap();
+    let view = f.view();
+    assert_eq!(
+        (view.status, view.trust),
+        (PluginStatus::Enabled, Some(TrustLevel::ConfirmChanges))
+    );
+    for capability in CHANGE {
+        let decision = f.ask(&alpha, capability);
+        assert!(
+            decision.allowed && decision.needs_confirmation,
+            "{capability:?}"
+        );
+    }
+    assert!(!f.ask(&alpha, Capability::ReadFiles).needs_confirmation);
+    assert_eq!(
+        f.refusal(&alpha, Capability::Elevate),
+        Refusal::NoElevationException
+    );
+    // There is nothing to revoke twice, or on a plugin that never had it.
+    assert_eq!(
+        f.store
+            .plugin_revoke_trusted(&f.plugins, PLUGIN)
+            .unwrap_err()
+            .code,
+        ErrorCode::Conflict
+    );
+    assert_eq!(
+        f.store
+            .plugin_revoke_trusted(&f.plugins, "org.example.absent")
+            .unwrap_err()
+            .code,
+        ErrorCode::Conflict
+    );
+    assert!(
+        f.log()
+            .iter()
+            .any(|e| e.action == "revoke_trusted_automation" && e.detail == "confirm_changes")
     );
 }

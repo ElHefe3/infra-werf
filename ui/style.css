@@ -362,6 +362,10 @@ form label { display: grid; gap: 7px; margin-top: 18px; color: #86987a; font-siz
 .plugin-server header{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px}.plugin-server header span{color:#8a9884;font-size:11px}.plugin-server header .count{margin-left:auto}.plugin-server header button{padding:3px 8px;font-size:11px}
 .plugin-invalid li{display:grid;gap:3px;font-size:12px}.plugin-invalid code{font-size:10px;color:#a36150;overflow-wrap:anywhere}
 .server-plugins{margin-top:26px}
+.plugin-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:8px 0}
+.plugin-activity{width:100%;border-collapse:collapse;margin:10px 0;font-size:11px;background:white;border:1px solid var(--border)}
+.plugin-activity th{position:static;padding:6px 8px;text-align:left}.plugin-activity td{padding:6px 8px;border-top:1px solid #eef2e9;vertical-align:top;overflow-wrap:anywhere}
+.plugin-activity tr.refused td:last-child{color:#a36150}.plugin-activity tr.allowed td:last-child{color:var(--green)}
 .history-retention{display:flex;gap:12px;align-items:center;max-width:380px}
 .history-retention select{width:auto}
 

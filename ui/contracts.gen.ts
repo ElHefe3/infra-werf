@@ -171,7 +171,7 @@ contributions: Array<Contribution>, };
 export type TrustLevel = "read_only" | "confirm_changes" | "trusted_automation";
 export type CapabilityKind = "read" | "change" | "elevation";
 export type PluginStatus = "disabled" | "enabled" | "changed_since_review";
-export type Refusal = "unknown_plugin" | "plugin_disabled" | "changed_since_review" | "unknown_server" | "not_requested" | "not_granted" | "trust_too_low" | "no_elevation_exception";
+export type Refusal = "unknown_plugin" | "plugin_disabled" | "changed_since_review" | "unknown_server" | "not_requested" | "not_granted" | "trust_too_low" | "no_elevation_exception" | "all_plugins_off";
 export type PluginDecision = { contract_version: number, allowed: boolean,
 /**
  * Allowed only after the owner confirms this one change.
@@ -198,4 +198,31 @@ trust: TrustLevel | null, capabilities: Array<RequestedCapability>, contribution
  */
 grants: Array<ServerGrant>, };
 export type InvalidPlugin = { folder: string, problems: Array<string>, };
-export type PluginsState = { contract_version: number, directory: string, plugins: Array<PluginView>, invalid: Array<InvalidPlugin>, };
+export type PluginsState = { contract_version: number, directory: string,
+/**
+ * The owner has turned every plugin off; nothing is admitted.
+ */
+all_off: boolean, plugins: Array<PluginView>, invalid: Array<InvalidPlugin>, };
+export type ActivityOutcome = "allowed" | "needs_confirmation" | "refused" | "done";
+export type PluginActivity = { id: number, at: string,
+/**
+ * Empty for an action on all plugins.
+ */
+plugin_id: string, plugin_name: string, server_id: ServerId | null,
+/**
+ * A capability name, or one of the owner actions such as `enable`.
+ */
+action: string, outcome: ActivityOutcome,
+/**
+ * The refusal, the trust level or the permissions set; never output.
+ */
+detail: string, };
+export type PluginActivityLog = { contract_version: number,
+/**
+ * How many entries are kept: the history retention setting.
+ */
+kept: number,
+/**
+ * Newest first.
+ */
+entries: Array<PluginActivity>, };

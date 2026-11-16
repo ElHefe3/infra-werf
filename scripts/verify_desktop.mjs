@@ -254,16 +254,53 @@ try {
   await page.reload();
   await expect(page.locator('.server-card')).toHaveCount(4);
   expect((await invoke('plugins_state')).plugins[0]).toMatchObject({ id: PLUGIN, status: 'enabled', trust: 'trusted_automation' });
+  // T042: the kill switch, revoking trusted automation and the plugin activity log.
+  await nav.getByRole('button', { name: 'Settings', exact: true }).click();
+  await expect(installed).toContainText('Enabled · Trusted automation · allowed on 1 server');
+  expect(await ask(core, 'ssh_session')).toBe('allowed');
+  await pluginsSection.getByRole('button', { name: 'Turn all plugins off', exact: true }).click();
+  await expect(pluginsSection.getByRole('alert')).toContainText('All plugins are turned off.');
+  await expect(installed).toContainText('Off with all plugins');
+  expect(await ask(core, 'ssh_session')).toBe('all_plugins_off');
+  // The switch survives a reload, and turning plugins back on restores exactly what was set.
+  await page.reload();
+  await expect(page.locator('.server-card')).toHaveCount(4);
+  expect((await invoke('plugins_state')).all_off).toBe(true);
+  expect(await ask(core, 'run_approved_command')).toBe('all_plugins_off');
+  await nav.getByRole('button', { name: 'Settings', exact: true }).click();
+  await pluginsSection.getByRole('button', { name: 'Turn plugins back on', exact: true }).click();
+  await expect(installed).toContainText('Enabled · Trusted automation · allowed on 1 server');
+  expect(await ask(core, 'ssh_session')).toBe('allowed');
+  // Trusted automation is revoked without disabling the plugin.
+  await pluginsSection.getByRole('button', { name: 'Configure Backup overview', exact: true }).click();
+  await pluginPage.getByRole('button', { name: 'Revoke trusted automation', exact: true }).click();
+  await expect(pluginPage).toContainText('Status: Enabled · Changes with confirmation');
+  await expect(pluginPage.getByRole('button', { name: 'Revoke trusted automation', exact: true })).toHaveCount(0);
+  expect((await invoke('plugins_state')).plugins[0]).toMatchObject({ status: 'enabled', trust: 'confirm_changes' });
+  expect(await ask(core, 'ssh_session')).toBe('allowed');
+  await expect(pluginPage.getByRole('table', { name: 'Backup overview recent activity' })).toContainText('Trusted automation revoked by you');
+  // The log: every call with plugin, server, action and outcome, and every change the owner made.
+  const activitySection = page.getByRole('region', { name: 'Plugin activity', exact: true });
+  await activitySection.getByRole('button', { name: 'Refresh activity', exact: true }).click();
+  const activityTable = activitySection.getByRole('table', { name: 'Plugin activity log' });
+  for (const text of ['Backup overview', 'Core & data', 'Asked to use ssh_session', 'Allowed', 'Refused: all plugins are turned off', 'Refused: it is not allowed on this server', 'All plugins turned off by you', 'Plugins turned back on by you', 'Enabled by you', 'Permissions set by you']) await expect(activityTable).toContainText(text);
+  await page.screenshot({ path: path.join(directory, 'plugin-activity.png') });
+  const activity = await invoke('plugin_activity', { limit: 500 });
+  expect(activity.kept).toBe((await invoke('monitoring_state')).history_limit);
+  const calls = activity.entries.filter(e => !['enable', 'disable', 'set_permissions', 'revoke_trusted_automation', 'all_plugins_off', 'all_plugins_on'].includes(e.action));
+  expect(calls.filter(e => e.outcome === 'refused').length).toBe(11);
+  expect(calls.filter(e => e.outcome === 'allowed').length).toBe(5);
+  expect(calls.every(e => e.plugin_id === PLUGIN && e.plugin_name === 'Backup overview' && [core.id, other.id].includes(e.server_id) && e.action && e.at)).toBe(true);
+  expect(activity.entries.filter(e => e.action.startsWith('all_plugins_')).map(e => e.action)).toEqual(['all_plugins_on', 'all_plugins_off']);
+  expect(activity.entries.every(e => Object.keys(e).sort().join() === 'action,at,detail,id,outcome,plugin_id,plugin_name,server_id')).toBe(true);
+  expect(JSON.stringify(activity)).not.toMatch(/password|passphrase|BEGIN|PRIVATE|token|secret/i);
+  // Plugin entries no longer go into the general history.
+  expect((await invoke('map_state')).events.some(e => e.message.includes('Backup overview'))).toBe(false);
   await invoke('plugin_set_grant', { pluginId: PLUGIN, serverId: core.id, capabilities: [] });
   await invoke('plugin_disable', { pluginId: PLUGIN });
-  // Every refusal above is in the activity history; grants and choices are too.
-  const pluginEvents = (await invoke('map_state')).events.map(e => e.message).filter(m => m.includes('Backup overview'));
-  expect(pluginEvents.filter(m => m.includes('was refused')).length).toBe(9);
-  expect(pluginEvents).toContain('Plugin "Backup overview" was refused ssh_session: it is not granted on this server.');
-  expect(pluginEvents).toContain('Plugin "Backup overview" enabled: read-only.');
-  expect(pluginEvents).toContain('Plugin "Backup overview" disabled.');
   expect(errors).toEqual([]);
   results.push('plugins: found with no trust and no grants; consent lists each capability in plain language; enabling needs an explicit trust level; grant, use, withdraw and disable are enforced in the core per server and logged; the server Settings tab shows a read-only list that links to the plugin page');
+  results.push('plugin activity log records every call with plugin, server, action and outcome plus the owner\'s changes, within the history bound and with no free text; the kill switch refuses everything at once, survives a reload and restores settings; trusted automation is revoked without disabling');
   results.push('main menu groups items in one-level categories; a category detaches as a draggable, edge-snapping, roll-up copy that is remembered; the menu hides and the floating button or Ctrl+B restores it; Settings resets the layout');
   await page.getByRole('button', { name: 'Inventory', exact: true }).first().click();
   await page.getByRole('textbox', { name: 'Find a server or workload' }).fill('unit-539');
