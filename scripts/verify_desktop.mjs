@@ -3,7 +3,7 @@
 import { chromium, expect } from '@playwright/test';
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { readFile, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -16,6 +16,12 @@ const original = createHash('sha256').update(await readFile(config.source)).dige
 const database = path.join(directory, 'native.sqlite3');
 const sshConfig = path.join(directory, 'ssh_config');
 await writeFile(sshConfig, 'Host *\n  BatchMode yes\n');
+// T041: a private plugins folder with the shipped example and one unusable folder.
+const pluginsDirectory = path.join(directory, 'plugins');
+await mkdir(path.join(pluginsDirectory, 'backup-overview'), { recursive: true });
+await copyFile(path.join(root, 'examples', 'backup-overview', 'infrawerf-plugin.json'), path.join(pluginsDirectory, 'backup-overview', 'infrawerf-plugin.json'));
+await mkdir(path.join(pluginsDirectory, 'broken'), { recursive: true });
+await writeFile(path.join(pluginsDirectory, 'broken', 'infrawerf-plugin.json'), '{ not json');
 const binary = process.env.ATLAS_DESKTOP_BINARY
   ? path.resolve(process.env.ATLAS_DESKTOP_BINARY)
   : path.join(root, 'target', 'debug', 'atlas-native.exe');
@@ -36,7 +42,7 @@ async function waitForCdpState(available, timeout = 15000) {
   throw new Error(`WebView CDP endpoint did not become ${available ? 'available' : 'unavailable'} within ${timeout}ms`);
 }
 async function launch(db = database, legacy = config.source, extra = {}) {
-  child = spawn(binary, [], { cwd: root, windowsHide: true, env: { ...process.env, ...extra, ATLAS_SSH_CONFIG:sshConfig, ATLAS_NATIVE_DB: db, ATLAS_LEGACY_DB: legacy, ATLAS_REPORTS_DIR: config.reports, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: '--remote-debugging-port=9225 --remote-debugging-address=127.0.0.1', WEBVIEW2_USER_DATA_FOLDER: path.join(directory, 'webview-profile') }, stdio: ['ignore', 'pipe', 'pipe'] });
+  child = spawn(binary, [], { cwd: root, windowsHide: true, env: { ...process.env, ...extra, ATLAS_PLUGINS_DIR: pluginsDirectory, ATLAS_SSH_CONFIG:sshConfig, ATLAS_NATIVE_DB: db, ATLAS_LEGACY_DB: legacy, ATLAS_REPORTS_DIR: config.reports, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: '--remote-debugging-port=9225 --remote-debugging-address=127.0.0.1', WEBVIEW2_USER_DATA_FOLDER: path.join(directory, 'webview-profile') }, stdio: ['ignore', 'pipe', 'pipe'] });
   child.stdout.on('data', () => {}); child.stderr.on('data', () => {});
   // Tauri's Windows process may return success after handing startup to the
   // GUI process. The WebView endpoint, not the short-lived launcher handle,
@@ -170,6 +176,94 @@ try {
   await nav.getByRole('button', { name: 'Topology', exact: true }).click();
   await expect(page.locator('.server-card')).toHaveCount(4);
   expect(errors).toEqual([]);
+  // T041: plugin permissions. Found plugins have no trust and no grants; the owner chooses both on the plugin's page, and the core enforces them.
+  const PLUGIN = 'org.example.backup-overview';
+  const fixtureServers = (await invoke('map_state')).servers;
+  const core = fixtureServers.find(s => s.name === 'Core & data'), other = fixtureServers.find(s => s.name !== 'Core & data');
+  const ask = async (server, capability) => { const decision = await invoke('plugin_authorize', { pluginId: PLUGIN, serverId: server.id, capability }); return decision.allowed ? (decision.needs_confirmation ? 'confirm' : 'allowed') : decision.refusal; };
+  expect(await ask(core, 'ssh_session')).toBe('plugin_disabled');
+  await nav.getByRole('button', { name: 'Settings', exact: true }).click();
+  const pluginsSection = page.getByRole('region', { name: 'Plugins', exact: true });
+  const installed = pluginsSection.getByRole('list', { name: 'Installed plugins' });
+  await expect(installed.getByRole('listitem')).toHaveCount(1);
+  await expect(installed).toContainText('Backup overview');
+  await expect(installed).toContainText('Not enabled · allowed on 0 servers');
+  const unusable = pluginsSection.getByRole('list', { name: 'Unusable plugin folders' });
+  await expect(unusable).toContainText('broken');
+  await expect(unusable).toContainText('malformed_json');
+  await pluginsSection.getByRole('button', { name: 'Configure Backup overview', exact: true }).click();
+  const pluginPage = page.getByRole('region', { name: 'Backup overview plugin', exact: true });
+  // Consent: every requested capability in plain language, and no trust level chosen for the owner.
+  const asks = pluginPage.getByRole('list', { name: 'Requested capabilities' });
+  await expect(asks.getByRole('listitem')).toHaveCount(3);
+  await expect(asks).toContainText('Sign in to this server through InfraWerf with your existing SSH access. The plugin never receives your keys or a raw session.');
+  await expect(asks).toContainText('Run fixed, read-only commands on this server.');
+  await expect(asks).toContainText('Used by: Last backup, Backups');
+  await expect(pluginPage.getByRole('radio')).toHaveCount(3);
+  await expect(pluginPage.getByRole('radio', { checked: true })).toHaveCount(0);
+  await expect(pluginPage.getByRole('button', { name: 'Enable plugin', exact: true })).toBeDisabled();
+  await pluginPage.getByRole('radio', { name: /^Read-only/ }).check();
+  await pluginPage.getByRole('button', { name: 'Enable plugin', exact: true }).click();
+  await expect(pluginPage).toContainText('Status: Enabled · Read-only');
+  // Enabled but nothing granted: still refused. Grant one capability on one server.
+  expect(await ask(core, 'ssh_session')).toBe('not_granted');
+  const corePermissions = pluginPage.getByRole('region', { name: 'Permissions on Core & data', exact: true });
+  await expect(corePermissions).toContainText('0 of 3 allowed');
+  // The box is ticked once the core has saved the grant, not on the click itself.
+  await corePermissions.getByRole('checkbox', { name: /^Sign in to this server/ }).click();
+  await expect(corePermissions.getByRole('checkbox', { name: /^Sign in to this server/ })).toBeChecked();
+  await expect(corePermissions).toContainText('1 of 3 allowed');
+  expect(await ask(core, 'ssh_session')).toBe('allowed');
+  await pluginPage.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: path.join(directory, 'plugin-page.png') });
+  expect(await ask(core, 'run_approved_command')).toBe('not_granted');
+  expect(await ask(other, 'ssh_session')).toBe('not_granted');
+  expect(await ask(core, 'write_files')).toBe('not_requested');
+  expect(await ask(core, 'elevate')).toBe('not_requested');
+  expect(await ask(core, 'interactive_terminal')).toBe('not_requested');
+  // The server's own Settings tab lists it read-only and links back to the plugin's page.
+  await nav.getByRole('button', { name: 'Topology', exact: true }).click();
+  await page.getByRole('button', { name: 'Open Core & data workspace', exact: true }).click();
+  const pluginWorkspace = page.getByRole('dialog', { name: 'Core & data', exact: true });
+  await pluginWorkspace.getByRole('tab', { name: 'Settings', exact: true }).click();
+  const serverPlugins = pluginWorkspace.getByRole('region', { name: 'Plugins on this server', exact: true });
+  await expect(serverPlugins).toContainText('Backup overview');
+  await expect(serverPlugins).toContainText('Enabled · Read-only');
+  await expect(serverPlugins).toContainText('ssh_session');
+  await expect(serverPlugins.getByRole('checkbox')).toHaveCount(0);
+  await expect(serverPlugins.getByRole('radio')).toHaveCount(0);
+  await serverPlugins.getByRole('button', { name: 'Open Backup overview plugin settings', exact: true }).click();
+  await expect(pluginWorkspace).not.toBeVisible();
+  await expect(pluginPage).toBeVisible();
+  // Withdraw: access stops at once. Allow everything, then disable: everything stops and the trust choice is forgotten.
+  await corePermissions.getByRole('button', { name: 'Withdraw all on Core & data', exact: true }).click();
+  await expect(corePermissions).toContainText('0 of 3 allowed');
+  expect(await ask(core, 'ssh_session')).toBe('not_granted');
+  await corePermissions.getByRole('button', { name: 'Allow all on Core & data', exact: true }).click();
+  await expect(corePermissions).toContainText('3 of 3 allowed');
+  expect(await ask(core, 'run_approved_command')).toBe('allowed');
+  await pluginPage.getByRole('button', { name: 'Disable plugin', exact: true }).click();
+  await expect(pluginPage).toContainText('Status: Not enabled');
+  expect(await ask(core, 'run_approved_command')).toBe('plugin_disabled');
+  await expect(pluginPage.getByRole('radio', { checked: true })).toHaveCount(0);
+  await expect(pluginPage.getByRole('button', { name: 'Enable plugin', exact: true })).toBeDisabled();
+  // Trust levels differ only for changes; this example has none, so confirm the stored level round-trips, then clean up.
+  await pluginPage.getByRole('radio', { name: /^Trusted automation/ }).check();
+  await pluginPage.getByRole('button', { name: 'Enable plugin', exact: true }).click();
+  await expect(pluginPage).toContainText('Status: Enabled · Trusted automation');
+  await page.reload();
+  await expect(page.locator('.server-card')).toHaveCount(4);
+  expect((await invoke('plugins_state')).plugins[0]).toMatchObject({ id: PLUGIN, status: 'enabled', trust: 'trusted_automation' });
+  await invoke('plugin_set_grant', { pluginId: PLUGIN, serverId: core.id, capabilities: [] });
+  await invoke('plugin_disable', { pluginId: PLUGIN });
+  // Every refusal above is in the activity history; grants and choices are too.
+  const pluginEvents = (await invoke('map_state')).events.map(e => e.message).filter(m => m.includes('Backup overview'));
+  expect(pluginEvents.filter(m => m.includes('was refused')).length).toBe(9);
+  expect(pluginEvents).toContain('Plugin "Backup overview" was refused ssh_session: it is not granted on this server.');
+  expect(pluginEvents).toContain('Plugin "Backup overview" enabled: read-only.');
+  expect(pluginEvents).toContain('Plugin "Backup overview" disabled.');
+  expect(errors).toEqual([]);
+  results.push('plugins: found with no trust and no grants; consent lists each capability in plain language; enabling needs an explicit trust level; grant, use, withdraw and disable are enforced in the core per server and logged; the server Settings tab shows a read-only list that links to the plugin page');
   results.push('main menu groups items in one-level categories; a category detaches as a draggable, edge-snapping, roll-up copy that is remembered; the menu hides and the floating button or Ctrl+B restores it; Settings resets the layout');
   await page.getByRole('button', { name: 'Inventory', exact: true }).first().click();
   await page.getByRole('textbox', { name: 'Find a server or workload' }).fill('unit-539');

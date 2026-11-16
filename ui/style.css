@@ -347,6 +347,21 @@ form label { display: grid; gap: 7px; margin-top: 18px; color: #86987a; font-siz
 .settings-screen{padding:24px;overflow:auto;height:100%;box-sizing:border-box}
 .settings-section{max-width:640px;margin:0 0 28px;padding-top:4px}
 .settings-section h3{margin:0 0 8px}
+.plugins h5,.plugin-page h5{margin:22px 0 6px;font-size:12px;font-weight:600;color:#3f5a48}
+.plugin-page h4{margin:10px 0 6px;font-size:17px}.plugin-page h4 small,.plugin-list small{display:inline;margin-left:6px}
+.plugin-list,.plugin-adds,.plugin-asks,.plugin-invalid{list-style:none;margin:8px 0;padding:0;display:grid;gap:8px}
+.plugin-list li{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:white}
+.plugin-list li > div{display:grid;gap:3px;min-width:0}.plugin-status{font-size:11px;color:#7c8b78}.plugin-status.enabled{color:var(--green)}.plugin-status.changed_since_review{color:#a36150}
+.plugin-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 20px;margin:12px 0}.plugin-facts dt{font-size:10px;color:#96a38b}.plugin-facts dd{margin:2px 0 0;font-size:12px;overflow-wrap:anywhere}
+.plugin-adds li{font-size:12px}
+.plugin-asks li{display:grid;grid-template-columns:70px 1fr;gap:10px;font-size:12px;align-items:start}.plugin-asks small{margin-top:2px}
+.kind{font-size:10px;font-weight:600;text-align:center;padding:2px 0;border-radius:4px;background:#e9f1e6;color:#3f6b52}.kind.change{background:#fbefd9;color:#8a6420}.kind.elevation{background:#fde7e1;color:#a05040}
+.trust-choice{border:1px solid var(--border);border-radius:8px;margin:8px 0 12px;padding:10px 12px;display:grid;gap:8px}.trust-choice legend{font-size:11px;color:#6f8470;padding:0 4px}
+.trust-choice label,.plugin-server label{display:flex;gap:8px;align-items:flex-start;font-size:12px}.trust-choice input,.plugin-server input{width:auto;margin-top:2px}
+.plugin-server{border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin:8px 0;display:grid;gap:6px;background:white}
+.plugin-server header{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px}.plugin-server header span{color:#8a9884;font-size:11px}.plugin-server header .count{margin-left:auto}.plugin-server header button{padding:3px 8px;font-size:11px}
+.plugin-invalid li{display:grid;gap:3px;font-size:12px}.plugin-invalid code{font-size:10px;color:#a36150;overflow-wrap:anywhere}
+.server-plugins{margin-top:26px}
 .history-retention{display:flex;gap:12px;align-items:center;max-width:380px}
 .history-retention select{width:auto}
 

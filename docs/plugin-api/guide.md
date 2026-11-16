@@ -8,7 +8,7 @@ Read this first, so you know what you are building.
 
 - **v1 defines the manifest.** A plugin is a folder with one file, `infrawerf-plugin.json`, that says who the plugin is, what it adds to InfraWerf and what it asks permission to use.
 - **v1 does not yet define plugin content.** There is no way in v1 to ship the code or data behind a tab or a check. That arrives in later API versions. A v1 manifest is the stable base those versions build on.
-- **InfraWerf does not load plugins yet.** Today you validate a manifest with the command-line tool. Installing a plugin, and the screen where the owner reviews and allows what it asks for, are not built yet.
+- **InfraWerf finds plugins and lets the owner review them.** A plugin folder placed in the owner's plugins folder is listed in Settings, where the owner reads what it asks for and decides what to allow. Because v1 has no plugin content, an allowed plugin does not yet add anything visible. Installing from a file or an address is not built yet.
 - **A manifest grants nothing.** It is a request. Each owner decides what their own InfraWerf allows.
 
 ## Before you start
@@ -215,13 +215,23 @@ One capability exists in InfraWerf that no plugin may request: `interactive_term
 
 The manifest is written for two readers: InfraWerf and the person deciding whether to trust your plugin.
 
-Today the owner's view is the check command. It reports the plugin's ID and version, the API version, and how many contributions and capabilities it declares. With `--json` it prints the same as data:
+In InfraWerf, **Settings → Plugins** lists every plugin folder found in the owner's plugins folder (the path is shown there). A folder whose manifest is not valid is listed separately with the same codes the check command prints. Each valid plugin has one page, and that page shows:
 
-```
-{"api_version":1,"id":"org.example.backup-overview","issues":[],"valid":true,"version":"1.0.0"}
-```
+- your `name`, `version`, `description`, `author`, `license`, `homepage` and `id`;
+- **What it adds:** each contribution's `title` and where its `point` puts it;
+- **What it asks for:** each capability as a sentence, marked as reading, changing or sudo, with the titles of the contributions that use it;
+- **Trust level:** read-only, changes with confirmation, or trusted automation. The owner must pick one to enable the plugin; nothing is preselected. Read-only refuses every changing capability even if it was allowed on a server;
+- **Servers:** for each server on the owner's map, which of your capabilities are allowed there. Nothing is allowed until the owner ticks it.
 
-The in-app review, where an owner reads what a plugin asks for and allows or refuses it, is not built yet, so this guide does not describe it. What is already fixed is what that review will be based on: your `name`, `description`, `author`, `license`, `homepage`, the top-level `capabilities` and each contribution's `title`, `point` and `capabilities`. Write them for a person.
+What follows from that for you:
+
+- A found plugin can do nothing. It needs a trust level and at least one server.
+- Each capability is allowed or refused per server. Do not assume that having one means having another.
+- Sudo (`elevate`) can be requested but cannot be granted yet, so it is always refused.
+- If your manifest changes after the owner enabled the plugin, the plugin is switched off until the owner reviews it and enables it again.
+- Every refused use is written to the owner's activity history with your plugin's name.
+
+Write your `name`, `description` and each `title` for the person reading that page.
 
 ## Versions and compatibility
 

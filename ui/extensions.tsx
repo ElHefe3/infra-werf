@@ -12,6 +12,7 @@ import { liveStatus } from "./live-monitoring";
 import { appSettings, type AppSettingsRenderer } from "./app-settings";
 import { observedLabel, workloads } from "./map-model";
 import { groupMenu, type MenuGroup, type MenuRenderer } from "./menu-model";
+import { ServerPlugins } from "./plugins";
 import { date, memory, Notice, SavedInventory } from "./workspace-parts";
 
 // Built-in renderers for the interface extension points (S12/F18). The Rust
@@ -35,6 +36,8 @@ export type WorkspaceContext = {
   /** Switch to another tab by its contribution ID. */
   openTab: (id: string) => void;
   edit: () => void;
+  /** Close this workspace and open a plugin's page in the application Settings. */
+  openPlugin: (id: string) => void;
   settings: Bound<SettingsRenderer>[];
 };
 
@@ -65,6 +68,7 @@ const settings: Record<string, SettingsRenderer> = {
   "builtin.settings.map-details": c => <><h3>Map details</h3><dl className="system-grid"><div><dt>Name</dt><dd>{c.server.name}</dd></div><div><dt>Host</dt><dd>{c.server.host}</dd></div></dl><button className="primary" disabled={c.busy} onClick={c.edit}>Edit server details</button></>,
   "builtin.settings.ssh-connection": c => <SshConnection key={`${c.server.id}:${c.server.host}`} server={c.server} disabled={c.busy} onBusy={value => c.reportBusy("ssh", value)} />,
   "builtin.settings.elevation": c => <ElevationCheck key={`elevation:${c.server.id}:${c.server.host}`} server={c.server} disabled={c.busy} onBusy={value => c.reportBusy("elevation", value)} />,
+  "builtin.settings.plugins": c => <ServerPlugins key={`plugins:${c.server.id}`} server={c.server} openPlugin={c.openPlugin} />,
 };
 
 const badges: Record<string, BadgeRenderer> = {

@@ -483,6 +483,13 @@ pub fn builtin_with(disabled: &[String]) -> ExtensionRegistry {
             30,
             &[SshSession, Elevate],
         ),
+        (
+            "builtin.settings.plugins",
+            SettingsSection,
+            "Plugins on this server",
+            40,
+            &[ReadSavedState],
+        ),
         // Sections of the application Settings screen.
         (
             "builtin.app-settings.history-retention",
@@ -504,6 +511,13 @@ pub fn builtin_with(disabled: &[String]) -> ExtensionRegistry {
             "Menu layout",
             30,
             &[ReadSavedState],
+        ),
+        (
+            "builtin.app-settings.plugins",
+            AppSettingsSection,
+            "Plugins",
+            40,
+            &[ReadSavedState, EditMap],
         ),
         // Main menu items. The interface places each in a category (T053).
         (
@@ -739,7 +753,12 @@ mod tests {
             .collect();
         assert_eq!(
             app_settings,
-            ["History retention", "SSH alias discovery", "Menu layout"]
+            [
+                "History retention",
+                "SSH alias discovery",
+                "Menu layout",
+                "Plugins"
+            ]
         );
         let menu: Vec<&str> = registry
             .at(ExtensionPoint::MenuItem)

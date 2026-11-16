@@ -94,7 +94,7 @@ function Dialog({ title, children, close, busy = false, wide = false }: { title:
 }
 
 
-function ServerWorkspace({ server, state, close, edit, reload, initialTab = TAB.services }: { server: MapServer; state: MapState; close: () => void; edit: () => void; reload: () => Promise<void>; initialTab?: WorkspaceTab }) {
+function ServerWorkspace({ server, state, close, edit, reload, openPlugin, initialTab = TAB.services }: { server: MapServer; state: MapState; close: () => void; edit: () => void; reload: () => Promise<void>; openPlugin: (id: string) => void; initialTab?: WorkspaceTab }) {
   const extensions = useExtensions();
   const [tab, setTab] = useState<WorkspaceTab>(initialTab);
   const transfers = useTransfers();
@@ -118,7 +118,7 @@ function ServerWorkspace({ server, state, close, edit, reload, initialTab = TAB.
     } finally { reportBusy("inventory", false); setRefreshing(false); }
   };
   const active = extensions.tabs.find(entry => entry.contribution.id === tab) ?? extensions.tabs[0];
-  const context: WorkspaceContext = { server, state, busy: checkingSsh, reportBusy, refreshInventory, refreshing, filter, setFilter, transfers, openTab: setTab, edit, settings: extensions.settings };
+  const context: WorkspaceContext = { server, state, busy: checkingSsh, reportBusy, refreshInventory, refreshing, filter, setFilter, transfers, openTab: setTab, edit, openPlugin, settings: extensions.settings };
   return <Dialog title={server.name} close={close} wide busy={checkingSsh}><div className="workspace-server-line"><span>{server.host}</span><span>{observedLabel(server)} · {date(server.inventory?.collected_at)}</span></div>
     <div className="workspace-tabs" role="tablist" aria-label="Server workspace">{extensions.tabs.map(({ contribution }) => <button key={contribution.id} role="tab" disabled={checkingSsh} aria-selected={active?.contribution.id === contribution.id} onClick={() => setTab(contribution.id)}>{contribution.title}</button>)}</div>
     <section className="workspace-body" role="tabpanel" aria-label={active?.contribution.title}>
@@ -147,6 +147,7 @@ function App() {
   const [query, setQuery] = useState("");
   const [view, setView] = useState<View>("topology");
   const menu = useMenu();
+  const [pluginFocus, setPluginFocus] = useState<string | null>(null);
   const [inspector, setInspector] = useState(true);
   const [inspectorTab, setInspectorTab] = useState("Overview");
   const [modal, setModalState] = useState<Modal | null>(null);
@@ -214,7 +215,7 @@ function App() {
             {!state ? <div className="loading-state"><BrandMark /><h2>{error ? "Your workspace couldn’t be opened." : "Opening your workspace…"}</h2><p>{error ? "Resolve the message above, then retry. Your saved data has not been replaced." : "Reading the native Rust store on this PC."}</p></div> : <>
               {view === "topology" && <ReactFlowProvider><MapCanvas state={visibleState!} selected={selected} query={query} busy={busy} select={setSelected} open={open} move={(id, x, y) => mutate(() => client.update(id, { x, y }), "Map position saved.")} connect={c => relationship(c.source, c.target)} /></ReactFlowProvider>}
               {view === "servers" && <MonitoringHub state={state} monitoring={monitoring} client={client} reload={reloadLive} remove={id=>setModal({kind:"remove-server",id})} open={open} openSettings={()=>setView("settings")} />}
-              {view === "settings" && extensions && <SettingsScreen sections={extensions.appSettings} monitoring={monitoring} client={client} reload={reloadLive} resetMenu={menu.reset} />}
+              {view === "settings" && extensions && <SettingsScreen sections={extensions.appSettings} monitoring={monitoring} client={client} reload={reloadLive} resetMenu={menu.reset} servers={state.servers} pluginFocus={pluginFocus} setPluginFocus={setPluginFocus} />}
               {view === "inventory" && <SavedInventory state={state} query={query} open={open} />}
               {view === "activity" && <div className="activity-view"><h2>Workspace activity</h2><p>Timestamped reachability, inventory and lifecycle changes. Use Settings to set history retention.</p><ActivityList state={state} /></div>}
               {view === "transfers" && <TransferQueue rows={transfers.rows} failure={transfers.failure} retry={id => { setWorkspaceTab(TAB.files); setSelected(id); setWorkspace(id); }} />}
@@ -232,7 +233,7 @@ function App() {
         <footer className="app-footer"><b>InfraWerf</b><span>Your homelab, connected.</span></footer>
       </main>
     </div>
-    {workspaceServer && state && extensions && <ServerWorkspace key={workspaceServer.id} server={workspaceServer} state={state} reload={async () => { setState(await client.retry()); }} initialTab={workspaceTab} close={() => setWorkspace(null)} edit={() => { setWorkspace(null); setModal({ kind: "edit", id: workspaceServer.id }); }} />}
+    {workspaceServer && state && extensions && <ServerWorkspace key={workspaceServer.id} server={workspaceServer} state={state} openPlugin={id => { setWorkspace(null); setPluginFocus(id); setView("settings"); }} reload={async () => { setState(await client.retry()); }} initialTab={workspaceTab} close={() => setWorkspace(null)} edit={() => { setWorkspace(null); setModal({ kind: "edit", id: workspaceServer.id }); }} />}
     {modal && state && <Dialog title={modal.kind === "add" ? "Add a server" : modal.kind === "edit" ? "Edit server" : modal.kind === "relationship" ? "Document a relationship" : modal.kind === "remove-server" ? "Remove server from map?" : "Remove relationship?"} close={() => setModal(null)} busy={busy}>
       {error && <p role="alert" className="form-error">{error}</p>}
       {modal.kind === "add" || modal.kind === "edit" ? <form onSubmit={formSubmit}><p className="muted">A map entry stores a name and address. It does not connect to the server.</p><label>Server name<input name="name" required maxLength={80} autoFocus defaultValue={editServer?.name} placeholder="e.g. Forgejo" /></label><label>Host or IP address<input name="host" required maxLength={253} defaultValue={editServer?.host} placeholder="server.example or 192.168.1.10" spellCheck={false} /></label><div className="form-actions">{modal.kind === "edit" && <button type="button" className="danger text-button" disabled={busy} onClick={() => setModal({ kind: "remove-server", id: modal.id })}>Remove from map</button>}<button type="button" disabled={busy} onClick={() => setModal(null)}>Cancel</button><button className="primary" disabled={busy}>{busy ? "Saving…" : "Save server"}</button></div></form>
