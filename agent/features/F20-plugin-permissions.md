@@ -16,7 +16,7 @@ Context: The owner decided on 2026-11-11 that an explicitly trusted plugin may a
 
 ## T041 — Capability model and consent screen
 
-<!-- atlas-ticket: {"id":"T041","feature":"F20","status":"todo","depends_on":["T039","T052"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T041","feature":"F20","status":"done","depends_on":["T039","T052"],"evidence":"../evidence/T041-acceptance.md"} -->
 
 ### Outcome and included work
 
@@ -34,12 +34,12 @@ Trust is each owner's choice ([D055](../discovery/D055-plugin-choices-belong-to-
 
 ### Acceptance criteria
 
-- [ ] A plugin call outside its granted capabilities is refused in the core and logged.
-- [ ] The consent screen lists each requested capability in plain language, including the exact commands a declarative pack will run.
-- [ ] One configuration page per plugin shows every permission it has and is the only place they are changed.
-- [ ] Grants can be given and withdrawn per server, from that page.
-- [ ] Enabling a plugin requires an explicit trust-level choice; no level is preselected and none is implied.
-- [ ] No capability gives access to keys, passwords or an unrestricted shell.
+- [x] A plugin call outside its granted capabilities is refused in the core and logged.
+- [x] The consent screen lists each requested capability in plain language, including the exact commands a declarative pack will run.
+- [x] One configuration page per plugin shows every permission it has and is the only place they are changed.
+- [x] Grants can be given and withdrawn per server, from that page.
+- [x] Enabling a plugin requires an explicit trust-level choice; no level is preselected and none is implied.
+- [x] No capability gives access to keys, passwords or an unrestricted shell.
 
 ### Verification
 
@@ -47,7 +47,7 @@ Core tests that attempt every ungranted capability; native journey for grant, us
 
 ### Evidence and closure
 
-None yet.
+Accepted on `5fffd2a`: [T041 acceptance](../evidence/T041-acceptance.md). All twelve native suites pass in one run. One part of the second criterion is carried to T043: a pack's exact commands cannot be shown until packs exist. Sudo cannot be granted yet and is always refused; exceptions are carried to T042. No separate review pass was run.
 
 ### Stop conditions
 
