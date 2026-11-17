@@ -84,22 +84,43 @@ export function PluginViewPanel({ server, view }: { server: MapServer; view: Plu
   </section>;
 }
 
-/** InfraWerf's own dialog for a command a plugin view asks to run. */
+/** How long Run stays disabled after the dialog appears, so a click aimed at the plugin page cannot land on it (T047 review, finding 3). */
+export const RUN_DELAY_MS = 1000;
+
+/** InfraWerf's own dialog for a command a plugin view asks to run. Requests from several views queue; one is shown at a time. */
 export function PluginActionDialog() {
-  const [request, setRequest] = useState<ViewActionRequest | null>(null);
+  const [queue, setQueue] = useState<ViewActionRequest[]>([]);
   const [busy, setBusy] = useState(false);
+  const [ready, setReady] = useState(false);
+  const pressed = useRef(false);
+  const decline = useRef<HTMLButtonElement>(null);
+  const request = queue[0] ?? null;
   useEffect(() => {
     let disposed = false, unlisten: (() => void) | undefined;
-    void listen<ViewActionRequest>("atlas-plugin-action", event => { hideViews(true); setRequest(event.payload); })
+    void listen<ViewActionRequest>("atlas-plugin-action", event => { hideViews(true); setQueue(current => current.some(r => r.id === event.payload.id) ? current : [...current, event.payload]); })
       .then(fn => { if (disposed) fn(); else unlisten = fn; }).catch(() => {});
     return () => { disposed = true; unlisten?.(); };
   }, []);
+  // Each request, and every return to the window, starts the wait again.
+  useEffect(() => {
+    if (!request) return;
+    setReady(false); pressed.current = false;
+    // A stray Enter or Space declines.
+    requestAnimationFrame(() => decline.current?.focus());
+    let timer = window.setTimeout(() => setReady(true), RUN_DELAY_MS);
+    const restart = () => { setReady(false); window.clearTimeout(timer); timer = window.setTimeout(() => setReady(true), RUN_DELAY_MS); };
+    window.addEventListener("focus", restart);
+    return () => { window.clearTimeout(timer); window.removeEventListener("focus", restart); };
+  }, [request?.id]);
   if (!request) return null;
   async function answer(run: boolean) {
     if (!request) return;
     setBusy(true);
     try { await client.answerPluginView(request.id, run); } catch { /* the view sees the request's state */ }
-    finally { setBusy(false); setRequest(null); hideViews(false); }
+    finally {
+      setBusy(false);
+      setQueue(current => { const rest = current.slice(1); if (!rest.length) hideViews(false); return rest; });
+    }
   }
   const chosen = Object.entries(request.parameters);
   return <Dialog title="A plugin asks to run a command" close={() => void answer(false)} busy={busy}>
@@ -107,6 +128,9 @@ export function PluginActionDialog() {
     <code className="pack-argv" aria-label="Requested command">{request.argv.join(" ")}</code>
     {chosen.length > 0 && <ul aria-label="Chosen workloads">{chosen.map(([name, value]) => <li key={name}><code>{`{${name}}`}</code> = {value}</li>)}</ul>}
     <p className="muted">This request came from the plugin’s own page. It runs only if you press Run here, through your SSH access and the same checks as the Plugin data tab. Nothing else in the plugin page can run it.</p>
-    <div className="form-actions"><button disabled={busy} onClick={() => void answer(false)}>Decline</button><button className="primary" disabled={busy} onClick={() => void answer(true)}>{busy ? "Running…" : "Run"}</button></div>
+    {queue.length > 1 && <p className="muted">{queue.length - 1} more {queue.length === 2 ? "request is" : "requests are"} waiting after this one.</p>}
+    <div className="form-actions"><button ref={decline} disabled={busy} onClick={() => void answer(false)}>Decline</button>
+      <button className="primary" disabled={busy || !ready} onPointerDown={() => { pressed.current = true; }}
+        onClick={event => { const fromPointer = event.detail > 0; if (fromPointer && !pressed.current) return; pressed.current = false; void answer(true); }}>{busy ? "Running…" : ready ? "Run" : "Run (wait…)"}</button></div>
   </Dialog>;
 }

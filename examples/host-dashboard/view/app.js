@@ -12,7 +12,7 @@ async function call(path, options) {
 
 async function load() {
   const context = await call("context");
-  show("server", `Host dashboard · ${context.server.name}`);
+  show("server", context.server ? `Host dashboard · ${context.server.name}` : "Host dashboard");
   try {
     const readings = await call("observations");
     const list = document.getElementById("readings");

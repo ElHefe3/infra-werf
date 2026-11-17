@@ -23,9 +23,28 @@ use std::collections::BTreeMap;
 use std::sync::Weak;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-/// Blocked attempts logged per view; further ones are counted, not logged,
-/// so a hostile page cannot flush the activity log.
-const MAX_BLOCKS_LOGGED: u32 = 40;
+/// Log rows one opening of a view may cause, whatever their kind: blocked
+/// attempts, refused requests and refused reads. Further ones are counted
+/// and summed up in one row when the view closes, so a page cannot flood
+/// the activity log and push other entries out (T047 review, findings 2, 5).
+const LOG_BUDGET: u32 = 40;
+
+/// The guard's report words; anything else is logged as `other`.
+const GUARD_WORDS: &[&str] = &[
+    "chrome.webview",
+    "__TAURI__",
+    "__TAURI_IPC__",
+    "ipc",
+    "__TAURI_POST_MESSAGE__",
+    "RTCPeerConnection",
+    "webkitRTCPeerConnection",
+    "RTCDataChannel",
+    "RTCIceTransport",
+    "RTCSctpTransport",
+    "RTCDtlsTransport",
+    "RTCRtpSender",
+    "RTCRtpReceiver",
+];
 
 /// The script every view runs before its own: it removes the webview's
 /// native message channel and Tauri's internals from the page, and reports
@@ -39,6 +58,12 @@ const VIEW_GUARD: &str = r#"(() => {
   // Tauri's own internals are frozen and cannot be removed. Their two
   // routes are closed: the native channel is removed here, and the content
   // security policy blocks requests to ipc.localhost (and reports them).
+  // WebRTC is not covered by the content security policy; it is also off
+  // in the browser. Remove it here as a second layer.
+  for (const name of ['RTCPeerConnection', 'webkitRTCPeerConnection', 'RTCDataChannel', 'RTCIceTransport', 'RTCSctpTransport', 'RTCDtlsTransport', 'RTCRtpSender', 'RTCRtpReceiver']) {
+    try { delete window[name]; } catch (_) {}
+    try { Object.defineProperty(window, name, trap(name)); } catch (_) {}
+  }
   for (const name of ['__TAURI__', '__TAURI_IPC__', 'ipc', '__TAURI_POST_MESSAGE__']) {
     try { delete window[name]; } catch (_) {}
     try { Object.defineProperty(window, name, trap(name)); } catch (_) {}
@@ -57,6 +82,7 @@ struct OpenView {
     tab: PluginViewTab,
     server: ServerId,
     webview: tauri::Webview,
+    link: Arc<ViewLink>,
     _server: ViewServer,
 }
 
@@ -91,7 +117,14 @@ struct ViewLink {
     label: String,
     tab: PluginViewTab,
     server: ServerId,
-    blocks: std::sync::atomic::AtomicU32,
+    /// Rows this opening may still write.
+    budget: std::sync::atomic::AtomicU32,
+    /// Rows not written because the budget ran out.
+    unlogged: std::sync::atomic::AtomicU32,
+    /// Requests refused before they reached the view: no secret, wrong host
+    /// or another origin. Anything on this PC can send those, so they are
+    /// not charged to the plugin; one row counts them at close.
+    outside: std::sync::atomic::AtomicU32,
 }
 
 #[derive(Deserialize)]
@@ -103,6 +136,37 @@ struct ActionAsk {
 }
 
 impl ViewLink {
+    /// Logs one row within the opening's budget.
+    fn note(&self, workspace: &Workspace, action: &str, outcome: ActivityOutcome, detail: &str) {
+        let spent = self
+            .budget
+            .try_update(Ordering::SeqCst, Ordering::SeqCst, |left| {
+                left.checked_sub(1)
+            });
+        if spent.is_ok() {
+            self.log(workspace, action, outcome, detail);
+        } else {
+            self.unlogged.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+
+    /// The rows written when the view closes, outside the budget.
+    fn close_note(&self, workspace: &Workspace) {
+        let unlogged = self.unlogged.swap(0, Ordering::SeqCst);
+        if unlogged > 0 {
+            self.log(
+                workspace,
+                ACTION_VIEW_BLOCKED,
+                ActivityOutcome::Refused,
+                &format!("{unlogged} more refused or blocked attempts were not logged one by one"),
+            );
+        }
+        let outside = self.outside.swap(0, Ordering::SeqCst);
+        if outside > 0 {
+            self.log(workspace, ACTION_VIEW_BLOCKED, ActivityOutcome::Refused, &format!("{outside} requests from outside the view were refused (not counted as the plugin's)"));
+        }
+    }
+
     fn log(&self, workspace: &Workspace, action: &str, outcome: ActivityOutcome, detail: &str) {
         let directory = workspace.plugins_directory();
         let _ = workspace.with_store(|store| {
@@ -117,11 +181,28 @@ impl ViewLink {
         });
     }
 
-    /// Admits one capability now, logging the answer like any plugin call.
+    /// Admits one capability now. A refusal is logged within the budget;
+    /// an allowed read is not logged on every call, as a page may poll.
     fn allowed(&self, workspace: &Workspace, capability: Capability) -> bool {
-        workspace
-            .plugin_authorize(&self.tab.plugin_id, &self.server, capability)
-            .is_ok_and(|decision| decision.allowed && !decision.needs_confirmation)
+        let directory = workspace.plugins_directory();
+        match workspace.with_store(|store| {
+            store.plugin_check(&directory, &self.tab.plugin_id, &self.server, capability)
+        }) {
+            Ok(Ok(())) => true,
+            Ok(Err(refusal)) => {
+                let capability = serde_json::to_value(capability)
+                    .ok()
+                    .and_then(|v| v.as_str().map(str::to_owned))
+                    .unwrap_or_default();
+                let refusal = serde_json::to_value(refusal)
+                    .ok()
+                    .and_then(|v| v.as_str().map(str::to_owned))
+                    .unwrap_or_default();
+                self.note(workspace, &capability, ActivityOutcome::Refused, &refusal);
+                false
+            }
+            Err(_) => false,
+        }
     }
 
     fn still_open(&self, workspace: &Workspace) -> bool {
@@ -141,6 +222,16 @@ impl ViewLink {
     }
 
     fn context(&self, workspace: &Workspace) -> ApiReply {
+        // The server's name and host are the owner's saved data: only with
+        // read_saved_state (T047 review, finding 1).
+        if !self.allowed(workspace, Capability::ReadSavedState) {
+            return ApiReply::ok(serde_json::json!({
+                "api_version": VIEW_API_VERSION,
+                "plugin_id": self.tab.plugin_id,
+                "contribution_id": self.tab.contribution_id,
+                "server": null,
+            }));
+        }
         let server = workspace
             .with_store(|store| store.snapshot())
             .ok()
@@ -218,11 +309,33 @@ impl ViewLink {
                 })
             });
         let Some(run) = run else {
-            self.log(
+            // The page's own text is logged only if it names a real
+            // contribution of this plugin (T047 review, finding 2).
+            let real = workspace
+                .plugins_state()
+                .ok()
+                .and_then(|state| {
+                    state
+                        .plugins
+                        .into_iter()
+                        .find(|p| p.id == self.tab.plugin_id)
+                })
+                .is_some_and(|plugin| {
+                    plugin
+                        .contributions
+                        .iter()
+                        .any(|c| c.id == ask.contribution_id)
+                });
+            let detail = if real {
+                ask.contribution_id.as_str()
+            } else {
+                "unknown_contribution"
+            };
+            self.note(
                 workspace,
                 ACTION_VIEW_REQUEST,
                 ActivityOutcome::Refused,
-                &ask.contribution_id,
+                detail,
             );
             return Self::not_granted();
         };
@@ -261,7 +374,7 @@ impl ViewLink {
                     names.insert(name.clone(), choice.name.clone());
                 }
                 None => {
-                    self.log(
+                    self.note(
                         workspace,
                         ACTION_VIEW_REQUEST,
                         ActivityOutcome::Refused,
@@ -285,10 +398,10 @@ impl ViewLink {
                 );
             }
         };
-        if actions
-            .values()
-            .any(|a| a.request.view == self.label && a.state == ViewActionState::Waiting)
-        {
+        if actions.values().any(|a| {
+            a.request.view == self.label
+                && matches!(a.state, ViewActionState::Waiting | ViewActionState::Running)
+        }) {
             return ApiReply::refused(
                 409,
                 "busy",
@@ -319,7 +432,7 @@ impl ViewLink {
             },
         );
         drop(actions);
-        self.log(
+        self.note(
             workspace,
             ACTION_VIEW_REQUEST,
             ActivityOutcome::NeedsConfirmation,
@@ -376,7 +489,12 @@ impl ViewApi for ViewLink {
                     .ok()
                     .and_then(|v| v.get("what").and_then(|w| w.as_str()).map(str::to_owned))
                     .unwrap_or_default();
-                self.blocked("ipc", &what.chars().take(40).collect::<String>());
+                let what = GUARD_WORDS
+                    .iter()
+                    .find(|w| **w == what)
+                    .copied()
+                    .unwrap_or("other");
+                self.blocked("ipc", what);
                 ApiReply::ok(serde_json::json!({}))
             }
             _ => {
@@ -397,19 +515,21 @@ impl ViewApi for ViewLink {
         let Some(workspace) = self.workspace.upgrade() else {
             return;
         };
-        if self.blocks.fetch_add(1, Ordering::SeqCst) < MAX_BLOCKS_LOGGED {
-            let detail = if detail.is_empty() {
-                what.to_owned()
-            } else {
-                format!("{what}: {detail}")
-            };
-            self.log(
-                &workspace,
-                ACTION_VIEW_BLOCKED,
-                ActivityOutcome::Refused,
-                &detail,
-            );
+        if matches!(what, "no_secret" | "wrong_host" | "cross_origin") {
+            self.outside.fetch_add(1, Ordering::SeqCst);
+            return;
         }
+        let detail = if detail.is_empty() {
+            what.to_owned()
+        } else {
+            format!("{what}: {detail}")
+        };
+        self.note(
+            &workspace,
+            ACTION_VIEW_BLOCKED,
+            ActivityOutcome::Refused,
+            &detail,
+        );
     }
 }
 
@@ -463,9 +583,23 @@ impl Workspace {
             label: label.clone(),
             tab: source.tab.clone(),
             server: server.clone(),
-            blocks: std::sync::atomic::AtomicU32::new(0),
+            budget: std::sync::atomic::AtomicU32::new(LOG_BUDGET),
+            unlogged: std::sync::atomic::AtomicU32::new(0),
+            outside: std::sync::atomic::AtomicU32::new(0),
         });
-        let view_server = ViewServer::start(source.folder.clone(), &source.entry, link.clone())
+        // The view serves what it reads now, with links refused, and only
+        // if that is what was installed (T047 review, findings 7 and 8).
+        let files = atlas_core::plugin_install::read_folder(&source.folder)
+            .map_err(|_| AtlasError::new(ErrorCode::Denied))?;
+        if source
+            .content_sha256
+            .as_deref()
+            .is_some_and(|recorded| recorded != atlas_core::plugin_install::content_hash(&files))
+        {
+            return Err(AtlasError::new(ErrorCode::Denied));
+        }
+        let files: atlas_core::plugin_view::ViewFiles = files.into_iter().collect();
+        let view_server = ViewServer::start(files, &source.entry, link.clone())
             .map_err(|_| AtlasError::new(ErrorCode::IoFailure))?;
         let url: tauri::Url = view_server
             .url()
@@ -481,7 +615,9 @@ impl Workspace {
             // The page stays on its own origin; anything else is refused
             // and logged.
             .on_navigation(move |target| {
-                let same = target.origin() == origin;
+                // Only plain http on the view's own host and port: no blob:,
+                // data: or about: documents, where the guard does not run.
+                let same = target.scheme() == "http" && target.origin() == origin;
                 if !same && let Some(link) = navigation.upgrade() {
                     link.blocked(
                         "navigation",
@@ -511,6 +647,7 @@ impl Workspace {
                 tab: source.tab.clone(),
                 server: server.clone(),
                 webview,
+                link: link.clone(),
                 _server: view_server,
             },
         );
@@ -548,6 +685,7 @@ impl Workspace {
             .and_then(|mut open| open.remove(label));
         if let Some(view) = removed {
             let _ = view.webview.close();
+            view.link.close_note(self);
         }
         if let Ok(mut actions) = self.views.actions.lock() {
             for action in actions.values_mut() {
@@ -619,6 +757,9 @@ impl Workspace {
                 action.state = ViewActionState::Declined;
                 return Ok(ViewActionState::Declined);
             }
+            // Marked under the lock, so the same request cannot run twice
+            // (T047 review, finding 9).
+            action.state = ViewActionState::Running;
             (action.request.clone(), action.workload_ids.clone())
         };
         let still_open = self

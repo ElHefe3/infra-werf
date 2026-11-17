@@ -8,6 +8,8 @@ import { spawn, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { cp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
+import dgram from 'node:dgram';
+import os from 'node:os';
 import path from 'node:path';
 
 const root = process.cwd();
@@ -18,6 +20,13 @@ const plugins = path.join(directory, 'plugins');
 await cp(path.join(root, 'scripts/fixtures/hostile-view'), path.join(plugins, 'hostile-view'), { recursive: true });
 await cp(path.join(root, 'examples/host-dashboard'), path.join(plugins, 'host-dashboard'), { recursive: true });
 const HOSTILE = 'org.example.hostile-view', DASHBOARD = 'org.example.host-dashboard';
+// A UDP listener stands in for any address WebRTC could reach.
+const udp = dgram.createSocket('udp4');
+const packets = { loopback: 0, lan: 0 };
+udp.on('message', (_, from) => { packets[from.address === '127.0.0.1' ? 'loopback' : 'lan'] += 1; });
+await new Promise(resolve => udp.bind(0, '0.0.0.0', resolve));
+const lan = Object.values(os.networkInterfaces()).flat().find(i => i && i.family === 'IPv4' && !i.internal)?.address;
+await writeFile(path.join(plugins, 'hostile-view/view/rtc.json'), JSON.stringify({ port: udp.address().port }));
 
 const server = spawn(path.join(root, '.tools/ssh-fixture-venv/Scripts/python.exe'), ['scripts/linux_fixture.py', path.join(directory, 'fixture')], { cwd: root, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
 const lines = createInterface({ input: server.stdout });
@@ -95,7 +104,7 @@ try {
   await expect.poll(async () => hostile.isClosed() ? 'closed' : await hostile.title().catch(() => ''), { timeout: 60000 }).toBe('done');
   const attempts = JSON.parse(await hostile.locator('#results').innerText());
   await writeFile(path.join(directory, 'hostile-results.json'), JSON.stringify(attempts, null, 2));
-  const mustFail = ['tauri_add_server', 'tauri_post_message', 'tauri_global', 'ipc_postmessage', 'webview_postmessage', 'ipc_protocol_fetch', 'ipc_protocol_remove', 'main_origin_fetch', 'internet_fetch', 'image_beacon', 'websocket', 'worker', 'window_open', 'api_without_secret', 'api_observations', 'api_inventory', 'api_action', 'api_unknown'];
+  const mustFail = ['webrtc_stun', 'rtc_blank_frame', 'rtc_frames_index', 'rtc_srcdoc_frame', 'rtc_nested_frame', 'tauri_add_server', 'tauri_post_message', 'tauri_global', 'ipc_postmessage', 'webview_postmessage', 'ipc_protocol_fetch', 'ipc_protocol_remove', 'main_origin_fetch', 'internet_fetch', 'image_beacon', 'websocket', 'worker', 'window_open', 'api_without_secret', 'api_observations', 'api_inventory', 'api_action', 'api_unknown'];
   for (const name of mustFail) expect(attempts[name]?.reached, `${name}: ${JSON.stringify(attempts[name])}`).toBe(false);
   expect(attempts.api_context.reached).toBe(true);
   // Tauri freezes its internals in every page, so the page can call
@@ -106,16 +115,37 @@ try {
   // submit returns: the content security policy log below shows both blocked.
   expect(['loaded-opaque', 'no load']).toContain(attempts.iframe_main.value.replace(/^Error: /, ''));
   expect(JSON.parse(attempts.api_context.value).plugin_id).toBe(HOSTILE);
+  // Without read_saved_state the view does not learn the server's name or host.
+  expect(JSON.parse(attempts.api_context.value).server).toBe(null);
   // The last attempt navigates the whole view to InfraWerf's page: refused.
   await delay(1500);
   expect(hostile.url().startsWith('http://127.0.0.1:')).toBe(true);
+  // While the view ran, nothing reached the UDP listener. As a positive
+  // control, InfraWerf's own page (trusted, with no guard) shows that
+  // WebRTC works in this browser and that the listener sees it: the view's
+  // lack of WebRTC is the guard's doing (T047 review, finding 1).
+  const duringView = { ...packets };
+  expect(duringView, 'UDP packets while the view ran').toEqual({ loopback: 0, lan: 0 });
+  const sent = await page.evaluate(async ({ port, lan }) => {
+    const peer = new RTCPeerConnection({ iceServers: [{ urls: `stun:127.0.0.1:${port}` }, ...(lan ? [{ urls: `stun:${lan}:${port}` }] : [])] });
+    peer.createDataChannel('x');
+    await peer.setLocalDescription(await peer.createOffer());
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    const candidates = (peer.localDescription?.sdp ?? '').split(String.fromCharCode(10)).filter(line => line.startsWith('a=candidate')).length;
+    peer.close();
+    return candidates;
+  }, { port: udp.address().port, lan });
+  await delay(500);
+  await writeFile(path.join(directory, 'webrtc.json'), JSON.stringify({ lan, duringView, control: packets, sent }));
+  expect(packets.loopback, 'positive control: the listener sees WebRTC').toBeGreaterThan(0);
+  results.push(`WebRTC: the view and every frame it made (blank, indexed, srcdoc, nested) had no RTCPeerConnection, and the UDP listener received nothing while the view ran; as a control, InfraWerf's own page sent ${packets.loopback} STUN packets to the same listener, so the absence is the guard's doing`);
   // Nothing in InfraWerf changed, and the attempts are in the activity log.
   expect(JSON.stringify((await invoke('map_state')).servers.map(s => [s.id, s.name, s.host]))).toBe(before);
   expect(JSON.stringify(await invoke('map_state'))).not.toContain('planted.invalid');
   let entries = await log();
   const blocked = entries.filter(e => e.plugin_id === HOSTILE && e.action === 'view_blocked').map(e => e.detail);
   await writeFile(path.join(directory, 'hostile-log.json'), JSON.stringify(blocked, null, 2));
-  for (const expected of [/^content_policy: connect-src http:\/\/ipc\.localhost/, /^content_policy: connect-src https:\/\/example\.com/, /^ipc: /, /^no_secret$/, /^unknown_call: GET servers\/remove/, /^navigation: http:\/\/tauri\.localhost/, /^new_window: http:\/\/tauri\.localhost/, /^content_policy: frame-src http:\/\/tauri\.localhost/, /^content_policy: form-action http:\/\/ipc\.localhost/, /^content_policy: worker-src blob/])
+  for (const expected of [/^content_policy: connect-src http:\/\/ipc\.localhost/, /^content_policy: connect-src https:\/\/example\.com/, /^ipc: /, /^ipc: RTCPeerConnection$/, /^unknown_call: GET servers\/remove/, /^new_window: http:\/\/tauri\.localhost/, /^content_policy: frame-src http:\/\/tauri\.localhost/, /^content_policy: form-action http:\/\/ipc\.localhost/, /^content_policy: worker-src blob/])
     expect(blocked.some(d => expected.test(d)), `${expected} in ${JSON.stringify(blocked)}`).toBe(true);
   expect(entries.some(e => e.plugin_id === HOSTILE && e.action === 'read_saved_state' && e.outcome === 'refused' && e.detail === 'not_requested' || e.plugin_id === HOSTILE && e.action === 'read_saved_state' && e.outcome === 'refused')).toBe(true);
   expect(entries.some(e => e.plugin_id === HOSTILE && e.action === 'view_request' && e.outcome === 'refused' && e.detail === 'kernel')).toBe(true);
@@ -127,6 +157,18 @@ try {
   await workspace.getByRole('tab', { name: 'Host dashboard', exact: true }).click();
   const dashboard = await awaitView('/view/index.html');
   await expect.poll(() => hostile.isClosed()).toBe(true);
+  // Requests that never reached the view (here, the page's own call without
+  // the secret) are not charged to the plugin: one row counts them at close.
+  await expect.poll(async () => (await log()).some(e => e.plugin_id === HOSTILE && e.action === 'view_blocked' && /^\d+ requests from outside the view were refused/.test(e.detail))).toBe(true);
+  // The flood stayed within one opening's budget, its text was not logged,
+  // and the owner's earlier entries are still there.
+  entries = await log();
+  const fromView = entries.filter(e => e.plugin_id === HOSTILE && ['view_blocked', 'view_request', 'read_saved_state', 'run_approved_command'].includes(e.action));
+  expect(fromView.length, JSON.stringify(fromView.map(e => e.detail))).toBeLessThanOrEqual(40 + 2);
+  expect(entries.some(e => e.detail.includes('flood-'))).toBe(false);
+  expect(entries.some(e => e.plugin_id === HOSTILE && e.action === 'view_blocked' && /^\d+ more refused or blocked attempts were not logged one by one$/.test(e.detail))).toBe(true);
+  expect(entries.some(e => e.plugin_id === HOSTILE && e.action === 'enable')).toBe(true);
+  results.push(`200 refused requests from the hostile view were logged within one opening's budget of 40 rows plus a summary row; none of their text reached the log; the owner's enable entry is still there`);
   await expect(dashboard.locator('#server')).toHaveText('Host dashboard · View host');
   // The view sits exactly over the tab area.
   const area = await workspace.getByLabel('Host dashboard view', { exact: true }).boundingBox();
@@ -138,6 +180,9 @@ try {
   await dashboard.locator('#read-kernel').click();
   const ask = page.getByRole('dialog', { name: 'A plugin asks to run a command', exact: true });
   await expect(ask).toContainText('Host dashboard asks to run Kernel version on View host.');
+  // Run waits a moment, so a click aimed at the page cannot land on it.
+  await expect(ask.getByRole('button', { name: 'Run (wait…)', exact: true })).toBeDisabled();
+  await expect(ask.getByRole('button', { name: 'Decline', exact: true })).toBeFocused();
   await expect(ask.getByLabel('Requested command', { exact: true })).toHaveText('uname -r');
   // The view is hidden while InfraWerf asks.
   expect(await invoke('plugin_views_open', {})).toHaveLength(1);
@@ -154,7 +199,7 @@ try {
   await expect(dashboard.locator('#action')).toHaveText('Not run: declined', { timeout: 10000 });
   entries = await log();
   expect(entries.filter(e => e.plugin_id === DASHBOARD && e.action === 'run_command' && e.outcome === 'done').length).toBe(1);
-  results.push(`the example view showed the server name, the plugin's reading and the saved inventory; its request to run "uname -r" opened InfraWerf's own dialog with the exact command, nothing ran until Run was pressed, and the view then showed the container's kernel ${kernel}; a declined request ran nothing`);
+  results.push(`Run stayed disabled ("Run (wait…)") when the dialog appeared, with Decline focused; the example view showed the server name, the plugin's reading and the saved inventory; its request to run "uname -r" opened InfraWerf's own dialog with the exact command, nothing ran until Run was pressed, and the view then showed the container's kernel ${kernel}; a declined request ran nothing`);
 
   // 4. Lock, closing and the kill switch tear the view down.
   await workspace.getByRole('button', { name: 'Lock view', exact: true }).click();
@@ -203,4 +248,5 @@ try {
     if (server.exitCode === null) server.kill();
   }
   lines.close();
+  udp.close();
 }
