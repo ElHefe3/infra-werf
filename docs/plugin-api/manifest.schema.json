@@ -192,6 +192,11 @@
           "description": "A named kind of relationship for the map: a label and a line style.\nIt documents intent and applies nothing (plugin API v2).",
           "type": "string",
           "const": "relationship_kind"
+        },
+        {
+          "description": "A plugin job: a sandboxed module that reads and may ask for the\nworkload controls it declares (plugin API v2, D061).",
+          "type": "string",
+          "const": "job"
         }
       ]
     },
@@ -283,6 +288,94 @@
             "kind",
             "path"
           ]
+        }
+      ]
+    },
+    "JobAction": {
+      "description": "One action a job may ask for: a workload control on a service or a\ncontainer from the server's own inventory.",
+      "type": "object",
+      "properties": {
+        "control": {
+          "$ref": "#/$defs/JobControl"
+        },
+        "effect": {
+          "description": "What it does and why, in one sentence for the owner, 200 characters\nat most.",
+          "type": "string"
+        },
+        "id": {
+          "description": "Lower-case letters, digits and hyphens, starting with a letter, 32\ncharacters at most.",
+          "type": "string"
+        },
+        "target": {
+          "$ref": "#/$defs/JobTarget"
+        },
+        "title": {
+          "description": "What the owner reads, 40 characters at most.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "control",
+        "target",
+        "effect"
+      ]
+    },
+    "JobControl": {
+      "description": "The workload control an action performs.",
+      "oneOf": [
+        {
+          "description": "Start the workload.",
+          "type": "string",
+          "const": "start"
+        },
+        {
+          "description": "Stop the workload.",
+          "type": "string",
+          "const": "stop"
+        },
+        {
+          "description": "Restart the workload.",
+          "type": "string",
+          "const": "restart"
+        }
+      ]
+    },
+    "JobSpec": {
+      "description": "A plugin job: a WebAssembly module run in InfraWerf's sandbox, and the\nchanging actions it may ask for. Only InfraWerf's own workload controls\ncan be actions (owner decision D061).",
+      "type": "object",
+      "properties": {
+        "actions": {
+          "description": "The actions the job may ask for, at most 16. Each needs the owner's\npermission to control workloads on the server, and a run asks the\nowner first unless the plugin is at trusted automation.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/JobAction"
+          }
+        },
+        "module": {
+          "description": "The module, relative to the plugin's folder, ending in `.wasm`.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "module"
+      ]
+    },
+    "JobTarget": {
+      "description": "What kind of workload an action acts on.",
+      "oneOf": [
+        {
+          "description": "A systemd service.",
+          "type": "string",
+          "const": "service"
+        },
+        {
+          "description": "A container.",
+          "type": "string",
+          "const": "container"
         }
       ]
     },
@@ -388,6 +481,17 @@
         "id": {
           "description": "Name within the plugin: lower-case letters, digits and hyphens,\nstarting with a letter, 32 characters at most. The full identifier\nis the plugin ID, a dot, then this.",
           "type": "string"
+        },
+        "job": {
+          "description": "Required for a `job`: its module and the actions it may ask for\n(API v2).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/JobSpec"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "order": {
           "description": "Position among contributions at the same point. Defaults to 1000,\nafter everything built in.",

@@ -412,7 +412,7 @@ fn the_guide_and_reference_document_everything_in_the_api() {
     };
     let points = names("ExtensionPoint");
     let capabilities = names("Capability");
-    assert_eq!(points.len(), 10);
+    assert_eq!(points.len(), 11);
     assert_eq!(capabilities.len(), 12);
     let fields = declared_fields();
     let everything: Vec<String> = fields

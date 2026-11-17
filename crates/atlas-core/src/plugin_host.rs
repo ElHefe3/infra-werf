@@ -47,6 +47,14 @@ CREATE TABLE IF NOT EXISTS plugin_install (
  plugin_id TEXT PRIMARY KEY, folder TEXT NOT NULL, source_kind TEXT NOT NULL, source TEXT NOT NULL,
  content_hash TEXT NOT NULL, archive_hash TEXT, signer_key_id TEXT, installed_at TEXT NOT NULL,
  integrity TEXT NOT NULL, checked_at TEXT);
+CREATE TABLE IF NOT EXISTS plugin_schedule (
+ plugin_id TEXT NOT NULL, server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE, contribution_id TEXT NOT NULL,
+ every_minutes INTEGER NOT NULL, created_at TEXT NOT NULL, next_run_at TEXT NOT NULL, last_run_at TEXT, last_outcome TEXT,
+ failures INTEGER NOT NULL DEFAULT 0, paused INTEGER NOT NULL DEFAULT 0,
+ PRIMARY KEY(plugin_id, server_id, contribution_id));
+CREATE TABLE IF NOT EXISTS plugin_elevation (
+ plugin_id TEXT NOT NULL, server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE, action_id TEXT NOT NULL,
+ granted_at TEXT NOT NULL, PRIMARY KEY(plugin_id, server_id, action_id));
 CREATE TABLE IF NOT EXISTS edge_kind (
  edge_id TEXT PRIMARY KEY REFERENCES edges(id) ON DELETE CASCADE,
  plugin_id TEXT NOT NULL, kind_id TEXT NOT NULL, title TEXT NOT NULL);
@@ -69,6 +77,21 @@ pub const ACTION_REMOVE: &str = "remove";
 /// A plugin was replaced by a newer or older version; the detail says the
 /// versions and whether it needs a new review.
 pub const ACTION_UPDATE: &str = "update";
+/// A plugin job ran; the detail is the contribution and how it ended.
+pub const ACTION_JOB_RUN: &str = "job_run";
+/// A job asked for one of its declared actions; the detail is the action,
+/// the workload and how it ended.
+pub const ACTION_JOB_ACTION: &str = "job_action";
+/// The owner set or removed a schedule; the detail is the contribution and
+/// the interval.
+pub const ACTION_SET_SCHEDULE: &str = "set_schedule";
+/// The owner granted or withdrew a sudo exception; the detail is the action.
+pub const ACTION_ELEVATION_EXCEPTION: &str = "elevation_exception";
+/// Shortest schedule interval, in minutes (D061).
+pub const MIN_SCHEDULE_MINUTES: u32 = 5;
+pub const MAX_SCHEDULE_MINUTES: u32 = 24 * 60;
+/// A schedule pauses itself after this many failed runs in a row.
+pub const SCHEDULE_FAILURE_LIMIT: u32 = 3;
 /// A plugin view was opened on a server; the detail is its contribution.
 pub const ACTION_OPEN_VIEW: &str = "open_view";
 /// A plugin view tried something that was blocked; the detail says what.
@@ -252,6 +275,53 @@ pub struct PluginContributionView {
     pub badge: Option<crate::plugin::PackBadge>,
     pub relationship: Option<crate::plugin::PackRelationship>,
     pub view: Option<crate::plugin::PluginViewSpec>,
+    pub job: Option<crate::plugin::JobSpec>,
+}
+
+/// A schedule the owner set for a job on one server.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct JobSchedule {
+    pub every_minutes: u32,
+    pub next_run_at: String,
+    pub last_run_at: Option<String>,
+    /// `done`, `failed`, `cancelled` or `refused`.
+    pub last_outcome: Option<String>,
+    /// Failed runs in a row.
+    pub failures: u32,
+    /// Paused after too many failures; set it again to resume.
+    pub paused: bool,
+}
+
+/// A job the owner's settings admit on one server right now.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct JobEntry {
+    pub plugin_id: String,
+    pub plugin_name: String,
+    pub contribution_id: String,
+    pub title: String,
+    pub job: crate::plugin::JobSpec,
+    pub trust: TrustLevel,
+    pub schedule: Option<JobSchedule>,
+    /// Declared actions the owner granted a sudo exception for here.
+    pub elevation_exceptions: Vec<String>,
+}
+
+/// Where an admitted job's files are.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JobSource {
+    pub entry: JobEntry,
+    pub folder: std::path::PathBuf,
+    pub content_sha256: Option<String>,
+}
+
+/// A schedule that is due.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DueSchedule {
+    pub plugin_id: String,
+    pub server_id: ServerId,
+    pub contribution_id: String,
 }
 
 /// A plugin view tab the owner's settings admit on one server right now.
@@ -716,7 +786,393 @@ fn plugin_folder(directory: &Path, folder: &str) -> Result<std::path::PathBuf, A
     Ok(path)
 }
 
+fn schedule(
+    db: &Connection,
+    plugin: &str,
+    server: &ServerId,
+    contribution: &str,
+) -> Result<Option<JobSchedule>, AtlasError> {
+    db.query_row(
+        "SELECT every_minutes,next_run_at,last_run_at,last_outcome,failures,paused FROM plugin_schedule WHERE plugin_id=? AND server_id=? AND contribution_id=?",
+        params![plugin, server.as_str(), contribution],
+        |row| {
+            Ok(JobSchedule {
+                every_minutes: row.get(0)?,
+                next_run_at: row.get(1)?,
+                last_run_at: row.get(2)?,
+                last_outcome: row.get(3)?,
+                failures: row.get(4)?,
+                paused: row.get::<_, i64>(5)? != 0,
+            })
+        },
+    )
+    .map(Some)
+    .or_else(|error| match error {
+        rusqlite::Error::QueryReturnedNoRows => Ok(None),
+        other => Err(sql_error(other)),
+    })
+}
+
+fn elevation_exceptions(
+    db: &Connection,
+    plugin: &str,
+    server: &ServerId,
+) -> Result<Vec<String>, AtlasError> {
+    let mut statement = db
+        .prepare("SELECT action_id FROM plugin_elevation WHERE plugin_id=? AND server_id=? ORDER BY action_id")
+        .map_err(sql_error)?;
+    statement
+        .query_map(params![plugin, server.as_str()], |row| row.get(0))
+        .map_err(sql_error)?
+        .collect::<Result<_, _>>()
+        .map_err(sql_error)
+}
+
+/// The minute schedules count in. Tests may shorten it with
+/// `ATLAS_SCHEDULE_MINUTE_SECONDS`, like the other `ATLAS_*` test overrides.
+pub fn schedule_minute() -> chrono::Duration {
+    let seconds = std::env::var("ATLAS_SCHEDULE_MINUTE_SECONDS")
+        .ok()
+        .and_then(|value| value.parse::<i64>().ok())
+        .filter(|value| (1..=60).contains(value))
+        .unwrap_or(60);
+    chrono::Duration::seconds(seconds)
+}
+
 impl Store {
+    /// The jobs that may run on a server right now: the plugin is enabled,
+    /// unchanged and intact, and the owner allowed every capability the job
+    /// lists except the changing ones, which each action checks when it is
+    /// asked for. Nothing is logged.
+    pub fn plugin_jobs(
+        &self,
+        directory: &Path,
+        server: &ServerId,
+    ) -> Result<Vec<JobSource>, AtlasError> {
+        let (installed, _) = discover(directory);
+        let all = records(&self.db)?;
+        let mut found = Vec::new();
+        for plugin in &installed {
+            let manifest = &plugin.manifest;
+            let Some(trust) = all
+                .get(&manifest.id)
+                .filter(|r| r.hash == plugin.hash)
+                .map(|r| r.trust)
+            else {
+                continue;
+            };
+            for entry in &manifest.contributions {
+                let Some(job) = &entry.job else { continue };
+                let reads: Vec<Capability> = entry
+                    .capabilities
+                    .iter()
+                    .copied()
+                    .filter(|c| capability_kind(*c) == CapabilityKind::Read)
+                    .collect();
+                if !admits(&self.db, &installed, &manifest.id, server, &reads, false)? {
+                    continue;
+                }
+                found.push(JobSource {
+                    entry: JobEntry {
+                        plugin_id: manifest.id.clone(),
+                        plugin_name: manifest.name.clone(),
+                        contribution_id: entry.id.clone(),
+                        title: entry.title.clone(),
+                        job: job.clone(),
+                        trust,
+                        schedule: schedule(&self.db, &manifest.id, server, &entry.id)?,
+                        elevation_exceptions: elevation_exceptions(&self.db, &manifest.id, server)?,
+                    },
+                    folder: directory.join(&plugin.folder),
+                    content_sha256: install_record(&self.db, &manifest.id)?
+                        .map(|r| r.content_sha256),
+                });
+            }
+        }
+        Ok(found)
+    }
+
+    /// Sets, changes or removes (`None`) the schedule of a job on a server.
+    /// Setting it again resumes a paused schedule.
+    pub fn plugin_set_schedule(
+        &mut self,
+        directory: &Path,
+        plugin: &str,
+        server: &ServerId,
+        contribution: &str,
+        every_minutes: Option<u32>,
+    ) -> Result<(), AtlasError> {
+        let (installed, _) = discover(directory);
+        let found = installed
+            .iter()
+            .find(|p| p.manifest.id == plugin)
+            .ok_or_else(|| AtlasError::new(ErrorCode::NotFound))?;
+        if !found
+            .manifest
+            .contributions
+            .iter()
+            .any(|c| c.id == contribution && c.job.is_some())
+        {
+            return Err(AtlasError::new(ErrorCode::NotFound));
+        }
+        if !server_exists(&self.db, server)? {
+            return Err(AtlasError::new(ErrorCode::NotFound));
+        }
+        let detail = match every_minutes {
+            Some(minutes) => {
+                if !(MIN_SCHEDULE_MINUTES..=MAX_SCHEDULE_MINUTES).contains(&minutes) {
+                    return Err(invalid());
+                }
+                let now = Utc::now();
+                let next = (now + schedule_minute() * minutes as i32).to_rfc3339();
+                self.db
+                    .execute(
+                        "INSERT INTO plugin_schedule(plugin_id,server_id,contribution_id,every_minutes,created_at,next_run_at,failures,paused) VALUES(?,?,?,?,?,?,0,0)
+                         ON CONFLICT(plugin_id,server_id,contribution_id) DO UPDATE SET every_minutes=excluded.every_minutes,next_run_at=excluded.next_run_at,failures=0,paused=0",
+                        params![plugin, server.as_str(), contribution, minutes, now.to_rfc3339(), next],
+                    )
+                    .map_err(sql_error)?;
+                format!("{contribution}: every {minutes} minutes")
+            }
+            None => {
+                self.db
+                    .execute(
+                        "DELETE FROM plugin_schedule WHERE plugin_id=? AND server_id=? AND contribution_id=?",
+                        params![plugin, server.as_str(), contribution],
+                    )
+                    .map_err(sql_error)?;
+                format!("{contribution}: off")
+            }
+        };
+        record(
+            &self.db,
+            (plugin, &found.manifest.name),
+            Some(server.as_str()),
+            ACTION_SET_SCHEDULE,
+            ActivityOutcome::Done,
+            &detail,
+        )
+    }
+
+    /// Schedules due now. None while plugins are all off.
+    pub fn plugin_due_schedules(
+        &self,
+        now: chrono::DateTime<Utc>,
+    ) -> Result<Vec<DueSchedule>, AtlasError> {
+        if all_off(&self.db)? {
+            return Ok(Vec::new());
+        }
+        let mut statement = self
+            .db
+            .prepare("SELECT plugin_id,server_id,contribution_id,next_run_at FROM plugin_schedule WHERE paused=0")
+            .map_err(sql_error)?;
+        let rows: Vec<(String, String, String, String)> = statement
+            .query_map([], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+            })
+            .map_err(sql_error)?
+            .collect::<Result<_, _>>()
+            .map_err(sql_error)?;
+        Ok(rows
+            .into_iter()
+            .filter(|(_, _, _, next)| {
+                chrono::DateTime::parse_from_rfc3339(next).is_ok_and(|at| at <= now)
+            })
+            .filter_map(|(plugin_id, server, contribution_id, _)| {
+                Some(DueSchedule {
+                    plugin_id,
+                    server_id: ServerId::parse(&server).ok()?,
+                    contribution_id,
+                })
+            })
+            .collect())
+    }
+
+    /// A scheduled run started: the next one is a full interval away, so a
+    /// slow or failing run is never started again at once.
+    pub fn plugin_schedule_started(
+        &mut self,
+        due: &DueSchedule,
+        now: chrono::DateTime<Utc>,
+    ) -> Result<(), AtlasError> {
+        let every: Option<u32> = self
+            .db
+            .query_row(
+                "SELECT every_minutes FROM plugin_schedule WHERE plugin_id=? AND server_id=? AND contribution_id=?",
+                params![due.plugin_id, due.server_id.as_str(), due.contribution_id],
+                |row| row.get(0),
+            )
+            .ok();
+        if let Some(every) = every {
+            self.db
+                .execute(
+                    "UPDATE plugin_schedule SET next_run_at=?,last_run_at=? WHERE plugin_id=? AND server_id=? AND contribution_id=?",
+                    params![(now + schedule_minute() * every as i32).to_rfc3339(), now.to_rfc3339(), due.plugin_id, due.server_id.as_str(), due.contribution_id],
+                )
+                .map_err(sql_error)?;
+        }
+        Ok(())
+    }
+
+    /// How a scheduled run ended. After `SCHEDULE_FAILURE_LIMIT` failures in
+    /// a row the schedule pauses and says so in the log.
+    pub fn plugin_schedule_finished(
+        &mut self,
+        directory: &Path,
+        due: &DueSchedule,
+        outcome: &str,
+    ) -> Result<bool, AtlasError> {
+        let failed = outcome != "done";
+        self.db
+            .execute(
+                "UPDATE plugin_schedule SET last_outcome=?, failures=CASE WHEN ? THEN failures+1 ELSE 0 END WHERE plugin_id=? AND server_id=? AND contribution_id=?",
+                params![outcome, failed, due.plugin_id, due.server_id.as_str(), due.contribution_id],
+            )
+            .map_err(sql_error)?;
+        let failures: u32 = self
+            .db
+            .query_row(
+                "SELECT failures FROM plugin_schedule WHERE plugin_id=? AND server_id=? AND contribution_id=?",
+                params![due.plugin_id, due.server_id.as_str(), due.contribution_id],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+        if failures >= SCHEDULE_FAILURE_LIMIT {
+            self.db
+                .execute(
+                    "UPDATE plugin_schedule SET paused=1 WHERE plugin_id=? AND server_id=? AND contribution_id=?",
+                    params![due.plugin_id, due.server_id.as_str(), due.contribution_id],
+                )
+                .map_err(sql_error)?;
+            let (installed, _) = discover(directory);
+            let label = installed
+                .iter()
+                .find(|p| p.manifest.id == due.plugin_id)
+                .map_or(due.plugin_id.clone(), |p| p.manifest.name.clone());
+            record(
+                &self.db,
+                (&due.plugin_id, &label),
+                Some(due.server_id.as_str()),
+                ACTION_SET_SCHEDULE,
+                ActivityOutcome::Failed,
+                &format!(
+                    "{}: paused after {failures} failed runs in a row",
+                    due.contribution_id
+                ),
+            )?;
+            return Ok(true);
+        }
+        Ok(false)
+    }
+
+    /// Grants or withdraws a sudo exception for one declared action of one
+    /// plugin on one server (D061). The password is still asked every time.
+    pub fn plugin_set_elevation(
+        &mut self,
+        directory: &Path,
+        plugin: &str,
+        server: &ServerId,
+        action: &str,
+        granted: bool,
+    ) -> Result<(), AtlasError> {
+        let (installed, _) = discover(directory);
+        let found = installed
+            .iter()
+            .find(|p| p.manifest.id == plugin)
+            .ok_or_else(|| AtlasError::new(ErrorCode::NotFound))?;
+        let declared = found.manifest.contributions.iter().any(|c| {
+            c.capabilities.contains(&Capability::Elevate)
+                && c.job
+                    .as_ref()
+                    .is_some_and(|job| job.actions.iter().any(|a| a.id == action))
+        });
+        if !declared || !found.manifest.capabilities.contains(&Capability::Elevate) {
+            return Err(invalid());
+        }
+        if !server_exists(&self.db, server)? {
+            return Err(AtlasError::new(ErrorCode::NotFound));
+        }
+        if granted {
+            self.db
+                .execute(
+                    "INSERT OR IGNORE INTO plugin_elevation VALUES(?,?,?,?)",
+                    params![plugin, server.as_str(), action, Utc::now().to_rfc3339()],
+                )
+                .map_err(sql_error)?;
+        } else {
+            self.db
+                .execute(
+                    "DELETE FROM plugin_elevation WHERE plugin_id=? AND server_id=? AND action_id=?",
+                    params![plugin, server.as_str(), action],
+                )
+                .map_err(sql_error)?;
+        }
+        record(
+            &self.db,
+            (plugin, &found.manifest.name),
+            Some(server.as_str()),
+            ACTION_ELEVATION_EXCEPTION,
+            if granted {
+                ActivityOutcome::Done
+            } else {
+                ActivityOutcome::Refused
+            },
+            &format!(
+                "{action}: {}",
+                if granted { "granted" } else { "withdrawn" }
+            ),
+        )
+    }
+
+    pub fn plugin_has_elevation(
+        &self,
+        plugin: &str,
+        server: &ServerId,
+        action: &str,
+    ) -> Result<bool, AtlasError> {
+        self.db
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM plugin_elevation WHERE plugin_id=? AND server_id=? AND action_id=?)",
+                params![plugin, server.as_str(), action],
+                |row| row.get(0),
+            )
+            .map_err(sql_error)
+    }
+
+    /// The decision for a job's changing action, without logging it: the
+    /// caller logs the action with its outcome. `Ok(true)` means the owner
+    /// must confirm it.
+    pub fn plugin_decide_change(
+        &self,
+        directory: &Path,
+        plugin: &str,
+        server: &ServerId,
+    ) -> Result<Result<bool, Refusal>, AtlasError> {
+        let (installed, _) = discover(directory);
+        for capability in [Capability::SshSession, Capability::ControlWorkloads] {
+            match decide(&self.db, &installed, plugin, server, capability)? {
+                Ok(false) => {}
+                Ok(true) if capability == Capability::ControlWorkloads => return Ok(Ok(true)),
+                Ok(true) => {}
+                Err(refusal) => return Ok(Err(refusal)),
+            }
+        }
+        Ok(Ok(false))
+    }
+
+    /// Logs a job's run or action. `detail` is fixed words and identifiers.
+    pub fn plugin_job_event(
+        &mut self,
+        directory: &Path,
+        plugin: &str,
+        server: &ServerId,
+        action: &str,
+        outcome: ActivityOutcome,
+        detail: &str,
+    ) -> Result<(), AtlasError> {
+        self.plugin_view_event(directory, plugin, server, action, outcome, detail)
+    }
+
     /// Plugin views that may open on a server right now: the plugin is
     /// enabled, unchanged and intact, and the owner allowed every capability
     /// the view's contribution lists on that server. Nothing is logged.
@@ -922,7 +1378,13 @@ impl Store {
         std::fs::rename(&path, &parked).map_err(|_| AtlasError::new(ErrorCode::IoFailure))?;
         let transaction = self.db.transaction().map_err(sql_error)?;
         if let Some(id) = &id {
-            for table in ["plugin_state", "plugin_grant", "plugin_install"] {
+            for table in [
+                "plugin_state",
+                "plugin_grant",
+                "plugin_install",
+                "plugin_schedule",
+                "plugin_elevation",
+            ] {
                 transaction
                     .execute(&format!("DELETE FROM {table} WHERE plugin_id=?"), [id])
                     .map_err(sql_error)?;
@@ -1455,6 +1917,7 @@ impl Store {
                         badge: c.badge.clone(),
                         relationship: c.relationship.clone(),
                         view: c.view.clone(),
+                        job: c.job.clone(),
                     })
                     .collect(),
                 grants: granted(&self.db, &manifest.id)?
@@ -1565,6 +2028,10 @@ impl Store {
         directory: &Path,
         plugin: &str,
     ) -> Result<(), AtlasError> {
+        // Revoking trust stops the plugin's schedules (D061).
+        self.db
+            .execute("DELETE FROM plugin_schedule WHERE plugin_id=?", [plugin])
+            .map_err(sql_error)?;
         let changed = self
             .db
             .execute(
@@ -1627,6 +2094,10 @@ impl Store {
     /// Disables a plugin at once. Its trust level is forgotten, so enabling
     /// it again needs a new choice. Server permissions are kept but unused.
     pub fn plugin_disable(&mut self, directory: &Path, plugin: &str) -> Result<(), AtlasError> {
+        // A disabled plugin's schedules stop (D061).
+        self.db
+            .execute("DELETE FROM plugin_schedule WHERE plugin_id=?", [plugin])
+            .map_err(sql_error)?;
         let removed = self
             .db
             .execute("DELETE FROM plugin_state WHERE plugin_id=?", [plugin])
@@ -1895,6 +2366,8 @@ pub fn typescript_contracts(config: &Config) -> String {
         PluginActivityLog::decl(config),
         PluginViewTab::decl(config),
         PluginViewsState::decl(config),
+        JobSchedule::decl(config),
+        JobEntry::decl(config),
     ]
     .into_iter()
     .map(|d| format!("export {d}\n"))

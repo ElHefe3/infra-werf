@@ -113,7 +113,16 @@ switch ($Action) {
             Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-native', '--locked')
             Run-AtlasCommand 'cargo' @('run', '-p', 'atlas-core', '--bin', 'export-contracts', '--locked', '--', '--check')
             Run-AtlasCommand 'pnpm' @('check')
-        } elseif ($Feature -in @('F24', 'T048')) {
+        } elseif ($Feature -in @('F24', 'T049')) {
+            Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-core', '--test', 'plugin_jobs', '--locked')
+            Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-core', '--test', 'plugin_sandbox', '--locked')
+            Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-core', '--test', 'plugin_manifest', '--locked')
+            Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-core', '--test', 'plugin_host', '--locked')
+            Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-native', '--locked')
+            Run-AtlasCommand 'cargo' @('run', '-p', 'atlas-core', '--bin', 'export-contracts', '--locked', '--', '--check')
+            Run-AtlasCommand 'pnpm' @('check')
+            Run-AtlasCommand 'node' @('--test', 'ui/plugin-jobs-model.test.ts')
+        } elseif ($Feature -in @('T048')) {
             Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-core', '--test', 'plugin_sandbox', '--locked')
             Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-core', '--release', '--test', 'plugin_sandbox', '--locked')
             Run-AtlasCommand 'cargo' @('run', '-p', 'atlas-core', '--bin', 'export-contracts', '--locked', '--', '--check')

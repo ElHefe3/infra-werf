@@ -84,6 +84,7 @@ Each contribution:
 | `badge` | no | For a `server_badge`: the `observation` it shows, the `id` of a command in the same manifest. Needs `api_version` 2. Defined in [packs](packs.md#badges). |
 | `relationship` | no | For a `relationship_kind`: its `line` and `color`. Needs `api_version` 2. Defined in [packs](packs.md#relationship-kinds). |
 | `view` | no | For a `workspace_tab`: the plugin's own page, `entry`, shown in an isolated view. Needs `api_version` 2. Defined in [views](views.md). |
+| `job` | for `job` | The plugin's own logic: its `module` and the `actions` it may ask for. Needs `api_version` 2. Defined in [plugin logic](logic.md#declaring-a-job). |
 
 The file is UTF-8 JSON, 64 KiB at most.
 
@@ -103,8 +104,9 @@ A contribution may only use capabilities its extension point permits.
 | `operation` | A brokered operation on a server. | `ssh_session`, `run_approved_command`, `read_files`, `write_files`, `transfer_files`, `elevate`, `control_workloads`, `loopback_tunnel` |
 | `remote_app` | From v2: an application in a server's Apps list, opened through a private tunnel to the server's own localhost. | `ssh_session`, `loopback_tunnel` |
 | `relationship_kind` | From v2: a kind of relationship the owner can choose when documenting one on the map, with its own line style. | `read_saved_state` |
+| `job` | From v2: the plugin's own logic, run in InfraWerf's sandbox when the owner starts it or on the owner's schedule. | `read_saved_state`, `ssh_session`, `run_approved_command`, `control_workloads`, `elevate` |
 
-API v2 defines content for these points: a `collector` and a `health_check` may carry a `command`, a `collector` may also describe a `workload_kind`, a `server_badge` may show a command's result, a `remote_app` names an application and a `relationship_kind` names a line style ([packs](packs.md)). The content behind the other points (views, sandboxed logic) is defined by later parts of the API and will raise the API version.
+API v2 defines content for these points: a `collector` and a `health_check` may carry a `command`, a `collector` may also describe a `workload_kind`, a `server_badge` may show a command's result, a `remote_app` names an application and a `relationship_kind` names a line style ([packs](packs.md)), a `workspace_tab` may show a `view` ([views](views.md)) and a `job` runs a module ([plugin logic](logic.md)). The content behind the remaining points is defined by later parts of the API and will raise the API version.
 
 ## Capabilities
 
@@ -171,6 +173,7 @@ Each problem has a code, the field it concerns and a sentence. Codes are part of
 | `invalid_relationship_kind` | A `relationship` is on another point, or has a line or colour that is not in the lists. |
 | `invalid_workload_kind` | A `workload_kind` is not on a collector with a table extractor, or names a column the table does not have. |
 | `invalid_view` | A `view` is on another point, in a v1 manifest, or its `entry` is not a plain path inside the plugin ending in `.html`. |
+| `invalid_job` | A `job` is missing on a `job`, on another point or in a v1 manifest; its `module` is not a plain path inside the plugin ending in `.wasm`; an action's `id`, `title`, `control`, `target` or `effect` breaks its rule, or two share an `id`, or there are more than 16; or a job with actions does not list `ssh_session` and `control_workloads`. |
 
 ## Compatibility rule
 
@@ -189,6 +192,7 @@ The plugin API version is one whole number.
 - A `health_check` may use `ssh_session` and `run_approved_command`. In a v1 manifest it may still use only `network_probe`.
 - Two new extension points, `remote_app` and `relationship_kind`, and four new contribution fields: `workload_kind`, `app`, `badge` and `relationship` ([packs](packs.md)).
 - A `workspace_tab` may carry a `view`, its own page in an isolated view ([views](views.md)).
-- Fifteen new error codes, from `invalid_command` to `invalid_view`.
+- A new extension point, `job`, with its `job` field: the plugin's own logic ([plugin logic](logic.md)).
+- Sixteen new error codes, from `invalid_command` to `invalid_job`.
 
 Nothing was removed and no v1 rule changed, so a v1 manifest means what it always did.

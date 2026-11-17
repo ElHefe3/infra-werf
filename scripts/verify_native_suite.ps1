@@ -22,7 +22,8 @@ $steps = @(
     @{ Name='pack-map'; File='scripts/verify_native_pack_map.mjs'; Arguments=@() },
     @{ Name='plugin-install'; File='scripts/verify_native_plugin_install.mjs'; Arguments=@() },
     @{ Name='plugin-update'; File='scripts/verify_native_plugin_update.mjs'; Arguments=@() },
-    @{ Name='plugin-views'; File='scripts/verify_native_plugin_views.mjs'; Arguments=@() }
+    @{ Name='plugin-views'; File='scripts/verify_native_plugin_views.mjs'; Arguments=@() },
+    @{ Name='plugin-jobs'; File='scripts/verify_native_plugin_jobs.mjs'; Arguments=@() }
 )
 if ($steps.Name -notcontains $StartAt) { throw 'Unknown starting suite.' }
 $started = $false

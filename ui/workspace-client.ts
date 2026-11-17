@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { MonitoringState, MonitoringPolicy, TunnelInfo, TunnelRequest, AppDiscovery, ExtensionCatalogue, PluginsState, PluginActivityLog, TrustLevel, Capability, PackServerState, PackMapState, PackAppsState, InstallRequest, InstallReport, UpdatePreview, PluginViewsState, ViewActionState } from "./contracts.gen";
+import type { MonitoringState, MonitoringPolicy, TunnelInfo, TunnelRequest, AppDiscovery, ExtensionCatalogue, PluginsState, PluginActivityLog, TrustLevel, Capability, PackServerState, PackMapState, PackAppsState, InstallRequest, InstallReport, UpdatePreview, PluginViewsState, ViewActionState, JobsState, JobAsk } from "./contracts.gen";
 import { CONTRACT_VERSION, type AddRelationship, type AddServer, type MapState, type UpdateServer, type WorkspaceStatus, type OperationTicket, type SshVerification, type FileSession, type FileAction, type FileResult, type FileChange, type FileMutationPreview, type FileMutationReceipt, type LocalSelection, type TransferView, type ElevationPreview, type ElevationReceipt, type ProtectedPlacementRequest, type ProtectedPlacementStage, type ProtectedPlacementReceipt, type HealthProbeConfig, type HealthSnapshot, type InventoryRefreshResult, type TerminalPoll, type WorkloadInspection, type WorkloadAction, type WorkloadControlPreview, type WorkloadControlReceipt } from "./contracts.gen.ts";
 
 export type NativeTransport = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
@@ -38,6 +38,13 @@ export function createWorkspaceClient(transport: NativeTransport = invoke) {
     packMap: () => request<PackMapState>("pack_map"),
     packApps: (serverId: string) => request<PackAppsState>("pack_apps", { serverId }),
     openPackApp: (serverId: string, pluginId: string, contributionId: string) => request<TunnelInfo>("pack_app_open", { serverId, pluginId, contributionId }),
+    pluginJobs: (serverId: string) => request<JobsState>("plugin_jobs", { serverId }),
+    runJob: (serverId: string, pluginId: string, contributionId: string) => transport<string>("plugin_job_run", { serverId, pluginId, contributionId }),
+    answerJob: (id: string, run: boolean, password: string | null) => transport<void>("plugin_job_answer", { id, run, password }),
+    jobAsks: () => transport<JobAsk[]>("plugin_job_asks"),
+    cancelJob: (runId: string) => transport<void>("plugin_job_cancel", { runId }),
+    setJobSchedule: (serverId: string, pluginId: string, contributionId: string, everyMinutes: number | null) => request<JobsState>("plugin_set_schedule", { serverId, pluginId, contributionId, everyMinutes }),
+    setJobElevation: (serverId: string, pluginId: string, actionId: string, granted: boolean) => request<JobsState>("plugin_set_elevation", { serverId, pluginId, actionId, granted }),
     pluginViews: (serverId: string) => request<PluginViewsState>("plugin_views", { serverId }),
     openPluginView: (serverId: string, pluginId: string, contributionId: string, bounds: { x: number; y: number; width: number; height: number }) => transport<string>("plugin_view_open", { serverId, pluginId, contributionId, bounds }),
     pluginViewBounds: (label: string, bounds: { x: number; y: number; width: number; height: number } | null) => transport<void>("plugin_view_bounds", { label, bounds }),

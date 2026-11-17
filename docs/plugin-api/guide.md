@@ -7,7 +7,7 @@ This guide takes you from an empty folder to a plugin manifest that InfraWerf ac
 Read this first, so you know what you are building.
 
 - **The manifest comes first.** A plugin is a folder with one file, `infrawerf-plugin.json`, that says who the plugin is, what it adds to InfraWerf and what it asks permission to use.
-- **Content so far is data.** From API v2 a `collector` or a `health_check` can carry a read-only `command`, a `collector` can describe a `workload_kind`, a `server_badge` can show a command's result with `badge`, a `remote_app` names an `app` and a `relationship_kind` gives a `relationship` style, and a `workspace_tab` can show the plugin's own page with `view` ([views](views.md)); that is a pack, described in [packs](packs.md). There is not yet a way to ship the code or data behind a tab, a badge or a menu entry. This guide builds a v1 manifest, the base every later version builds on.
+- **Content so far is data.** From API v2 a `collector` or a `health_check` can carry a read-only `command`, a `collector` can describe a `workload_kind`, a `server_badge` can show a command's result with `badge`, a `remote_app` names an `app` and a `relationship_kind` gives a `relationship` style, a `workspace_tab` can show the plugin's own page with `view` ([views](views.md)) and a `job` runs the plugin's own logic ([plugin logic](logic.md)); that is a pack, described in [packs](packs.md). There is not yet a way to ship the code or data behind a tab, a badge or a menu entry. This guide builds a v1 manifest, the base every later version builds on.
 - **InfraWerf finds plugins and lets the owner review them.** A plugin folder placed in the owner's plugins folder is listed in Settings, where the owner reads what it asks for and decides what to allow. A plugin without a `command` does not yet add anything visible once allowed; a pack's commands appear in each allowed server's Plugin data tab. The owner can also install a plugin from a folder, a `.zip` or `.tar.gz` archive or an `https://` address, with its hash recorded and an optional minisign signature: see [sharing and installing](install.md).
 - **A manifest grants nothing.** It is a request. Each owner decides what their own InfraWerf allows.
 
@@ -190,6 +190,7 @@ A contribution's `point` decides where it appears and which capabilities it may 
 | `operation` | A brokered operation on a server. | `ssh_session`, `run_approved_command`, `read_files`, `write_files`, `transfer_files`, `elevate`, `control_workloads`, `loopback_tunnel` |
 | `remote_app` | From API v2: an application in a server's Apps list ([packs](packs.md#applications)). | `ssh_session`, `loopback_tunnel` |
 | `relationship_kind` | From API v2: a kind to choose when documenting a relationship on the map ([packs](packs.md#relationship-kinds)). | `read_saved_state` |
+| `job` | From API v2: the plugin's own logic, a `job` with a WebAssembly module, in each allowed server's Plugin data tab ([plugin logic](logic.md)). | `read_saved_state`, `ssh_session`, `run_approved_command`, `control_workloads`, `elevate` |
 
 Using a capability a point does not allow is refused with `capability_not_permitted`. A badge, for example, may only read saved state; it cannot contact a server.
 
@@ -229,7 +230,7 @@ What follows from that for you:
 
 - A found plugin can do nothing. It needs a trust level and at least one server.
 - Each capability is allowed or refused per server. Do not assume that having one means having another.
-- Sudo (`elevate`) can be requested but cannot be granted yet, so it is always refused.
+- Sudo (`elevate`) is never a server-wide permission. For a job's action the owner can grant an exception for that one action on one server, and is asked for the password every time ([plugin logic](logic.md#actions)). Everything else that asks for sudo is refused.
 - If your manifest changes after the owner enabled the plugin, the plugin is switched off until the owner reviews it and enables it again.
 - Every refused use is written to the owner's activity history with your plugin's name.
 
@@ -246,7 +247,7 @@ The full rule is in the [reference](README.md#compatibility-rule).
 
 ## Plugin logic
 
-A plugin's own logic, a WebAssembly module run in a sandbox with only the host functions the owner allows, is described in [plugin logic](logic.md). How a plugin declares and starts its module comes in a later version.
+A plugin's own logic, a WebAssembly module run in a sandbox with only the host functions the owner allows, is declared as a `job` and described in [plugin logic](logic.md). [`examples/service-summary`](../../examples/service-summary) is a complete job.
 
 ## Sharing a plugin
 

@@ -6,6 +6,7 @@ import type { PackCommand } from "./contracts.gen";
 import { createWorkspaceClient } from "./workspace-client";
 import { errorMessage } from "./map-model";
 import { InstallForm, InstallRecord, UpdatePanel } from "./plugin-install";
+import { JobConsent, JobSettings } from "./plugin-jobs";
 
 // Plugin permissions (S12/F20/T041). The Rust core finds plugins, stores what
 // the owner allowed and enforces it; these screens only show and edit that.
@@ -24,7 +25,7 @@ const POINT: Record<ExtensionPoint, string> = {
   workspace_tab: "a tab in a server's workspace", server_badge: "a badge on a server's card", settings_section: "a section of a server's Settings tab",
   app_settings_section: "a section of this Settings screen", menu_item: "an entry in the main menu", collector: "an inventory collector",
   health_check: "a reachability check", operation: "an operation on a server",
-  remote_app: "an application in a server's Apps list", relationship_kind: "a kind of relationship for your map",
+  remote_app: "an application in a server's Apps list", relationship_kind: "a kind of relationship for your map", job: "a job that runs the plugin's own logic",
 };
 const REFUSAL: Record<Refusal, string> = {
   unknown_plugin: "the plugin is not installed", plugin_disabled: "the plugin is not enabled", changed_since_review: "the plugin changed after you reviewed it",
@@ -36,6 +37,7 @@ const OWNER_ACTION: Record<string, string> = {
   enable: "Enabled by you", disable: "Disabled by you", set_permissions: "Permissions set by you", revoke_trusted_automation: "Trusted automation revoked by you",
   all_plugins_off: "All plugins turned off by you", all_plugins_on: "Plugins turned back on by you",
   install: "Installed by you", remove: "Removed by you, with its permissions", update: "Updated by you", open_view: "View opened by you",
+  set_schedule: "Schedule set by you", elevation_exception: "Sudo exception changed by you",
 };
 const SOURCE: Record<string, string> = { folder: "From a folder", archive: "From an archive file", address: "From an HTTPS address" };
 const RUN_OUTCOME: Record<string, string> = { done: "Finished", cancelled: "Cancelled: its permissions changed while it ran", failed: "Failed: nothing was read", refused: "Refused: the plugin is not installed" };
@@ -50,13 +52,16 @@ export function describeExtract(command: PackCommand): string {
 /** One log entry as two phrases: what happened and how it ended. */
 export function describeActivity(entry: PluginActivity): { action: string; outcome: string } {
   if (entry.action === "open_app") return { action: entry.outcome === "refused" ? "Asked to open an application" : `Opened its application "${entry.detail}"`, outcome: ({ done: "Opened through a private tunnel", cancelled: "Closed: its permissions changed while it opened", failed: "Failed: no tunnel was opened" } as Record<string, string>)[entry.outcome] ?? entry.outcome };
+  if (entry.action === "job_run") return { action: `Ran its job "${entry.detail.split(":")[0]}"`, outcome: entry.detail.split(": ").slice(1).join(": ") || entry.outcome };
+  if (entry.action === "job_action") { const [action, workload, word] = entry.detail.split(": "); return { action: `Its job asked to "${action}"${workload ? ` ${workload}` : ""}`, outcome: word ?? entry.outcome }; }
+  if (entry.action === "set_schedule" && entry.outcome === "failed") return { action: "Schedule paused", outcome: entry.detail };
   if (entry.action === "view_blocked") return { action: "Its view tried something not allowed", outcome: `Blocked: ${entry.detail}` };
   if (entry.action === "view_request") return entry.detail.endsWith(": declined by you")
     ? { action: `Its view asked to run "${entry.detail.slice(0, -": declined by you".length)}"`, outcome: "Declined by you" }
     : { action: `Its view asked to run "${entry.detail}"`, outcome: entry.outcome === "refused" ? "Refused: not allowed on this server" : "Shown to you to decide" };
   if (entry.action === "run_command") return { action: entry.outcome === "refused" ? "Asked to run a command" : `Ran its command "${entry.detail}"`, outcome: RUN_OUTCOME[entry.outcome] ?? entry.outcome };
   const owner = OWNER_ACTION[entry.action];
-  if (owner) return { action: owner, outcome: entry.action === "enable" ? trustLabel(entry.detail as TrustLevel) : entry.action === "set_permissions" ? (entry.detail || "Everything withdrawn") : entry.action === "revoke_trusted_automation" ? "Now: changes with confirmation" : entry.action === "install" ? `${SOURCE[entry.detail] ?? entry.detail} · disabled until you enable it` : entry.action === "update" ? (entry.outcome === "failed" ? `Not applied (${entry.detail}); the installed version is unchanged` : `Version ${entry.detail}`) : "" };
+  if (owner) return { action: owner, outcome: entry.action === "enable" ? trustLabel(entry.detail as TrustLevel) : entry.action === "set_permissions" ? (entry.detail || "Everything withdrawn") : entry.action === "revoke_trusted_automation" ? "Now: changes with confirmation" : entry.action === "install" ? `${SOURCE[entry.detail] ?? entry.detail} · disabled until you enable it` : entry.action === "set_schedule" || entry.action === "elevation_exception" ? entry.detail : entry.action === "update" ? (entry.outcome === "failed" ? `Not applied (${entry.detail}); the installed version is unchanged` : `Version ${entry.detail}`) : "" };
   const outcome = entry.outcome === "allowed" ? "Allowed" : entry.outcome === "needs_confirmation" ? "Allowed after your confirmation" : `Refused: ${REFUSAL[entry.detail as Refusal] ?? entry.detail}`;
   return { action: `Asked to use ${entry.action}`, outcome };
 }
@@ -104,6 +109,7 @@ function PluginPage({ plugin, servers, busy, run, back, leave, allOff, activity 
         {entry.command.parameters?.map(parameter => <small key={parameter.name}>{`{${parameter.name}}`} is a {parameter.source} you choose from that server’s inventory.</small>)}<small>{describeExtract(entry.command)} No shell reads the command, and it cannot use sudo.</small>{entry.workload_kind && <small>Shows each row as a workload named by its {entry.workload_kind.name_column} column{entry.workload_kind.state_column ? `, with its ${entry.workload_kind.state_column} as the state` : ""}.</small>}</span>}
         {entry.app && <span className="pack-shown">Opens <code aria-label={`${entry.title} address`}>localhost:{entry.app.port}{entry.app.path ?? "/"}</code> on the server, through the same private tunnel as any application, only when you press Open. It cannot reach another machine.</span>}
         {entry.badge && <span className="pack-shown"><small>Shows the latest result of “{plugin.contributions.find(other => other.id === entry.badge!.observation)?.title ?? entry.badge.observation}” on each server card. It never runs the command itself.</small></span>}
+        {entry.job && <JobConsent job={entry.job} />}
         {entry.view && <span className="pack-shown"><small>Its own page, <code>{entry.view.entry}</code>, shown in a tab isolated from InfraWerf. It sees only what you allow it on a server, and anything it asks to run is shown to you first.</small></span>}
         {entry.relationship && <span className="pack-shown"><small>A {entry.relationship.line ?? "solid"} {entry.relationship.color ?? "green"} line you can choose when documenting a relationship. It applies nothing.</small></span>}</li>)}</ul>
 
@@ -134,6 +140,7 @@ function PluginPage({ plugin, servers, busy, run, back, leave, allOff, activity 
         <button disabled={busy || allowed.length === grantable.length} aria-label={`Allow all on ${server.name}`} onClick={() => void setGrant(server, grantable.map(entry => entry.capability), `Everything allowed on ${server.name}.`)}>Allow all</button>
         <button disabled={busy || !allowed.length} aria-label={`Withdraw all on ${server.name}`} onClick={() => void setGrant(server, [], `Everything withdrawn on ${server.name}.`)}>Withdraw all</button></header>
       {grantable.map(entry => <label key={entry.capability}><input type="checkbox" disabled={busy} checked={allowed.includes(entry.capability)} onChange={event => void setGrant(server, event.target.checked ? [...allowed, entry.capability] : allowed.filter(item => item !== entry.capability), `Permissions on ${server.name} saved.`)} /><span>{entry.summary}</span></label>)}
+      <JobSettings pluginId={plugin.id} server={server} busy={busy} />
     </section>; })}
 
     <h5>Recent activity</h5>

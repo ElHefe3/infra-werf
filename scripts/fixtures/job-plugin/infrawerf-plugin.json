@@ -1,0 +1,46 @@
+{
+  "id": "org.example.service-keeper",
+  "name": "Service keeper",
+  "version": "1.0.0",
+  "api_version": 2,
+  "description": "Native test fixture: a job that restarts a user service and starts a system service.",
+  "license": "MIT",
+  "capabilities": [
+    "read_saved_state",
+    "ssh_session",
+    "control_workloads",
+    "elevate"
+  ],
+  "contributions": [
+    {
+      "id": "keeper",
+      "point": "job",
+      "title": "Keep services up",
+      "capabilities": [
+        "read_saved_state",
+        "ssh_session",
+        "control_workloads",
+        "elevate"
+      ],
+      "job": {
+        "module": "job.wasm",
+        "actions": [
+          {
+            "id": "restart-worker",
+            "title": "Restart the worker",
+            "control": "restart",
+            "target": "service",
+            "effect": "Restarts fixture-worker.service so it picks up new work."
+          },
+          {
+            "id": "start-stopped",
+            "title": "Start the stopped service",
+            "control": "start",
+            "target": "service",
+            "effect": "Starts fixture-stopped.service, a system service, which needs sudo."
+          }
+        ]
+      }
+    }
+  ]
+}

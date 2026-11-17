@@ -46,6 +46,21 @@ pub const HOST_FUNCTIONS: &[(&str, Capability, &str)] = &[
         Capability::ReadSavedState,
         "The server's saved inventory, or null.",
     ),
+    (
+        "workloads",
+        Capability::ReadSavedState,
+        "The server's discovered services and containers: id, name, kind, scope and state.",
+    ),
+    (
+        "run_command",
+        Capability::RunApprovedCommand,
+        "Runs one of this plugin's own read-only pack commands on the server and returns its observation. Args: contribution_id, and parameters as workload IDs.",
+    ),
+    (
+        "control",
+        Capability::ControlWorkloads,
+        "Asks for one of this job's declared actions on a workload. Args: action, and workload_id from workloads. InfraWerf asks the owner first unless the plugin is at trusted automation.",
+    ),
 ];
 
 /// The capability a host function needs, if it exists.

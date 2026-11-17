@@ -106,6 +106,64 @@ pub struct ManifestContribution {
     /// isolated view (API v2).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub view: Option<PluginViewSpec>,
+    /// Required for a `job`: its module and the actions it may ask for
+    /// (API v2).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub job: Option<JobSpec>,
+}
+
+/// A plugin job: a WebAssembly module run in InfraWerf's sandbox, and the
+/// changing actions it may ask for. Only InfraWerf's own workload controls
+/// can be actions (owner decision D061).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct JobSpec {
+    /// The module, relative to the plugin's folder, ending in `.wasm`.
+    pub module: String,
+    /// The actions the job may ask for, at most 16. Each needs the owner's
+    /// permission to control workloads on the server, and a run asks the
+    /// owner first unless the plugin is at trusted automation.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub actions: Vec<JobAction>,
+}
+
+/// One action a job may ask for: a workload control on a service or a
+/// container from the server's own inventory.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct JobAction {
+    /// Lower-case letters, digits and hyphens, starting with a letter, 32
+    /// characters at most.
+    pub id: String,
+    /// What the owner reads, 40 characters at most.
+    pub title: String,
+    pub control: JobControl,
+    pub target: JobTarget,
+    /// What it does and why, in one sentence for the owner, 200 characters
+    /// at most.
+    pub effect: String,
+}
+
+/// The workload control an action performs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum JobControl {
+    /// Start the workload.
+    Start,
+    /// Stop the workload.
+    Stop,
+    /// Restart the workload.
+    Restart,
+}
+
+/// What kind of workload an action acts on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum JobTarget {
+    /// A systemd service.
+    Service,
+    /// A container.
+    Container,
 }
 
 /// A plugin's own web page for a workspace tab. It runs in an isolated
@@ -610,7 +668,7 @@ fn check_additions(
     use ExtensionPoint::*;
     let v2 = manifest.api_version >= PACK_API_VERSION;
     let needs_v2 = format!("needs \"api_version\": {PACK_API_VERSION} or newer");
-    if !v2 && matches!(contribution.point, RemoteApp | RelationshipKind) {
+    if !v2 && matches!(contribution.point, RemoteApp | RelationshipKind | Job) {
         issues.add(
             ManifestRule::UnknownPoint,
             format!("{at}.point"),
@@ -727,6 +785,72 @@ fn check_additions(
                 "The entry is a path inside the plugin's folder, written with /, ending in .html, for example view/index.html.",
             );
         }
+    }
+
+    let field = format!("{at}.job");
+    match (&contribution.job, contribution.point == Job) {
+        (None, true) => issues.add(
+            ManifestRule::InvalidJob,
+            field,
+            "A job contribution has a \"job\" that names its module.",
+        ),
+        (Some(_), false) => issues.add(
+            ManifestRule::InvalidJob,
+            field,
+            "Only a job contribution has a \"job\".",
+        ),
+        (Some(job), true) => {
+            if crate::plugin_install::clean_path(&job.module).is_err()
+                || !job.module.to_ascii_lowercase().ends_with(".wasm")
+                || job.module.contains('\\')
+                || job.module.split('/').any(|part| part.starts_with('.'))
+            {
+                issues.add(
+                    ManifestRule::InvalidJob,
+                    format!("{field}.module"),
+                    "The module is a path inside the plugin's folder, written with /, ending in .wasm, for example logic/job.wasm.",
+                );
+            }
+            if job.actions.len() > 16 {
+                issues.add(
+                    ManifestRule::InvalidJob,
+                    format!("{field}.actions"),
+                    "A job declares at most 16 actions.",
+                );
+            }
+            let mut seen = BTreeSet::new();
+            for (index, action) in job.actions.iter().enumerate() {
+                let here = format!("{field}.actions[{index}]");
+                if action.id.len() > 32 || !slug(&action.id) || !seen.insert(action.id.as_str()) {
+                    issues.add(ManifestRule::InvalidJob, format!("{here}.id"), "Use lower-case letters, digits and hyphens, starting with a letter, 32 characters at most, once per job.");
+                }
+                if !tidy(&action.title, 40) {
+                    issues.add(ManifestRule::InvalidJob, format!("{here}.title"), "A title is 1 to 40 characters with no leading, trailing or control characters.");
+                }
+                if !tidy(&action.effect, 200) {
+                    issues.add(
+                        ManifestRule::InvalidJob,
+                        format!("{here}.effect"),
+                        "Say what the action does in 1 to 200 characters on one line.",
+                    );
+                }
+            }
+            if !job.actions.is_empty() {
+                for needed in [Capability::SshSession, Capability::ControlWorkloads] {
+                    if !contribution.capabilities.contains(&needed) {
+                        issues.add(
+                            ManifestRule::InvalidJob,
+                            format!("{at}.capabilities"),
+                            format!(
+                                "A job with actions lists \"{}\" in its capabilities.",
+                                capability_name(needed)
+                            ),
+                        );
+                    }
+                }
+            }
+        }
+        (None, false) => {}
     }
 
     if contribution.relationship.is_some() {
@@ -887,10 +1011,13 @@ pub enum ManifestRule {
     /// A view is misplaced, or its entry is not a plain relative path to an
     /// `.html` file inside the plugin.
     InvalidView,
+    /// A job is missing, misplaced or malformed: its module, its actions, or
+    /// the capabilities its actions need.
+    InvalidJob,
 }
 
 impl ManifestRule {
-    pub const ALL: [ManifestRule; 41] = [
+    pub const ALL: [ManifestRule; 42] = [
         Self::MalformedJson,
         Self::TooLarge,
         Self::WrongType,
@@ -932,6 +1059,7 @@ impl ManifestRule {
         Self::InvalidRelationshipKind,
         Self::InvalidWorkloadKind,
         Self::InvalidView,
+        Self::InvalidJob,
     ];
 
     /// The stable code, as written in output and documentation.
@@ -994,6 +1122,7 @@ enum Kind {
     Badge,
     Relationship,
     View,
+    Job,
 }
 impl Kind {
     fn expects(self) -> &'static str {
@@ -1008,6 +1137,7 @@ impl Kind {
             Kind::Badge => "a badge object",
             Kind::Relationship => "a relationship style object",
             Kind::View => "a view object",
+            Kind::Job => "a job object",
         }
     }
 }
@@ -1038,6 +1168,7 @@ const CONTRIBUTION_FIELDS: &[(&str, Kind, bool)] = &[
     ("badge", Kind::Badge, false),
     ("relationship", Kind::Relationship, false),
     ("view", Kind::View, false),
+    ("job", Kind::Job, false),
 ];
 
 /// Field names and required flags, for the schema consistency test.
@@ -1184,7 +1315,12 @@ fn shape(value: &Value, path: &str, fields: &[(&str, Kind, bool)], issues: &mut 
                     );
                 }
             }
-            Kind::WorkloadKind | Kind::App | Kind::Badge | Kind::Relationship | Kind::View => {
+            Kind::WorkloadKind
+            | Kind::App
+            | Kind::Badge
+            | Kind::Relationship
+            | Kind::View
+            | Kind::Job => {
                 let (rule, read) = match kind {
                     Kind::WorkloadKind => (
                         ManifestRule::InvalidWorkloadKind,
@@ -1201,6 +1337,10 @@ fn shape(value: &Value, path: &str, fields: &[(&str, Kind, bool)], issues: &mut 
                     Kind::View => (
                         ManifestRule::InvalidView,
                         serde_json::from_value::<PluginViewSpec>(found.clone()).err(),
+                    ),
+                    Kind::Job => (
+                        ManifestRule::InvalidJob,
+                        serde_json::from_value::<JobSpec>(found.clone()).err(),
                     ),
                     _ => (
                         ManifestRule::InvalidRelationshipKind,

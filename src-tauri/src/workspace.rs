@@ -4,6 +4,7 @@ use atlas_core::files::{
     TransferDirection, TransferView,
 };
 use atlas_core::*;
+mod jobs;
 mod monitoring;
 mod packs;
 mod tunnels;
@@ -20,6 +21,7 @@ use atlas_core::{
         WorkloadAction, WorkloadControlPreview, WorkloadControlReceipt, WorkloadInspection,
     },
 };
+pub use jobs::JobAnswer;
 use std::{
     collections::HashMap,
     path::PathBuf,
@@ -114,6 +116,7 @@ pub struct Workspace {
     tunnels: Mutex<tunnels::Tunnels>,
     packs: packs::Packs,
     views: views::Views,
+    jobs: jobs::Jobs,
     /// Updates checked and shown to the owner, by token (T046).
     updates: Mutex<HashMap<String, PendingUpdate>>,
 }
@@ -165,6 +168,7 @@ impl Workspace {
             packs: packs::Packs::default(),
             updates: Mutex::new(HashMap::new()),
             views: views::Views::default(),
+            jobs: jobs::Jobs::default(),
         });
         // The start-up check of installed plugins' files (T045). A store
         // that cannot open is reported where it is used.
@@ -181,7 +185,7 @@ impl Workspace {
         self.broker.extensions().catalogue()
     }
     /// Where plugins are looked for: beside the workspace database.
-    fn plugins_directory(&self) -> PathBuf {
+    pub fn plugins_directory(&self) -> PathBuf {
         std::env::var_os(atlas_core::plugin_host::PLUGINS_DIR_ENV)
             .map(PathBuf::from)
             .unwrap_or_else(|| {
@@ -206,7 +210,7 @@ impl Workspace {
             store.plugin_enable(&directory, plugin, trust)?;
             store.plugins_state(&directory)
         });
-        self.plugins_changed();
+        self.plugins_changed_for(Some(plugin));
         state
     }
     pub fn plugin_disable(
@@ -218,7 +222,7 @@ impl Workspace {
             store.plugin_disable(&directory, plugin)?;
             store.plugins_state(&directory)
         });
-        self.plugins_changed();
+        self.plugins_changed_for(Some(plugin));
         state
     }
     pub fn plugin_set_grant(
@@ -232,7 +236,7 @@ impl Workspace {
             store.plugin_set_grant(&directory, plugin, server, capabilities)?;
             store.plugins_state(&directory)
         });
-        self.plugins_changed();
+        self.plugins_changed_for(Some(plugin));
         state
     }
     /// Installs a plugin. Reading, unpacking and checking happen before the
@@ -405,7 +409,7 @@ impl Workspace {
             store.plugin_revoke_trusted(&directory, plugin)?;
             store.plugins_state(&directory)
         });
-        self.plugins_changed();
+        self.plugins_changed_for(Some(plugin));
         state
     }
     /// The enforcement point for a plugin's use of a capability (T041).

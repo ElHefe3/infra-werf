@@ -28,6 +28,14 @@ impl Workspace {
     /// Called after every change to plugin permissions: stops pack commands
     /// in flight and forgets what packs observed.
     pub(super) fn plugins_changed(&self) {
+        self.plugins_changed_for(None);
+    }
+
+    /// What plugins may do changed, for one plugin or (`None`) for all. Pack
+    /// commands, tunnels and views stop for every plugin; job runs stop only
+    /// for the plugin concerned, so one plugin's change never ends another's
+    /// unattended run.
+    pub(super) fn plugins_changed_for(&self, plugin: Option<&str>) {
         self.packs.epoch.fetch_add(1, Ordering::SeqCst);
         if let Ok(mut observations) = self.packs.observations.lock() {
             observations.clear();
@@ -35,6 +43,8 @@ impl Workspace {
         self.close_pack_tunnels();
         // Plugin views close too, and their waiting requests are cancelled.
         self.close_plugin_views();
+        // Job runs stop too; their waiting requests end.
+        self.cancel_jobs(plugin);
     }
 
     /// One observation with its freshness as of now.

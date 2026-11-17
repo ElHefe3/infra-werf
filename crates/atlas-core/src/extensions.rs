@@ -57,6 +57,9 @@ pub enum ExtensionPoint {
     /// A named kind of relationship for the map: a label and a line style.
     /// It documents intent and applies nothing (plugin API v2).
     RelationshipKind,
+    /// A plugin job: a sandboxed module that reads and may ask for the
+    /// workload controls it declares (plugin API v2, D061).
+    Job,
 }
 
 /// What a contribution may use. A contribution must declare every capability
@@ -119,6 +122,13 @@ impl ExtensionPoint {
             // PC; they never contact a server.
             Self::AppSettingsSection => &[ReadSavedState, EditMap],
             Self::Collector => &[SshSession, RunApprovedCommand],
+            Self::Job => &[
+                ReadSavedState,
+                SshSession,
+                RunApprovedCommand,
+                ControlWorkloads,
+                Elevate,
+            ],
             Self::HealthCheck => &[NetworkProbe, SshSession, RunApprovedCommand],
             Self::Operation => &[
                 SshSession,

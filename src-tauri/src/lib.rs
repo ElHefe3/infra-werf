@@ -96,6 +96,109 @@ pub(crate) fn main_webview() -> tauri::EventTarget {
     }
 }
 
+/// A server's plugin jobs, with their latest runs (T049).
+#[tauri::command]
+fn plugin_jobs(
+    window: tauri::Webview,
+    workspace: State<'_, Arc<Workspace>>,
+    server_id: ServerId,
+) -> Result<atlas_core::plugin_jobs::JobsState, AtlasError> {
+    local_desktop(&window)?;
+    workspace.plugin_jobs(&server_id)
+}
+/// Runs a job now, started by the owner.
+#[tauri::command]
+fn plugin_job_run(
+    window: tauri::Webview,
+    workspace: State<'_, Arc<Workspace>>,
+    server_id: ServerId,
+    plugin_id: String,
+    contribution_id: String,
+) -> Result<String, AtlasError> {
+    local_desktop(&window)?;
+    workspace.start_job(&server_id, &plugin_id, &contribution_id, true, None)
+}
+/// The owner's answer to a job's request, from InfraWerf's own dialog. The
+/// password, if any, is used for this action only.
+#[tauri::command]
+fn plugin_job_answer(
+    window: tauri::Webview,
+    workspace: State<'_, Arc<Workspace>>,
+    id: String,
+    run: bool,
+    password: Option<String>,
+) -> Result<(), AtlasError> {
+    local_desktop(&window)?;
+    workspace.answer_job(
+        &id,
+        workspace::JobAnswer {
+            run,
+            password: password.map(ActionPassword::from),
+        },
+    )
+}
+/// Requests from jobs waiting for the owner.
+#[tauri::command]
+fn plugin_job_asks(
+    window: tauri::Webview,
+    workspace: State<'_, Arc<Workspace>>,
+) -> Result<Vec<atlas_core::plugin_jobs::JobAsk>, AtlasError> {
+    local_desktop(&window)?;
+    Ok(workspace.job_asks())
+}
+/// Stops a run.
+#[tauri::command]
+fn plugin_job_cancel(
+    window: tauri::Webview,
+    workspace: State<'_, Arc<Workspace>>,
+    run_id: String,
+) -> Result<(), AtlasError> {
+    local_desktop(&window)?;
+    workspace.cancel_job(&run_id);
+    Ok(())
+}
+/// Sets or removes (no minutes) a job's schedule on a server.
+#[tauri::command]
+fn plugin_set_schedule(
+    window: tauri::Webview,
+    workspace: State<'_, Arc<Workspace>>,
+    server_id: ServerId,
+    plugin_id: String,
+    contribution_id: String,
+    every_minutes: Option<u32>,
+) -> Result<atlas_core::plugin_jobs::JobsState, AtlasError> {
+    local_desktop(&window)?;
+    let _operation = workspace.inner().begin()?;
+    let directory = workspace.plugins_directory();
+    workspace.with_store(|store| {
+        store.plugin_set_schedule(
+            &directory,
+            &plugin_id,
+            &server_id,
+            &contribution_id,
+            every_minutes,
+        )
+    })?;
+    workspace.plugin_jobs(&server_id)
+}
+/// Grants or withdraws a sudo exception for one declared action.
+#[tauri::command]
+fn plugin_set_elevation(
+    window: tauri::Webview,
+    workspace: State<'_, Arc<Workspace>>,
+    server_id: ServerId,
+    plugin_id: String,
+    action_id: String,
+    granted: bool,
+) -> Result<atlas_core::plugin_jobs::JobsState, AtlasError> {
+    local_desktop(&window)?;
+    let _operation = workspace.inner().begin()?;
+    let directory = workspace.plugins_directory();
+    workspace.with_store(|store| {
+        store.plugin_set_elevation(&directory, &plugin_id, &server_id, &action_id, granted)
+    })?;
+    workspace.plugin_jobs(&server_id)
+}
 /// Plugin view tabs for one server (T047).
 #[tauri::command]
 fn plugin_views(
@@ -1174,12 +1277,17 @@ pub fn run() {
                 workspace.tick_live();
                 for session in workspace.reap_files() { let _ = handle.emit_to(main_webview(), "atlas-session-closed", session); }
                 apps::reap(&handle, &workspace);
+                workspace.tick_jobs();
             }
         });
         // A plugin view's request reaches only InfraWerf's own interface.
         let views_handle = app.handle().clone();
         workspace.set_view_emitter(Box::new(move |request| {
             let _ = views_handle.emit_to(main_webview(), "atlas-plugin-action", request);
+        }));
+        let jobs_handle = app.handle().clone();
+        workspace.set_job_ask_emitter(Box::new(move |ask| {
+            let _ = jobs_handle.emit_to(main_webview(), "atlas-plugin-job-ask", ask);
         }));
         app.manage(workspace);
         Ok(())
@@ -1200,7 +1308,7 @@ pub fn run() {
             }
         }
     })
-    .invoke_handler(tauri::generate_handler![extensions_state, plugins_state, plugin_enable, plugin_disable, plugin_install, plugin_update_check, plugin_update_apply, plugin_update_discard, plugin_remove, plugin_pick_source, plugin_set_grant, plugin_authorize, plugin_activity, plugins_set_all_off, plugin_revoke_trusted, pack_state, pack_run, plugin_views, plugin_view_open, plugin_view_bounds, plugin_view_close, plugin_views_open, plugin_view_answer, pack_map, pack_apps, apps::pack_app_open, apps::tunnel_open, apps::tunnel_discover, apps::tunnel_close, apps::tunnel_close_all, apps::tunnel_list, apps::tunnel_focus, monitoring_accept_identity, monitoring_state, monitoring_configure, monitoring_history_limit, monitoring_discover, foundation_status, workspace_status, map_state, retry_workspace, add_server, update_server, remove_server, add_relationship, remove_relationship, import_reports, ssh_prepare, ssh_verify, ssh_cancel, health_configure, health_status, health_cancel, inventory_refresh, files_prepare, files_open, files_read, workload_inspect, workload_control_preview, workload_control_confirm, files_lock, files_terminal_start, files_terminal_poll, files_terminal_write, files_terminal_resize, files_preview, files_commit, files_discard, files_release, files_pick_upload, files_pick_download, files_selection_discard, files_transfer, files_stage_protected, transfer_list, transfer_cancel, elevation_preview, elevation_confirm, elevation_cancel, protected_placement_preview, protected_placement_confirm, protected_placement_cancel])
+    .invoke_handler(tauri::generate_handler![extensions_state, plugins_state, plugin_enable, plugin_disable, plugin_install, plugin_update_check, plugin_update_apply, plugin_update_discard, plugin_remove, plugin_pick_source, plugin_set_grant, plugin_authorize, plugin_activity, plugins_set_all_off, plugin_revoke_trusted, pack_state, pack_run, plugin_jobs, plugin_job_run, plugin_job_answer, plugin_job_asks, plugin_job_cancel, plugin_set_schedule, plugin_set_elevation, plugin_views, plugin_view_open, plugin_view_bounds, plugin_view_close, plugin_views_open, plugin_view_answer, pack_map, pack_apps, apps::pack_app_open, apps::tunnel_open, apps::tunnel_discover, apps::tunnel_close, apps::tunnel_close_all, apps::tunnel_list, apps::tunnel_focus, monitoring_accept_identity, monitoring_state, monitoring_configure, monitoring_history_limit, monitoring_discover, foundation_status, workspace_status, map_state, retry_workspace, add_server, update_server, remove_server, add_relationship, remove_relationship, import_reports, ssh_prepare, ssh_verify, ssh_cancel, health_configure, health_status, health_cancel, inventory_refresh, files_prepare, files_open, files_read, workload_inspect, workload_control_preview, workload_control_confirm, files_lock, files_terminal_start, files_terminal_poll, files_terminal_write, files_terminal_resize, files_preview, files_commit, files_discard, files_release, files_pick_upload, files_pick_download, files_selection_discard, files_transfer, files_stage_protected, transfer_list, transfer_cancel, elevation_preview, elevation_confirm, elevation_cancel, protected_placement_preview, protected_placement_confirm, protected_placement_cancel])
     .run(tauri::generate_context!())
     .expect("InfraWerf native runtime failed");
 }

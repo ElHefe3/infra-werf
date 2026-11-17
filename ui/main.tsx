@@ -13,6 +13,7 @@ import { date, memory, Notice, SavedInventory } from "./workspace-parts";
 import { SettingsScreen } from "./app-settings";
 import { Dialog } from "./dialog";
 import { PluginActionDialog, PluginViewPanel, usePluginViews, viewTabId } from "./plugin-view";
+import { JobAskDialog } from "./plugin-jobs";
 import { MenuSystem, useMenu } from "./menu";
 import type { View } from "./menu-model";
 import type { MonitoringState, PackMapState } from "./contracts.gen";
@@ -241,6 +242,7 @@ function App() {
           : <><p>{modal.kind === "remove-server" ? `Permanently delete ${editServer?.name}: ${workloads(editServer!).length} saved workloads, ${state.edges.filter(e=>e.source===modal.id || e.target===modal.id).length} relationships and ${state.events.filter(e=>e.server_id===modal.id).length} retained history events? A configured alias may be rediscovered as a new candidate. Archive or ignore it in Servers to retain its history. No remote data is changed.` : `Remove the “${modal.edge.label || "unlabelled"}” diagram relationship? Server configuration will be unchanged.`}</p><div className="form-actions"><button disabled={busy} onClick={() => setModal(null)}>Cancel</button><button className="danger-button" disabled={busy} onClick={() => void mutate(() => modal.kind === "remove-server" ? client.remove(modal.id) : client.disconnect(modal.edge.id), "Map entry removed.", true)}>{busy ? "Removing…" : "Remove"}</button></div></>}
     </Dialog>}
     <PluginActionDialog />
+    <JobAskDialog />
   </div></PackMapContext.Provider></ExtensionsContext.Provider>;
 }
 

@@ -145,7 +145,7 @@ export type WorkloadControlPreview = { contract_version: number, operation_id: O
 export type WorkloadControlReceipt = { contract_version: number, operation_id: OperationId, workload_id: string, action: WorkloadAction, outcome: WorkloadActionOutcome, observed_state: WorkloadState, observed_at: string, message: string, };
 export type WorkloadDetail = { label: string, value: string, };
 export type WorkloadInspection = { contract_version: number, workload_id: string, inspected_at: string, state: WorkloadState, details: Array<WorkloadDetail>, logs_state: WorkloadLogState, logs: string, logs_truncated: boolean, };
-export type ExtensionPoint = "workspace_tab" | "server_badge" | "settings_section" | "app_settings_section" | "menu_item" | "collector" | "health_check" | "operation" | "remote_app" | "relationship_kind";
+export type ExtensionPoint = "workspace_tab" | "server_badge" | "settings_section" | "app_settings_section" | "menu_item" | "collector" | "health_check" | "operation" | "remote_app" | "relationship_kind" | "job";
 export type Capability = "read_saved_state" | "edit_map" | "network_probe" | "ssh_session" | "run_approved_command" | "read_files" | "write_files" | "transfer_files" | "interactive_terminal" | "elevate" | "control_workloads" | "loopback_tunnel";
 export type ExtensionInfo = {
 /**
@@ -275,6 +275,34 @@ export type PluginViewSpec = {
  * for example `view/index.html`.
  */
 entry: string, };
+export type JobControl = "start" | "stop" | "restart";
+export type JobTarget = "service" | "container";
+export type JobAction = {
+/**
+ * Lower-case letters, digits and hyphens, starting with a letter, 32
+ * characters at most.
+ */
+id: string,
+/**
+ * What the owner reads, 40 characters at most.
+ */
+title: string, control: JobControl, target: JobTarget,
+/**
+ * What it does and why, in one sentence for the owner, 200 characters
+ * at most.
+ */
+effect: string, };
+export type JobSpec = {
+/**
+ * The module, relative to the plugin's folder, ending in `.wasm`.
+ */
+module: string,
+/**
+ * The actions the job may ask for, at most 16. Each needs the owner's
+ * permission to control workloads on the server, and a run asks the
+ * owner first unless the plugin is at trusted automation.
+ */
+actions?: Array<JobAction>, };
 export type PackOutcome = "ok" | "command_failed" | "unreadable" | "output_limit" | "timed_out";
 export type PackHealth = "healthy" | "unhealthy" | "unknown";
 export type PackResult = { outcome: PackOutcome,
@@ -442,6 +470,24 @@ reason: string | null, logs: Array<string>, result: unknown, fuel_used: number, 
  * Host functions refused because the owner did not allow them.
  */
 refused: Array<string>, };
+export type JobRunState = "running" | "done" | "failed" | "cancelled";
+export type JobActionRecord = { action_id: string, workload: string,
+/**
+ * `done`, `failed`, `declined`, `refused` or `unknown`.
+ */
+outcome: string, message: string, };
+export type JobRunView = { run_id: string, plugin_id: string, contribution_id: string, server_id: ServerId,
+/**
+ * Started by the owner (true) or by a schedule.
+ */
+attended: boolean, started_at: string, finished_at: string | null, state: JobRunState, outcome: SandboxOutcome | null, actions: Array<JobActionRecord>, };
+export type JobAsk = { id: string, run_id: string, plugin_name: string, server_name: string, job_title: string, action_title: string, effect: string, control: JobControl, target: JobTarget, workload: string,
+/**
+ * The workload needs sudo: the owner types the password, which is used
+ * for this action only and never kept.
+ */
+requires_sudo: boolean, };
+export type JobsState = { contract_version: number, server_id: ServerId, jobs: Array<JobEntry>, runs: Array<JobRunView>, };
 export type TrustLevel = "read_only" | "confirm_changes" | "trusted_automation";
 export type CapabilityKind = "read" | "change" | "elevation";
 export type PluginStatus = "disabled" | "enabled" | "changed_since_review" | "files_changed";
@@ -460,7 +506,7 @@ export type PluginContributionView = { id: string, title: string, point: Extensi
 /**
  * The exact read-only command a pack contribution runs, if any.
  */
-command: PackCommand | null, workload_kind: PackWorkloadKind | null, app: PackApp | null, badge: PackBadge | null, relationship: PackRelationship | null, view: PluginViewSpec | null, };
+command: PackCommand | null, workload_kind: PackWorkloadKind | null, app: PackApp | null, badge: PackBadge | null, relationship: PackRelationship | null, view: PluginViewSpec | null, job: JobSpec | null, };
 export type ServerGrant = { server_id: ServerId, capabilities: Array<Capability>, };
 export type PluginView = { id: string, name: string, version: string, api_version: number, description: string | null, author: string | null, license: string | null, homepage: string | null,
 /**
@@ -510,3 +556,21 @@ kept: number,
 entries: Array<PluginActivity>, };
 export type PluginViewTab = { plugin_id: string, plugin_name: string, contribution_id: string, title: string, };
 export type PluginViewsState = { contract_version: number, server_id: ServerId, views: Array<PluginViewTab>, };
+export type JobSchedule = { every_minutes: number, next_run_at: string, last_run_at: string | null,
+/**
+ * `done`, `failed`, `cancelled` or `refused`.
+ */
+last_outcome: string | null,
+/**
+ * Failed runs in a row.
+ */
+failures: number,
+/**
+ * Paused after too many failures; set it again to resume.
+ */
+paused: boolean, };
+export type JobEntry = { plugin_id: string, plugin_name: string, contribution_id: string, title: string, job: JobSpec, trust: TrustLevel, schedule: JobSchedule | null,
+/**
+ * Declared actions the owner granted a sudo exception for here.
+ */
+elevation_exceptions: Array<string>, };
