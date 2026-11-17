@@ -36,7 +36,7 @@ document.getElementById("read-kernel").addEventListener("click", async () => {
     for (;;) {
       await new Promise(resolve => setTimeout(resolve, 700));
       const state = await call(`actions/${asked.id}`);
-      if (state.state === "waiting") continue;
+      if (state.state === "waiting" || state.state === "running") continue;
       show("action", state.state === "done" ? `Kernel ${state.observation?.result?.value ?? "unknown"}` : `Not run: ${state.state}`);
       await load();
       break;

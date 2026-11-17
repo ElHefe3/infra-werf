@@ -432,7 +432,10 @@ impl ViewLink {
             },
         );
         drop(actions);
-        self.note(
+        // A request that reaches the owner is always logged, outside the
+        // budget: there is at most one waiting per view, and the owner's own
+        // answer ends it (re-test, finding 15).
+        self.log(
             workspace,
             ACTION_VIEW_REQUEST,
             ActivityOutcome::NeedsConfirmation,
@@ -515,7 +518,10 @@ impl ViewApi for ViewLink {
         let Some(workspace) = self.workspace.upgrade() else {
             return;
         };
-        if matches!(what, "no_secret" | "wrong_host" | "cross_origin") {
+        if matches!(
+            what,
+            "no_secret" | "wrong_host" | "cross_origin" | "busy" | "bad_request"
+        ) {
             self.outside.fetch_add(1, Ordering::SeqCst);
             return;
         }
@@ -755,6 +761,19 @@ impl Workspace {
             }
             if !run {
                 action.state = ViewActionState::Declined;
+                let request = action.request.clone();
+                drop(actions);
+                let directory = self.plugins_directory();
+                let _ = self.with_store(|store| {
+                    store.plugin_view_event(
+                        &directory,
+                        &request.plugin_id,
+                        &request.server_id,
+                        ACTION_VIEW_REQUEST,
+                        ActivityOutcome::Refused,
+                        &format!("{}: declined by you", request.contribution_id),
+                    )
+                });
                 return Ok(ViewActionState::Declined);
             }
             // Marked under the lock, so the same request cannot run twice

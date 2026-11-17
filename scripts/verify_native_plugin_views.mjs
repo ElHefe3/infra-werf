@@ -199,6 +199,8 @@ try {
   await expect(dashboard.locator('#action')).toHaveText('Not run: declined', { timeout: 10000 });
   entries = await log();
   expect(entries.filter(e => e.plugin_id === DASHBOARD && e.action === 'run_command' && e.outcome === 'done').length).toBe(1);
+  expect(entries.some(e => e.plugin_id === DASHBOARD && e.action === 'view_request' && e.detail === 'kernel: declined by you')).toBe(true);
+  expect(entries.filter(e => e.plugin_id === DASHBOARD && e.action === 'view_request' && e.outcome === 'needs_confirmation').length).toBe(2);
   results.push(`Run stayed disabled ("Run (wait…)") when the dialog appeared, with Decline focused; the example view showed the server name, the plugin's reading and the saved inventory; its request to run "uname -r" opened InfraWerf's own dialog with the exact command, nothing ran until Run was pressed, and the view then showed the container's kernel ${kernel}; a declined request ran nothing`);
 
   // 4. Lock, closing and the kill switch tear the view down.

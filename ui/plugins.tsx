@@ -51,7 +51,9 @@ export function describeExtract(command: PackCommand): string {
 export function describeActivity(entry: PluginActivity): { action: string; outcome: string } {
   if (entry.action === "open_app") return { action: entry.outcome === "refused" ? "Asked to open an application" : `Opened its application "${entry.detail}"`, outcome: ({ done: "Opened through a private tunnel", cancelled: "Closed: its permissions changed while it opened", failed: "Failed: no tunnel was opened" } as Record<string, string>)[entry.outcome] ?? entry.outcome };
   if (entry.action === "view_blocked") return { action: "Its view tried something not allowed", outcome: `Blocked: ${entry.detail}` };
-  if (entry.action === "view_request") return { action: `Its view asked to run "${entry.detail}"`, outcome: entry.outcome === "refused" ? "Refused: not allowed on this server" : "Shown to you to decide" };
+  if (entry.action === "view_request") return entry.detail.endsWith(": declined by you")
+    ? { action: `Its view asked to run "${entry.detail.slice(0, -": declined by you".length)}"`, outcome: "Declined by you" }
+    : { action: `Its view asked to run "${entry.detail}"`, outcome: entry.outcome === "refused" ? "Refused: not allowed on this server" : "Shown to you to decide" };
   if (entry.action === "run_command") return { action: entry.outcome === "refused" ? "Asked to run a command" : `Ran its command "${entry.detail}"`, outcome: RUN_OUTCOME[entry.outcome] ?? entry.outcome };
   const owner = OWNER_ACTION[entry.action];
   if (owner) return { action: owner, outcome: entry.action === "enable" ? trustLabel(entry.detail as TrustLevel) : entry.action === "set_permissions" ? (entry.detail || "Everything withdrawn") : entry.action === "revoke_trusted_automation" ? "Now: changes with confirmation" : entry.action === "install" ? `${SOURCE[entry.detail] ?? entry.detail} · disabled until you enable it` : entry.action === "update" ? (entry.outcome === "failed" ? `Not applied (${entry.detail}); the installed version is unchanged` : `Version ${entry.detail}`) : "" };

@@ -33,9 +33,15 @@ const MAX_HEADER_BYTES: usize = 16 * 1024;
 const MAX_BODY_BYTES: usize = 64 * 1024;
 const MAX_ASSET_BYTES: u64 = 5 * 1024 * 1024;
 const IO_TIMEOUT: Duration = Duration::from_secs(10);
-/// Connections served at once; one page needs few. Further ones are closed
-/// at once (T047 review, finding 4).
+/// Requests carrying the view's secret served at once; one page needs few
+/// (T047 review, finding 4).
 pub const MAX_CONNECTIONS: usize = 16;
+/// Connections that have not yet sent their request line. They get a short
+/// deadline and a pool of their own, so another program holding open
+/// connections without the secret cannot take the page's slots (re-test,
+/// finding 14).
+pub const MAX_PENDING: usize = 32;
+const REQUEST_LINE_DEADLINE: Duration = Duration::from_secs(1);
 /// Time from accepting a connection to the end of its request headers.
 const HEADER_DEADLINE: Duration = Duration::from_secs(5);
 
@@ -173,65 +179,105 @@ struct Request {
     body: Vec<u8>,
 }
 
-/// Reads one request within the limits; `None` for anything malformed or
-/// too slow. The headers must arrive within `HEADER_DEADLINE` in all.
-fn read_request(stream: &TcpStream) -> Option<Request> {
+enum Incoming {
+    Request(Request),
+    /// Malformed, too large or too slow.
+    Bad,
+    /// It carries the secret, but the page's slots are all in use.
+    Busy,
+}
+
+/// Reads one request within the limits. The request line must arrive within
+/// `REQUEST_LINE_DEADLINE`; then `first_line` is called once, and a request
+/// carrying the secret must win one of the page's slots via `admit`. The
+/// headers must arrive within `HEADER_DEADLINE` in all.
+fn read_request(
+    stream: &TcpStream,
+    first_line: &dyn Fn(),
+    admit: &dyn Fn(&str) -> bool,
+) -> Incoming {
     let started = Instant::now();
-    let mut reader = BufReader::new(stream.take((MAX_HEADER_BYTES + MAX_BODY_BYTES) as u64));
-    let mut head = Vec::new();
-    loop {
-        let left = HEADER_DEADLINE.checked_sub(started.elapsed())?;
-        stream
-            .set_read_timeout(Some(left.max(Duration::from_millis(1))))
-            .ok()?;
-        let mut line = Vec::new();
-        let read = reader.read_until(b'\n', &mut line).ok()?;
-        if read == 0 {
-            return None;
+    let mut lines = 0usize;
+    let request = (|| -> Option<Result<Request, ()>> {
+        let mut reader = BufReader::new(stream.take((MAX_HEADER_BYTES + MAX_BODY_BYTES) as u64));
+        let mut head = Vec::new();
+        loop {
+            let deadline = if lines == 0 {
+                REQUEST_LINE_DEADLINE
+            } else {
+                HEADER_DEADLINE
+            };
+            let left = deadline.checked_sub(started.elapsed())?;
+            stream
+                .set_read_timeout(Some(left.max(Duration::from_millis(1))))
+                .ok()?;
+            let mut line = Vec::new();
+            let read = reader.read_until(b'\n', &mut line).ok()?;
+            if read == 0 {
+                return None;
+            }
+            head.extend_from_slice(&line);
+            if head.len() > MAX_HEADER_BYTES {
+                return None;
+            }
+            lines += 1;
+            if lines == 1 {
+                first_line();
+                let target = std::str::from_utf8(&line)
+                    .ok()?
+                    .split(' ')
+                    .nth(1)
+                    .unwrap_or_default()
+                    .to_owned();
+                if !admit(&target) {
+                    return Some(Err(()));
+                }
+            }
+            if line == b"\r\n" || line == b"\n" {
+                break;
+            }
         }
-        head.extend_from_slice(&line);
-        if head.len() > MAX_HEADER_BYTES {
-            return None;
-        }
-        if line == b"\r\n" || line == b"\n" {
-            break;
-        }
-    }
-    let text = std::str::from_utf8(&head).ok()?;
-    let mut lines = text.lines();
-    let mut first = lines.next()?.split(' ');
-    let method = first.next()?.to_owned();
-    let target = first.next()?.to_owned();
-    let mut request = Request {
-        method,
-        target,
-        host: None,
-        origin: None,
-        fetch_site: None,
-        body: Vec::new(),
-    };
-    let mut length = 0usize;
-    for line in lines {
-        let Some((name, value)) = line.split_once(':') else {
-            continue;
+        let text = std::str::from_utf8(&head).ok()?;
+        let mut lines = text.lines();
+        let mut first = lines.next()?.split(' ');
+        let method = first.next()?.to_owned();
+        let target = first.next()?.to_owned();
+        let mut request = Request {
+            method,
+            target,
+            host: None,
+            origin: None,
+            fetch_site: None,
+            body: Vec::new(),
         };
-        let value = value.trim().to_owned();
-        match name.trim().to_ascii_lowercase().as_str() {
-            "host" => request.host = Some(value),
-            "origin" => request.origin = Some(value),
-            "sec-fetch-site" => request.fetch_site = Some(value),
-            "content-length" => length = value.parse().ok()?,
-            "transfer-encoding" => return None,
-            _ => {}
+        let mut length = 0usize;
+        for line in lines {
+            let Some((name, value)) = line.split_once(':') else {
+                continue;
+            };
+            let value = value.trim().to_owned();
+            match name.trim().to_ascii_lowercase().as_str() {
+                "host" => request.host = Some(value),
+                "origin" => request.origin = Some(value),
+                "sec-fetch-site" => request.fetch_site = Some(value),
+                "content-length" => length = value.parse().ok()?,
+                "transfer-encoding" => return None,
+                _ => {}
+            }
         }
+        if length > MAX_BODY_BYTES {
+            return None;
+        }
+        stream.set_read_timeout(Some(IO_TIMEOUT)).ok()?;
+        request.body = vec![0; length];
+        reader.read_exact(&mut request.body).ok()?;
+        Some(Ok(request))
+    })();
+    match request {
+        Some(Ok(request)) => Incoming::Request(request),
+        Some(Err(())) => Incoming::Busy,
+        None => Incoming::Bad,
     }
-    if length > MAX_BODY_BYTES {
-        return None;
-    }
-    stream.set_read_timeout(Some(IO_TIMEOUT)).ok()?;
-    request.body = vec![0; length];
-    reader.read_exact(&mut request.body).ok()?;
-    Some(request)
 }
 
 fn respond(stream: &mut TcpStream, status: u16, kind: &str, body: &[u8], token: &str) {
@@ -265,13 +311,77 @@ fn json(stream: &mut TcpStream, reply: &ApiReply, token: &str) {
     respond(stream, reply.status, "application/json", &body, token);
 }
 
-fn handle(mut stream: TcpStream, port: u16, token: &str, files: &ViewFiles, api: &dyn ViewApi) {
-    let _ = stream.set_read_timeout(Some(IO_TIMEOUT));
+/// The two pools of a view server: connections not yet past their request
+/// line, and requests carrying the secret being served.
+struct Slots {
+    pending: AtomicUsize,
+    admitted: AtomicUsize,
+}
+
+fn take(slot: &AtomicUsize, limit: usize) -> bool {
+    slot.try_update(Ordering::SeqCst, Ordering::SeqCst, |n| {
+        (n < limit).then_some(n + 1)
+    })
+    .is_ok()
+}
+
+fn handle(
+    mut stream: TcpStream,
+    port: u16,
+    token: &str,
+    files: &ViewFiles,
+    api: &dyn ViewApi,
+    slots: &Slots,
+) {
     let _ = stream.set_write_timeout(Some(IO_TIMEOUT));
-    let Some(request) = read_request(&stream) else {
-        respond(&mut stream, 400, "text/plain", b"Bad request", token);
-        return;
+    let secret = format!("/{token}/");
+    let released = AtomicBool::new(false);
+    let release_pending = || {
+        if !released.swap(true, Ordering::SeqCst) {
+            slots.pending.fetch_sub(1, Ordering::SeqCst);
+        }
     };
+    let admitted = AtomicBool::new(false);
+    let read = read_request(&stream, &release_pending, &|target| {
+        if !target.starts_with(&secret) {
+            return true;
+        }
+        let won = take(&slots.admitted, MAX_CONNECTIONS);
+        admitted.store(won, Ordering::SeqCst);
+        won
+    });
+    release_pending();
+    let request = match read {
+        Incoming::Request(request) => request,
+        Incoming::Bad => {
+            // Counted as from outside the view: anything on this PC can
+            // open a connection (re-test, finding 16).
+            api.blocked("bad_request", "");
+            respond(&mut stream, 400, "text/plain", b"Bad request", token);
+            return;
+        }
+        Incoming::Busy => {
+            api.blocked("busy", "");
+            respond(&mut stream, 503, "text/plain", b"Busy", token);
+            return;
+        }
+    };
+    serve(&mut stream, port, token, files, api, request);
+    if admitted.load(Ordering::SeqCst) {
+        slots.admitted.fetch_sub(1, Ordering::SeqCst);
+    }
+    let _ = stream.shutdown(Shutdown::Both);
+}
+
+fn serve(
+    stream: &mut TcpStream,
+    port: u16,
+    token: &str,
+    files: &ViewFiles,
+    api: &dyn ViewApi,
+    request: Request,
+) {
+    let mut stream = stream;
     // The page's own origin only: no other host name (DNS rebinding), and
     // no request from another site.
     let origin = format!("http://127.0.0.1:{port}");
@@ -368,7 +478,10 @@ impl ViewServer {
     /// page the view opens.
     pub fn start(files: ViewFiles, entry: &str, api: Arc<dyn ViewApi>) -> std::io::Result<Self> {
         let files = Arc::new(files);
-        let active = Arc::new(AtomicUsize::new(0));
+        let slots = Arc::new(Slots {
+            pending: AtomicUsize::new(0),
+            admitted: AtomicUsize::new(0),
+        });
         let listener = TcpListener::bind(("127.0.0.1", 0))?;
         let port = listener.local_addr()?.port();
         let token = uuid::Uuid::new_v4().simple().to_string();
@@ -382,21 +495,21 @@ impl ViewServer {
                         break;
                     }
                     let Ok(stream) = stream else { continue };
-                    if active.fetch_add(1, Ordering::SeqCst) >= MAX_CONNECTIONS {
-                        active.fetch_sub(1, Ordering::SeqCst);
+                    if !take(&slots.pending, MAX_PENDING) {
+                        api.blocked("busy", "");
                         let _ = stream.shutdown(Shutdown::Both);
                         continue;
                     }
-                    let (secret, files, api, done) =
-                        (secret.clone(), files.clone(), api.clone(), active.clone());
+                    let (secret, files, api, shared) =
+                        (secret.clone(), files.clone(), api.clone(), slots.clone());
                     let spawned = std::thread::Builder::new()
                         .name("plugin-view-request".into())
                         .spawn(move || {
-                            handle(stream, port, &secret, &files, api.as_ref());
-                            done.fetch_sub(1, Ordering::SeqCst);
+                            handle(stream, port, &secret, &files, api.as_ref(), &shared)
                         });
                     if spawned.is_err() {
-                        active.fetch_sub(1, Ordering::SeqCst);
+                        // No thread took the connection, so free its slot.
+                        slots.pending.fetch_sub(1, Ordering::SeqCst);
                     }
                 }
             })?;
@@ -604,9 +717,10 @@ mod tests {
                 "other https://trusted.example".to_owned()
             )
         );
-        // Slow or idle connections cannot pile up: the 17th is closed at
-        // once, and an idle one is dropped after the header deadline.
-        let idle: Vec<TcpStream> = (0..MAX_CONNECTIONS)
+        // Idle connections cannot pile up: beyond MAX_PENDING one is closed
+        // at once, and an idle one is dropped after the request-line
+        // deadline, so the page is served again within about a second.
+        let idle: Vec<TcpStream> = (0..MAX_PENDING)
             .map(|_| TcpStream::connect(("127.0.0.1", port)).unwrap())
             .collect();
         std::thread::sleep(Duration::from_millis(300));
@@ -622,7 +736,7 @@ mod tests {
                 .unwrap_or(true),
             true
         );
-        std::thread::sleep(HEADER_DEADLINE + Duration::from_millis(500));
+        std::thread::sleep(REQUEST_LINE_DEADLINE + Duration::from_millis(500));
         let page = get(port, &format!("/{secret}/view/index.html"), &host, "");
         assert!(page.starts_with("HTTP/1.1 200"), "{page}");
         drop(idle);
