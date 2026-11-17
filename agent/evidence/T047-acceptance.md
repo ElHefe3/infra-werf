@@ -40,7 +40,7 @@ The new suite `plugin-views` (`scripts/verify_native_plugin_views.mjs`) drives t
 
 ## Independent review
 
-A separate session reviewed `d62feac` and tried to break it (report `agent/evidence/T047-isolation-review.md` on branch `claude/view-review-02e7db`, commits `3570cca` and `8591c59`; not merged here).
+A separate session reviewed `d62feac` and tried to break it ([report](T047-isolation-review.md), commits `3570cca` and `8591c59`, merged from branch `claude/view-review-02e7db`).
 
 - **The core boundary held.** No IPC, commands, events, main-window DOM or other HTTP origins were reachable.
 - **One high finding.** WebRTC sent page-chosen data over UDP to any address.
@@ -71,7 +71,7 @@ The re-test raised one new low finding (14) and two informational ones (15, 16),
 - **A local program can still deny a view service** by holding the 32 connection slots that have not sent their request line, reopening them every second. It cannot reach data or the page's secret. Review finding 14, reduced but not removed. A program that can do this can already disrupt the owner's PC.
 - **Not tested** (review finding 13): DNS prefetch, `window.print`, fullscreen, notifications, clipboard writes on a user gesture, and an intermediate junction in a plugin folder. The last is moot now: files are read with links refused when the view opens.
 - **`plugin:__TAURI_CHANNEL__|fetch`** passes Tauri's ACL without a capability. InfraWerf creates no channels, so there is nothing to fetch today (review finding 11).
-- The review's report and fixtures stay on branch `claude/view-review-02e7db` unless the owner wants them merged.
+- The review's report, its fixture and runner (`scripts/fixtures/hostile-view-review/`) and its evidence were merged on the owner's instruction.
 
 ## Notes
 
