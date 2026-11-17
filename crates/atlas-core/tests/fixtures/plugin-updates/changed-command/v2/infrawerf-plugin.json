@@ -1,0 +1,110 @@
+{
+  "id": "org.example.host-basics",
+  "name": "Host basics",
+  "version": "1.0.1",
+  "api_version": 2,
+  "description": "Disk usage, kernel version and two systemd health checks, read with standard commands.",
+  "author": "Example Author",
+  "license": "MIT",
+  "capabilities": [
+    "ssh_session",
+    "run_approved_command"
+  ],
+  "contributions": [
+    {
+      "id": "disk-usage",
+      "point": "collector",
+      "title": "Disk usage",
+      "capabilities": [
+        "ssh_session",
+        "run_approved_command"
+      ],
+      "command": {
+        "argv": [
+          "df",
+          "-P",
+          "-k"
+        ],
+        "extract": {
+          "kind": "table",
+          "columns": [
+            "filesystem",
+            "blocks_kib",
+            "used_kib",
+            "available_kib",
+            "used_percent",
+            "mounted_on"
+          ],
+          "skip_lines": 1
+        }
+      }
+    },
+    {
+      "id": "kernel",
+      "point": "collector",
+      "title": "Kernel version",
+      "capabilities": [
+        "ssh_session",
+        "run_approved_command"
+      ],
+      "command": {
+        "argv": [
+          "uname",
+          "-a"
+        ],
+        "extract": {
+          "kind": "line"
+        }
+      }
+    },
+    {
+      "id": "system-state",
+      "point": "health_check",
+      "title": "System state",
+      "capabilities": [
+        "ssh_session",
+        "run_approved_command"
+      ],
+      "command": {
+        "argv": [
+          "systemctl",
+          "is-system-running"
+        ],
+        "extract": {
+          "kind": "line"
+        },
+        "healthy": [
+          "running"
+        ]
+      }
+    },
+    {
+      "id": "service-active",
+      "point": "health_check",
+      "title": "Service is active",
+      "capabilities": [
+        "ssh_session",
+        "run_approved_command"
+      ],
+      "command": {
+        "argv": [
+          "systemctl",
+          "is-active",
+          "{unit}"
+        ],
+        "parameters": [
+          {
+            "name": "unit",
+            "source": "service"
+          }
+        ],
+        "extract": {
+          "kind": "line"
+        },
+        "healthy": [
+          "active"
+        ]
+      }
+    }
+  ]
+}

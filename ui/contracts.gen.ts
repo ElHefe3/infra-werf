@@ -357,7 +357,7 @@ expected_sha256?: string,
  * a valid signature by that key.
  */
 public_key?: string, };
-export type InstallProblemCode = "unreadable" | "not_https" | "unsupported_archive" | "path_traversal" | "unsafe_entry" | "too_large" | "no_manifest" | "invalid_manifest" | "hash_mismatch" | "signature_missing" | "signature_invalid" | "invalid_public_key" | "signature_not_possible" | "already_installed";
+export type InstallProblemCode = "unreadable" | "not_https" | "unsupported_archive" | "path_traversal" | "unsafe_entry" | "too_large" | "no_manifest" | "invalid_manifest" | "hash_mismatch" | "signature_missing" | "signature_invalid" | "invalid_public_key" | "signature_not_possible" | "already_installed" | "different_plugin" | "downgrade" | "changed_since_preview" | "preview_expired";
 export type InstallProblem = { code: InstallProblemCode, message: string, };
 export type InstallReport = { contract_version: number,
 /**
@@ -383,6 +383,35 @@ archive_sha256: string | null,
  * The minisign key ID whose signature was verified, if any.
  */
 signer_key_id: string | null, installed_at: string, integrity: Integrity, checked_at: string | null, };
+export type ContributionChangeKind = "added" | "removed" | "command_changed" | "app_changed" | "access_changed" | "presentation";
+export type ContributionChange = { id: string, title: string, change: ContributionChangeKind,
+/**
+ * The new command as the owner reads it, when it is new or changed.
+ */
+command: string | null, };
+export type UpdateDiff = { from_version: string, to_version: string,
+/**
+ * The new version is older than the installed one.
+ */
+downgrade: boolean, added_capabilities: Array<Capability>, removed_capabilities: Array<Capability>, contributions: Array<ContributionChange>,
+/**
+ * The update asks for something new, so the plugin is switched off
+ * until the owner reviews and enables it again.
+ */
+needs_review: boolean,
+/**
+ * Key ID verified at the previous install or update, if any.
+ */
+previous_signer: string | null,
+/**
+ * Key ID verified for this update, if a public key was given.
+ */
+signer: string | null, content_sha256: string, archive_sha256: string | null, };
+export type UpdatePreview = { contract_version: number,
+/**
+ * Pass this to apply exactly what was checked and shown.
+ */
+token: string | null, plugin_id: string, plugin_name: string, diff: UpdateDiff | null, problem: InstallProblem | null, };
 export type TrustLevel = "read_only" | "confirm_changes" | "trusted_automation";
 export type CapabilityKind = "read" | "change" | "elevation";
 export type PluginStatus = "disabled" | "enabled" | "changed_since_review" | "files_changed";

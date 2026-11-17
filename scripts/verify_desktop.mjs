@@ -199,8 +199,10 @@ try {
   await expect(asks).toContainText('Sign in to this server through InfraWerf with your existing SSH access. The plugin never receives your keys or a raw session.');
   await expect(asks).toContainText('Run fixed, read-only commands on this server.');
   await expect(asks).toContainText('Used by: Last backup, Backups');
-  await expect(pluginPage.getByRole('radio')).toHaveCount(3);
-  await expect(pluginPage.getByRole('radio', { checked: true })).toHaveCount(0);
+  // The trust choice; the Update form has its own source radios.
+  const trustChoice = pluginPage.getByRole('group', { name: 'Choose how far this plugin may act. Nothing is chosen for you.' });
+  await expect(trustChoice.getByRole('radio')).toHaveCount(3);
+  await expect(trustChoice.getByRole('radio', { checked: true })).toHaveCount(0);
   await expect(pluginPage.getByRole('button', { name: 'Enable plugin', exact: true })).toBeDisabled();
   await pluginPage.getByRole('radio', { name: /^Read-only/ }).check();
   await pluginPage.getByRole('button', { name: 'Enable plugin', exact: true }).click();
@@ -245,7 +247,7 @@ try {
   await pluginPage.getByRole('button', { name: 'Disable plugin', exact: true }).click();
   await expect(pluginPage).toContainText('Status: Not enabled');
   expect(await ask(core, 'run_approved_command')).toBe('plugin_disabled');
-  await expect(pluginPage.getByRole('radio', { checked: true })).toHaveCount(0);
+  await expect(pluginPage.getByRole('group', { name: 'Choose how far this plugin may act. Nothing is chosen for you.' }).getByRole('radio', { checked: true })).toHaveCount(0);
   await expect(pluginPage.getByRole('button', { name: 'Enable plugin', exact: true })).toBeDisabled();
   // Trust levels differ only for changes; this example has none, so confirm the stored level round-trips, then clean up.
   await pluginPage.getByRole('radio', { name: /^Trusted automation/ }).check();

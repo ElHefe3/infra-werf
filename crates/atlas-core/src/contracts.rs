@@ -502,6 +502,7 @@ pub fn typescript_contracts() -> String {
     output.push_str(&crate::extensions::typescript_contracts(&cfg));
     output.push_str(&crate::pack::typescript_contracts(&cfg));
     output.push_str(&crate::plugin_install::typescript_contracts(&cfg));
+    output.push_str(&crate::plugin_install::update_contracts(&cfg));
     output.push_str(&crate::plugin_host::typescript_contracts(&cfg));
     let mut output = output
         .lines()

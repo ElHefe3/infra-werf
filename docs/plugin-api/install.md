@@ -19,7 +19,7 @@ Everything is read and checked in memory before anything is written. A refusal l
 - **Entries.** Only plain files and folders. Symbolic links, hard links, devices and any other special entry are refused, from an archive or a folder.
 - **Shape.** `infrawerf-plugin.json` is at the top of the archive, or in exactly one folder at the top (as an archive made from a folder is). That folder level is dropped when installing.
 - **Manifest.** It must be valid, exactly as for a plugin placed by hand.
-- **Not already installed.** A plugin with the same ID must be removed first. Updating a plugin in place comes later.
+- **Not already installed.** A plugin with the same ID is updated instead: see [Updating](#updating).
 
 The plugin is then written to a working folder inside the plugins folder, read back and compared with what was checked, and moved into place with one rename as `plugins/<plugin id>`.
 
@@ -46,6 +46,28 @@ This writes `my-plugin.zip.minisig`. Publish it next to the archive, at the same
 
 InfraWerf trusts no key by itself. The owner pastes the author's public key into the install form when they want the signature checked. Then a missing signature, a signature by another key, or an archive changed after signing refuses the install. A verified signature's key ID is shown on the plugin's page. Without a key, the signature is not checked and the page says so. A folder cannot be signed.
 
+## Updating
+
+**Update** on a plugin's page takes the new version from the same three places, with the same checks, and with the same optional expected SHA-256 and public key. The new version must have the same plugin ID. Nothing is replaced until the owner has seen what changes and pressed Apply; the installed version keeps working until then, and if anything fails it stays as it was.
+
+What the owner is shown:
+
+- the version, and a warning when the new one is **older**. A downgrade applies only after the owner confirms it;
+- capabilities it **asks for more** of, and capabilities it **no longer** asks for;
+- each contribution that is new, removed or changed, with its new command written out;
+- whether it is signed by the **same key** as the installed version, by a different key, or not checked;
+- the new files hash.
+
+What happens when it applies:
+
+| The update | Result |
+| --- | --- |
+| Asks for nothing new: same or fewer capabilities, and no new or changed command, application, point or capability use | It keeps the owner's review and keeps working. Permissions for capabilities it no longer asks for are removed. |
+| Asks for anything new: a new capability, a new contribution, or a changed command, application or access | It is switched off ("changed since you reviewed it") until the owner reviews and enables it again. Its earlier permissions are kept but unused, and nothing new is allowed until the owner allows it on a server. |
+| Replaces a plugin whose files had changed | It needs a new review either way. |
+
+The update is checked once and applied from exactly what was checked: it is not fetched or read again. A check expires after 15 minutes, and applying is refused if the installed plugin changed in between. Every update, applied or refused, is in the plugin activity log.
+
 ## Removing
 
 **Remove** on a plugin's page deletes its folder from the plugins folder and forgets its trust level, its permissions on every server and its install record. A pack command in flight is cancelled and its application tunnels are closed. The plugin activity log keeps its history. A folder that is not a usable plugin can be removed the same way.
@@ -68,3 +90,7 @@ InfraWerf trusts no key by itself. The owner pastes the author's public key into
 | `invalid_public_key` | Not a minisign public key. |
 | `signature_not_possible` | A public key was given for a folder. |
 | `already_installed` | A plugin with this ID, or a folder with its name, is already there. |
+| `different_plugin` | An update whose manifest has another plugin's ID. |
+| `downgrade` | An older version, and the owner did not confirm going back. |
+| `changed_since_preview` | The installed plugin changed between checking and applying the update. |
+| `preview_expired` | The update was checked more than 15 minutes ago, or was already applied. |

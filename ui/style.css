@@ -362,6 +362,7 @@ form label { display: grid; gap: 7px; margin-top: 18px; color: #86987a; font-siz
 .plugin-server header{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px}.plugin-server header span{color:#8a9884;font-size:11px}.plugin-server header .count{margin-left:auto}.plugin-server header button{padding:3px 8px;font-size:11px}
 .plugin-invalid li{display:grid;gap:3px;font-size:12px}.plugin-invalid code{font-size:10px;color:#a36150;overflow-wrap:anywhere}
 .server-plugins{margin-top:26px}
+.plugin-update{margin-top:18px}.update-diff{display:grid;gap:8px;border:1px solid var(--border);border-radius:8px;padding:12px;background:white}.update-diff h5{margin:0}.update-ok{color:var(--green)}.update-changes{margin:0;padding-left:18px;display:grid;gap:4px}.update-changes code,.update-diff code{margin-left:6px;font-size:11px;overflow-wrap:anywhere}
 .plugin-install{display:grid;gap:8px;margin-top:22px;padding-top:14px;border-top:1px solid var(--border)}.plugin-install h5{margin:0}.install-kind{display:flex;gap:14px;border:0;padding:0;margin:0}.install-kind legend{font-size:11px;color:#5d6d59;margin-bottom:4px}
 .install-pick{display:flex;gap:8px}.install-pick input{flex:1}.install-checks{display:grid;gap:8px}.install-checks label{display:grid;gap:4px}.plugin-install-record code{overflow-wrap:anywhere;font-size:11px}
 .integrity.changed{color:#a36150;font-weight:600}.integrity.verified{color:var(--green)}.plugin-remove{border:1px solid #ecd3cc;background:#fbf1ee;border-radius:8px;padding:10px 12px}

@@ -111,7 +111,19 @@ pub struct Workspace {
     live_contact: Mutex<()>,
     tunnels: Mutex<tunnels::Tunnels>,
     packs: packs::Packs,
+    /// Updates checked and shown to the owner, by token (T046).
+    updates: Mutex<HashMap<String, PendingUpdate>>,
 }
+
+/// An update exactly as it was checked and shown, so applying it uses the
+/// same files rather than fetching or reading them again.
+struct PendingUpdate {
+    plugin: String,
+    prepared: atlas_core::plugin_install::Prepared,
+    previous_hash: String,
+    checked: std::time::Instant,
+}
+const UPDATE_LIFETIME: std::time::Duration = std::time::Duration::from_secs(15 * 60);
 
 impl Workspace {
     pub fn new(paths: Paths) -> Arc<Self> {
@@ -148,6 +160,7 @@ impl Workspace {
             live_contact: Mutex::new(()),
             tunnels: Mutex::new(tunnels::Tunnels::default()),
             packs: packs::Packs::default(),
+            updates: Mutex::new(HashMap::new()),
         });
         // The start-up check of installed plugins' files (T045). A store
         // that cannot open is reported where it is used.
@@ -229,6 +242,123 @@ impl Workspace {
             Ok(prepared) => self.with_store(|store| store.plugin_publish(&directory, &prepared)),
             Err(problem) => Ok(atlas_core::plugin_install::InstallReport::refused(problem)),
         }
+    }
+    /// Reads and checks an update, and shows what it would change. Nothing
+    /// is applied; the checked files are kept for 15 minutes under a token.
+    pub fn plugin_update_check(
+        &self,
+        plugin: &str,
+        request: &atlas_core::plugin_install::InstallRequest,
+    ) -> Result<atlas_core::plugin_install::UpdatePreview, AtlasError> {
+        use atlas_core::plugin_install::{UpdatePreview, prepare};
+        let directory = self.plugins_directory();
+        let name = self
+            .plugins_state()?
+            .plugins
+            .into_iter()
+            .find(|p| p.id == plugin)
+            .map(|p| p.name)
+            .ok_or_else(|| AtlasError::new(ErrorCode::NotFound))?;
+        let prepared = match prepare(request) {
+            Ok(prepared) => prepared,
+            Err(problem) => return Ok(UpdatePreview::refused(plugin, &name, problem)),
+        };
+        let (previous_hash, diff) = match self
+            .with_store(|store| store.plugin_update_diff(&directory, plugin, &prepared))?
+        {
+            Ok(found) => found,
+            Err(problem) => return Ok(UpdatePreview::refused(plugin, &name, problem)),
+        };
+        let token = OperationId::generate().as_str().to_owned();
+        let mut updates = self.updates.lock().map_err(|_| failure())?;
+        updates.retain(|_, pending| {
+            pending.checked.elapsed() < UPDATE_LIFETIME && pending.plugin != plugin
+        });
+        updates.insert(
+            token.clone(),
+            PendingUpdate {
+                plugin: plugin.to_owned(),
+                prepared,
+                previous_hash,
+                checked: std::time::Instant::now(),
+            },
+        );
+        Ok(UpdatePreview {
+            contract_version: CONTRACT_VERSION,
+            token: Some(token),
+            plugin_id: plugin.to_owned(),
+            plugin_name: name,
+            diff: Some(diff),
+            problem: None,
+        })
+    }
+    /// Applies an update the owner checked. A refusal or failure leaves the
+    /// installed version as it was, and is logged.
+    pub fn plugin_update_apply(
+        &self,
+        token: &str,
+        allow_downgrade: bool,
+    ) -> Result<atlas_core::plugin_install::UpdatePreview, AtlasError> {
+        use atlas_core::plugin_install::{InstallProblem, InstallProblemCode, UpdatePreview};
+        let directory = self.plugins_directory();
+        let pending = self
+            .updates
+            .lock()
+            .map_err(|_| failure())?
+            .remove(token)
+            .filter(|pending| pending.checked.elapsed() < UPDATE_LIFETIME);
+        let Some(pending) = pending else {
+            return Ok(UpdatePreview::refused(
+                "",
+                "",
+                InstallProblem::new(
+                    InstallProblemCode::PreviewExpired,
+                    "This update was checked more than 15 minutes ago, or was already applied. Check it again.",
+                ),
+            ));
+        };
+        let name = pending.prepared.manifest.name.clone();
+        let outcome = self.with_store(|store| {
+            let applied = store.plugin_apply_update(
+                &directory,
+                &pending.plugin,
+                &pending.prepared,
+                &pending.previous_hash,
+                allow_downgrade,
+            );
+            let why = match &applied {
+                Ok(Ok(_)) => None,
+                Ok(Err(problem)) => Some(
+                    serde_json::to_value(problem.code)
+                        .ok()
+                        .and_then(|v| v.as_str().map(str::to_owned))
+                        .unwrap_or_default(),
+                ),
+                Err(_) => Some("io_failure".to_owned()),
+            };
+            if let Some(why) = why {
+                store.plugin_update_failed(&directory, &pending.plugin, &why)?;
+            }
+            applied
+        });
+        // The plugin's files changed: work in flight for plugins stops.
+        self.plugins_changed();
+        Ok(match outcome? {
+            Ok(diff) => UpdatePreview {
+                contract_version: CONTRACT_VERSION,
+                token: None,
+                plugin_id: pending.plugin,
+                plugin_name: name,
+                diff: Some(diff),
+                problem: None,
+            },
+            Err(problem) => UpdatePreview::refused(&pending.plugin, &name, problem),
+        })
+    }
+    /// Forgets a checked update the owner decided not to apply.
+    pub fn plugin_update_discard(&self, token: &str) -> Result<(), AtlasError> {
+        self.updates.lock().map_err(|_| failure())?.remove(token);
+        Ok(())
     }
     /// Removes a plugin folder with its permissions and install record.
     pub fn plugin_remove(

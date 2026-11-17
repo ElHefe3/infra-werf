@@ -76,7 +76,7 @@ try {
   const form = section.getByRole('form', { name: 'Install a plugin' });
   await form.getByRole('radio', { name: 'HTTPS address' }).check();
   await form.getByLabel('Plugin address', { exact: true }).fill(`${base}/good.zip`);
-  await form.getByText('Check it before installing (optional)').click();
+  await form.getByText('Check it first (optional)').click();
   const goodZip = await readFile(path.join(archives, 'good.zip'));
   await form.getByLabel('Expected SHA-256', { exact: true }).fill(sha256(goodZip));
   const publicKey = (await readFile(path.join(archives, 'author.pub'), 'utf8')).trim().split('\n').at(-1);

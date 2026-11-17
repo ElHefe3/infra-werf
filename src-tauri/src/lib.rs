@@ -708,6 +708,45 @@ async fn plugin_install(
     .await
     .map_err(|_| AtlasError::new(ErrorCode::IoFailure))?
 }
+/// Checks an update for an installed plugin and shows what it changes (T046).
+#[tauri::command]
+async fn plugin_update_check(
+    window: tauri::WebviewWindow,
+    workspace: State<'_, Arc<Workspace>>,
+    plugin_id: String,
+    request: atlas_core::plugin_install::InstallRequest,
+) -> Result<atlas_core::plugin_install::UpdatePreview, AtlasError> {
+    local_desktop(&window)?;
+    let workspace = workspace.inner().clone();
+    let admission = workspace.begin()?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let _admission = admission;
+        workspace.plugin_update_check(&plugin_id, &request)
+    })
+    .await
+    .map_err(|_| AtlasError::new(ErrorCode::IoFailure))?
+}
+/// Applies a checked update (T046).
+#[tauri::command]
+fn plugin_update_apply(
+    window: tauri::WebviewWindow,
+    workspace: State<'_, Arc<Workspace>>,
+    token: String,
+    allow_downgrade: bool,
+) -> Result<atlas_core::plugin_install::UpdatePreview, AtlasError> {
+    local_desktop(&window)?;
+    let _operation = workspace.inner().begin()?;
+    workspace.plugin_update_apply(&token, allow_downgrade)
+}
+#[tauri::command]
+fn plugin_update_discard(
+    window: tauri::WebviewWindow,
+    workspace: State<'_, Arc<Workspace>>,
+    token: String,
+) -> Result<(), AtlasError> {
+    local_desktop(&window)?;
+    workspace.plugin_update_discard(&token)
+}
 /// Removes a plugin folder, its permissions and its install record (T045).
 #[tauri::command]
 fn plugin_remove(
@@ -1042,7 +1081,7 @@ pub fn run() {
             }
         }
     })
-    .invoke_handler(tauri::generate_handler![extensions_state, plugins_state, plugin_enable, plugin_disable, plugin_install, plugin_remove, plugin_pick_source, plugin_set_grant, plugin_authorize, plugin_activity, plugins_set_all_off, plugin_revoke_trusted, pack_state, pack_run, pack_map, pack_apps, apps::pack_app_open, apps::tunnel_open, apps::tunnel_discover, apps::tunnel_close, apps::tunnel_close_all, apps::tunnel_list, apps::tunnel_focus, monitoring_accept_identity, monitoring_state, monitoring_configure, monitoring_history_limit, monitoring_discover, foundation_status, workspace_status, map_state, retry_workspace, add_server, update_server, remove_server, add_relationship, remove_relationship, import_reports, ssh_prepare, ssh_verify, ssh_cancel, health_configure, health_status, health_cancel, inventory_refresh, files_prepare, files_open, files_read, workload_inspect, workload_control_preview, workload_control_confirm, files_lock, files_terminal_start, files_terminal_poll, files_terminal_write, files_terminal_resize, files_preview, files_commit, files_discard, files_release, files_pick_upload, files_pick_download, files_selection_discard, files_transfer, files_stage_protected, transfer_list, transfer_cancel, elevation_preview, elevation_confirm, elevation_cancel, protected_placement_preview, protected_placement_confirm, protected_placement_cancel])
+    .invoke_handler(tauri::generate_handler![extensions_state, plugins_state, plugin_enable, plugin_disable, plugin_install, plugin_update_check, plugin_update_apply, plugin_update_discard, plugin_remove, plugin_pick_source, plugin_set_grant, plugin_authorize, plugin_activity, plugins_set_all_off, plugin_revoke_trusted, pack_state, pack_run, pack_map, pack_apps, apps::pack_app_open, apps::tunnel_open, apps::tunnel_discover, apps::tunnel_close, apps::tunnel_close_all, apps::tunnel_list, apps::tunnel_focus, monitoring_accept_identity, monitoring_state, monitoring_configure, monitoring_history_limit, monitoring_discover, foundation_status, workspace_status, map_state, retry_workspace, add_server, update_server, remove_server, add_relationship, remove_relationship, import_reports, ssh_prepare, ssh_verify, ssh_cancel, health_configure, health_status, health_cancel, inventory_refresh, files_prepare, files_open, files_read, workload_inspect, workload_control_preview, workload_control_confirm, files_lock, files_terminal_start, files_terminal_poll, files_terminal_write, files_terminal_resize, files_preview, files_commit, files_discard, files_release, files_pick_upload, files_pick_download, files_selection_discard, files_transfer, files_stage_protected, transfer_list, transfer_cancel, elevation_preview, elevation_confirm, elevation_cancel, protected_placement_preview, protected_placement_confirm, protected_placement_cancel])
     .run(tauri::generate_context!())
     .expect("InfraWerf native runtime failed");
 }

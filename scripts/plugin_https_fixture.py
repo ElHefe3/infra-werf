@@ -40,6 +40,17 @@ leaf = (x509.CertificateBuilder().subject_name(name("127.0.0.1")).issuer_name(ca
 (directory / "leaf.pem").write_bytes(leaf.public_bytes(serialization.Encoding.PEM))
 (directory / "leaf.key").write_bytes(key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()))
 requests = []
+# Each update fixture version as a zip, served at /updates/<case>-<version>.zip.
+import io as _io, zipfile as _zipfile
+updates_dir = archives.parent / "plugin-updates"
+updates = {}
+for case in sorted(updates_dir.iterdir()):
+    for version in sorted(case.iterdir()):
+        buffer = _io.BytesIO()
+        with _zipfile.ZipFile(buffer, "w", _zipfile.ZIP_DEFLATED) as archive:
+            for file in sorted(version.iterdir()):
+                archive.write(file, file.name)
+        updates[f"/updates/{case.name}-{version.name}.zip"] = buffer.getvalue()
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -54,7 +65,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_header("Location", f"http://127.0.0.1:{port}/good.zip")
             self.end_headers()
             return
-        if self.path == "/big.zip":
+        if self.path in updates:
+            body = updates[self.path]
+        elif self.path == "/big.zip":
             body = b"PK\x03\x04" + b"\0" * (6 * 1024 * 1024)
         else:
             file = archives / self.path.lstrip("/")

@@ -110,6 +110,14 @@ pub enum InstallProblemCode {
     SignatureNotPossible,
     /// A plugin with this ID, or a folder with its name, already exists.
     AlreadyInstalled,
+    /// An update whose manifest has another plugin's ID.
+    DifferentPlugin,
+    /// The update is an older version and the owner did not confirm it.
+    Downgrade,
+    /// The installed plugin changed between checking and applying.
+    ChangedSincePreview,
+    /// The update was checked too long ago, or was already applied.
+    PreviewExpired,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -1032,4 +1040,272 @@ mod tests {
             );
         }
     }
+}
+
+// ---------------------------------------------------------------- updates
+//
+// An update is a plugin with the same ID as one already there, read and
+// checked exactly like an install (F22/T046). Before it applies, the owner
+// sees what changes. It keeps working without a new review only when it
+// asks for nothing new: no added capability, and no new or changed command,
+// application or access. Anything else switches the plugin off until the
+// owner reviews and enables it again, and no permission is ever added.
+
+/// How one contribution differs between two versions.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ContributionChangeKind {
+    Added,
+    Removed,
+    /// Its command is new or different: the owner must read it again.
+    CommandChanged,
+    /// Its application's port or path is new or different.
+    AppChanged,
+    /// It uses different capabilities, or sits at another point.
+    AccessChanged,
+    /// Only its title, order or presentation changed.
+    Presentation,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ContributionChange {
+    pub id: String,
+    pub title: String,
+    pub change: ContributionChangeKind,
+    /// The new command as the owner reads it, when it is new or changed.
+    pub command: Option<String>,
+}
+
+/// What an update changes, shown before it applies.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct UpdateDiff {
+    pub from_version: String,
+    pub to_version: String,
+    /// The new version is older than the installed one.
+    pub downgrade: bool,
+    pub added_capabilities: Vec<crate::extensions::Capability>,
+    pub removed_capabilities: Vec<crate::extensions::Capability>,
+    pub contributions: Vec<ContributionChange>,
+    /// The update asks for something new, so the plugin is switched off
+    /// until the owner reviews and enables it again.
+    pub needs_review: bool,
+    /// Key ID verified at the previous install or update, if any.
+    pub previous_signer: Option<String>,
+    /// Key ID verified for this update, if a public key was given.
+    pub signer: Option<String>,
+    pub content_sha256: String,
+    pub archive_sha256: Option<String>,
+}
+
+/// The answer to "check this update": what it would change, or why not.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct UpdatePreview {
+    pub contract_version: u32,
+    /// Pass this to apply exactly what was checked and shown.
+    pub token: Option<String>,
+    pub plugin_id: String,
+    pub plugin_name: String,
+    pub diff: Option<UpdateDiff>,
+    pub problem: Option<InstallProblem>,
+}
+
+impl UpdatePreview {
+    pub fn refused(plugin_id: &str, plugin_name: &str, problem: InstallProblem) -> Self {
+        Self {
+            contract_version: CONTRACT_VERSION,
+            token: None,
+            plugin_id: plugin_id.to_owned(),
+            plugin_name: plugin_name.to_owned(),
+            diff: None,
+            problem: Some(problem),
+        }
+    }
+}
+
+/// Semantic Versioning 2.0.0 precedence. Build metadata is ignored.
+pub fn compare_versions(a: &str, b: &str) -> std::cmp::Ordering {
+    use std::cmp::Ordering;
+    fn split(v: &str) -> (Vec<u64>, Option<Vec<String>>) {
+        let v = v.split('+').next().unwrap_or_default();
+        let (core, pre) = match v.split_once('-') {
+            Some((core, pre)) => (core, Some(pre.split('.').map(str::to_owned).collect())),
+            None => (v, None),
+        };
+        (
+            core.split('.').map(|n| n.parse().unwrap_or(0)).collect(),
+            pre,
+        )
+    }
+    let (ca, pa) = split(a);
+    let (cb, pb) = split(b);
+    match ca.cmp(&cb) {
+        Ordering::Equal => {}
+        other => return other,
+    }
+    match (pa, pb) {
+        (None, None) => Ordering::Equal,
+        (None, Some(_)) => Ordering::Greater,
+        (Some(_), None) => Ordering::Less,
+        (Some(pa), Some(pb)) => {
+            for (x, y) in pa.iter().zip(pb.iter()) {
+                let order = match (x.parse::<u64>(), y.parse::<u64>()) {
+                    (Ok(x), Ok(y)) => x.cmp(&y),
+                    (Ok(_), Err(_)) => Ordering::Less,
+                    (Err(_), Ok(_)) => Ordering::Greater,
+                    (Err(_), Err(_)) => x.cmp(y),
+                };
+                if order != Ordering::Equal {
+                    return order;
+                }
+            }
+            pa.len().cmp(&pb.len())
+        }
+    }
+}
+
+/// Compares the installed manifest with an update's.
+pub fn diff(old: &PluginManifest, new: &PluginManifest) -> UpdateDiff {
+    use std::collections::BTreeSet;
+    let before: BTreeSet<_> = old.capabilities.iter().copied().collect();
+    let after: BTreeSet<_> = new.capabilities.iter().copied().collect();
+    let mut contributions = Vec::new();
+    for entry in &new.contributions {
+        let previous = old.contributions.iter().find(|c| c.id == entry.id);
+        let same_access = |p: &crate::plugin::ManifestContribution| {
+            let a: BTreeSet<_> = p.capabilities.iter().collect();
+            let b: BTreeSet<_> = entry.capabilities.iter().collect();
+            p.point == entry.point && a == b
+        };
+        let change = match previous {
+            None => Some(ContributionChangeKind::Added),
+            Some(p) if !same_access(p) => Some(ContributionChangeKind::AccessChanged),
+            Some(p) if p.command != entry.command => Some(ContributionChangeKind::CommandChanged),
+            Some(p) if p.app != entry.app => Some(ContributionChangeKind::AppChanged),
+            Some(p) if p != entry => Some(ContributionChangeKind::Presentation),
+            Some(_) => None,
+        };
+        if let Some(change) = change {
+            let shows_command = matches!(
+                change,
+                ContributionChangeKind::Added
+                    | ContributionChangeKind::CommandChanged
+                    | ContributionChangeKind::AccessChanged
+            );
+            contributions.push(ContributionChange {
+                id: entry.id.clone(),
+                title: entry.title.clone(),
+                change,
+                command: entry
+                    .command
+                    .as_ref()
+                    .filter(|_| shows_command)
+                    .map(ToString::to_string),
+            });
+        }
+    }
+    for entry in &old.contributions {
+        if !new.contributions.iter().any(|c| c.id == entry.id) {
+            contributions.push(ContributionChange {
+                id: entry.id.clone(),
+                title: entry.title.clone(),
+                change: ContributionChangeKind::Removed,
+                command: None,
+            });
+        }
+    }
+    let added_capabilities: Vec<_> = after.difference(&before).copied().collect();
+    // Any new contribution, and any changed command, application or access,
+    // is something the owner has not reviewed, even with the same
+    // capabilities.
+    let unseen = contributions.iter().any(|change| {
+        !matches!(
+            change.change,
+            ContributionChangeKind::Removed | ContributionChangeKind::Presentation
+        )
+    });
+    UpdateDiff {
+        from_version: old.version.clone(),
+        to_version: new.version.clone(),
+        downgrade: compare_versions(&new.version, &old.version) == std::cmp::Ordering::Less,
+        needs_review: !added_capabilities.is_empty() || unseen,
+        added_capabilities,
+        removed_capabilities: before.difference(&after).copied().collect(),
+        contributions,
+        previous_signer: None,
+        signer: None,
+        content_sha256: String::new(),
+        archive_sha256: None,
+    }
+}
+
+/// Replaces an installed plugin folder with a prepared update. The old
+/// folder is kept, renamed aside, until the new one is in place; if moving
+/// the new one in fails, the old one is put back. Returns the parked old
+/// folder, for the caller to delete once its records are saved, or to put
+/// back with `restore` if they cannot be.
+pub fn replace(directory: &Path, folder: &str, prepared: &Prepared) -> Result<PathBuf, AtlasError> {
+    let io = |_| AtlasError::new(ErrorCode::IoFailure);
+    let target = directory.join(folder);
+    let staging = directory.join(format!("{STAGING_PREFIX}{}", uuid::Uuid::new_v4().simple()));
+    let parked = directory.join(format!(
+        "{REMOVING_PREFIX}{}",
+        uuid::Uuid::new_v4().simple()
+    ));
+    let written = (|| -> Result<(), AtlasError> {
+        std::fs::create_dir(&staging).map_err(io)?;
+        for (path, bytes) in &prepared.files {
+            let file = staging.join(path);
+            if let Some(parent) = file.parent() {
+                std::fs::create_dir_all(parent).map_err(io)?;
+            }
+            std::fs::write(&file, bytes).map_err(io)?;
+        }
+        if folder_hash(&staging).as_deref() != Some(prepared.content_sha256.as_str()) {
+            return Err(AtlasError::new(ErrorCode::IoFailure));
+        }
+        std::fs::rename(&target, &parked).map_err(io)?;
+        if let Err(error) = std::fs::rename(&staging, &target) {
+            let _ = std::fs::rename(&parked, &target);
+            return Err(io(error));
+        }
+        Ok(())
+    })();
+    if written.is_err() {
+        let _ = std::fs::remove_dir_all(&staging);
+    }
+    written.map(|()| parked)
+}
+
+/// Puts the previous version back after a failed update.
+pub fn restore(directory: &Path, folder: &str, parked: &Path) {
+    let target = directory.join(folder);
+    let aside = directory.join(format!("{STAGING_PREFIX}{}", uuid::Uuid::new_v4().simple()));
+    if std::fs::rename(&target, &aside).is_ok() && std::fs::rename(parked, &target).is_ok() {
+        let _ = std::fs::remove_dir_all(&aside);
+    }
+}
+
+/// The manifest's own hash, as the owner's review records it.
+pub fn manifest_hash(prepared: &Prepared) -> String {
+    prepared
+        .files
+        .iter()
+        .find(|(path, _)| path == MANIFEST_FILE)
+        .map(|(_, bytes)| sha256_hex(bytes))
+        .unwrap_or_default()
+}
+
+pub fn update_contracts(config: &Config) -> String {
+    [
+        ContributionChangeKind::decl(config),
+        ContributionChange::decl(config),
+        UpdateDiff::decl(config),
+        UpdatePreview::decl(config),
+    ]
+    .into_iter()
+    .map(|d| format!("export {d}\n"))
+    .collect()
 }

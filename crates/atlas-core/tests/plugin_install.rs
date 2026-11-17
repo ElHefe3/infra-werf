@@ -352,10 +352,17 @@ fn the_install_page_documents_every_code_and_limit() {
         InstallProblemCode::InvalidPublicKey,
         InstallProblemCode::SignatureNotPossible,
         InstallProblemCode::AlreadyInstalled,
+        InstallProblemCode::DifferentPlugin,
+        InstallProblemCode::Downgrade,
+        InstallProblemCode::ChangedSincePreview,
+        InstallProblemCode::PreviewExpired,
     ];
     for code in codes {
         let name = serde_json::to_value(code).unwrap();
-        assert!(page.contains(&format!("`{}`", name.as_str().unwrap())), "{name}");
+        assert!(
+            page.contains(&format!("`{}`", name.as_str().unwrap())),
+            "{name}"
+        );
     }
     for limit in [
         format!("{} MiB", MAX_ARCHIVE_BYTES / 1024 / 1024),

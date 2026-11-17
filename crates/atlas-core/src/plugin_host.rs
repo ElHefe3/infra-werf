@@ -66,6 +66,9 @@ pub const ACTION_RUN_COMMAND: &str = "run_command";
 pub const ACTION_INSTALL: &str = "install";
 /// A plugin's files, permissions and settings were removed.
 pub const ACTION_REMOVE: &str = "remove";
+/// A plugin was replaced by a newer or older version; the detail says the
+/// versions and whether it needs a new review.
+pub const ACTION_UPDATE: &str = "update";
 /// A pack application was opened through a tunnel; the detail is its ID.
 pub const ACTION_OPEN_APP: &str = "open_app";
 
@@ -849,6 +852,194 @@ impl Store {
                 .map_err(sql_error)?;
         }
         Ok(changed)
+    }
+
+    /// What an update would change for an installed plugin: the installed
+    /// manifest's hash (to notice a change before it applies) and the
+    /// difference, including the previous and new signer.
+    pub fn plugin_update_diff(
+        &self,
+        directory: &Path,
+        plugin: &str,
+        prepared: &crate::plugin_install::Prepared,
+    ) -> Result<
+        Result<(String, crate::plugin_install::UpdateDiff), crate::plugin_install::InstallProblem>,
+        AtlasError,
+    > {
+        use crate::plugin_install::{InstallProblem, InstallProblemCode};
+        let (installed, _) = discover(directory);
+        let Some(current) = installed.iter().find(|p| p.manifest.id == plugin) else {
+            return Err(AtlasError::new(ErrorCode::NotFound));
+        };
+        if prepared.manifest.id != plugin {
+            return Ok(Err(InstallProblem::new(
+                InstallProblemCode::DifferentPlugin,
+                format!(
+                    "This is the plugin {}, not {plugin}. An update must have the same ID.",
+                    prepared.manifest.id
+                ),
+            )));
+        }
+        let mut diff = crate::plugin_install::diff(&current.manifest, &prepared.manifest);
+        diff.previous_signer = install_record(&self.db, plugin)?.and_then(|r| r.signer_key_id);
+        diff.signer = prepared.signer_key_id.clone();
+        diff.content_sha256 = prepared.content_sha256.clone();
+        diff.archive_sha256 = prepared.archive_sha256.clone();
+        Ok(Ok((current.hash.clone(), diff)))
+    }
+
+    /// Applies an update the owner saw. The installed plugin must still be
+    /// the one compared (`previous_hash`). The old folder stays until the
+    /// new one is in place and its records are saved; any failure puts it
+    /// back. An update that asks for nothing new keeps the owner's review;
+    /// anything else leaves the plugin switched off until it is reviewed
+    /// again. Permissions for capabilities the update no longer requests
+    /// are removed; none are ever added.
+    pub fn plugin_apply_update(
+        &mut self,
+        directory: &Path,
+        plugin: &str,
+        prepared: &crate::plugin_install::Prepared,
+        previous_hash: &str,
+        allow_downgrade: bool,
+    ) -> Result<
+        Result<crate::plugin_install::UpdateDiff, crate::plugin_install::InstallProblem>,
+        AtlasError,
+    > {
+        use crate::plugin_install::{InstallProblem, InstallProblemCode, Integrity};
+        let (hash, diff) = match self.plugin_update_diff(directory, plugin, prepared)? {
+            Ok(found) => found,
+            Err(problem) => return Ok(Err(problem)),
+        };
+        let (installed, _) = discover(directory);
+        let current = installed
+            .iter()
+            .find(|p| p.manifest.id == plugin)
+            .ok_or_else(|| AtlasError::new(ErrorCode::NotFound))?;
+        if hash != previous_hash {
+            return Ok(Err(InstallProblem::new(
+                InstallProblemCode::ChangedSincePreview,
+                "The installed plugin changed after you checked this update. Check the update again.",
+            )));
+        }
+        if diff.downgrade && !allow_downgrade {
+            return Ok(Err(InstallProblem::new(
+                InstallProblemCode::Downgrade,
+                format!(
+                    "Version {} is older than the installed {}. Confirm the downgrade to apply it.",
+                    diff.to_version, diff.from_version
+                ),
+            )));
+        }
+        let folder = current.folder.clone();
+        let previous_record = install_record(&self.db, plugin)?;
+        let files_were_changed = previous_record
+            .as_ref()
+            .is_some_and(|r| r.integrity == Integrity::Changed);
+        let parked = crate::plugin_install::replace(directory, &folder, prepared)?;
+        let new_hash = crate::plugin_install::manifest_hash(prepared);
+        let keeps_review = !diff.needs_review && !files_were_changed;
+        let now = Utc::now().to_rfc3339();
+        let saved = (|| -> Result<(), AtlasError> {
+            let transaction = self.db.transaction().map_err(sql_error)?;
+            transaction
+                .execute("DELETE FROM plugin_install WHERE plugin_id=?", [plugin])
+                .map_err(sql_error)?;
+            transaction
+                .execute(
+                    "INSERT INTO plugin_install VALUES(?,?,?,?,?,?,?,?,?,?)",
+                    params![
+                        plugin,
+                        folder,
+                        name(prepared.source_kind),
+                        prepared.source,
+                        prepared.content_sha256,
+                        prepared.archive_sha256,
+                        prepared.signer_key_id,
+                        now,
+                        name(Integrity::Verified),
+                        now
+                    ],
+                )
+                .map_err(sql_error)?;
+            if keeps_review {
+                // The owner already reviewed everything this version asks
+                // for: the review carries over to its manifest.
+                transaction
+                    .execute(
+                        "UPDATE plugin_state SET manifest_hash=? WHERE plugin_id=? AND manifest_hash=?",
+                        params![new_hash, plugin, hash],
+                    )
+                    .map_err(sql_error)?;
+            } else if files_were_changed {
+                transaction
+                    .execute("DELETE FROM plugin_state WHERE plugin_id=?", [plugin])
+                    .map_err(sql_error)?;
+            }
+            // Otherwise the recorded review is for the old manifest, so the
+            // plugin shows as changed since review and stays off.
+            for capability in &diff.removed_capabilities {
+                transaction
+                    .execute(
+                        "DELETE FROM plugin_grant WHERE plugin_id=? AND capability=?",
+                        params![plugin, name(*capability)],
+                    )
+                    .map_err(sql_error)?;
+            }
+            let detail = format!(
+                "{} to {}{}{}",
+                diff.from_version,
+                diff.to_version,
+                if diff.downgrade { ", downgrade" } else { "" },
+                if keeps_review {
+                    ""
+                } else {
+                    ", needs your review"
+                }
+            );
+            record(
+                &transaction,
+                (plugin, &prepared.manifest.name),
+                None,
+                ACTION_UPDATE,
+                ActivityOutcome::Done,
+                &detail,
+            )?;
+            transaction.commit().map_err(sql_error)
+        })();
+        match saved {
+            Ok(()) => {
+                let _ = std::fs::remove_dir_all(&parked);
+                Ok(Ok(diff))
+            }
+            Err(error) => {
+                crate::plugin_install::restore(directory, &folder, &parked);
+                Err(error)
+            }
+        }
+    }
+
+    /// Logs an update that was refused or failed. The installed version is
+    /// unchanged.
+    pub fn plugin_update_failed(
+        &mut self,
+        directory: &Path,
+        plugin: &str,
+        why: &str,
+    ) -> Result<(), AtlasError> {
+        let (installed, _) = discover(directory);
+        let label = installed
+            .iter()
+            .find(|p| p.manifest.id == plugin)
+            .map_or(plugin.to_owned(), |p| p.manifest.name.clone());
+        record(
+            &self.db,
+            (plugin, &label),
+            None,
+            ACTION_UPDATE,
+            ActivityOutcome::Failed,
+            why,
+        )
     }
 
     /// Every pack badge to draw: the plugin is enabled and unchanged, and

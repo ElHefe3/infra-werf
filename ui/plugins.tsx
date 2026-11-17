@@ -5,7 +5,7 @@ import { commandLine } from "./plugin-data";
 import type { PackCommand } from "./contracts.gen";
 import { createWorkspaceClient } from "./workspace-client";
 import { errorMessage } from "./map-model";
-import { InstallForm, InstallRecord } from "./plugin-install";
+import { InstallForm, InstallRecord, UpdatePanel } from "./plugin-install";
 
 // Plugin permissions (S12/F20/T041). The Rust core finds plugins, stores what
 // the owner allowed and enforces it; these screens only show and edit that.
@@ -35,7 +35,7 @@ const REFUSAL: Record<Refusal, string> = {
 const OWNER_ACTION: Record<string, string> = {
   enable: "Enabled by you", disable: "Disabled by you", set_permissions: "Permissions set by you", revoke_trusted_automation: "Trusted automation revoked by you",
   all_plugins_off: "All plugins turned off by you", all_plugins_on: "Plugins turned back on by you",
-  install: "Installed by you", remove: "Removed by you, with its permissions",
+  install: "Installed by you", remove: "Removed by you, with its permissions", update: "Updated by you",
 };
 const SOURCE: Record<string, string> = { folder: "From a folder", archive: "From an archive file", address: "From an HTTPS address" };
 const RUN_OUTCOME: Record<string, string> = { done: "Finished", cancelled: "Cancelled: its permissions changed while it ran", failed: "Failed: nothing was read", refused: "Refused: the plugin is not installed" };
@@ -52,7 +52,7 @@ export function describeActivity(entry: PluginActivity): { action: string; outco
   if (entry.action === "open_app") return { action: entry.outcome === "refused" ? "Asked to open an application" : `Opened its application "${entry.detail}"`, outcome: ({ done: "Opened through a private tunnel", cancelled: "Closed: its permissions changed while it opened", failed: "Failed: no tunnel was opened" } as Record<string, string>)[entry.outcome] ?? entry.outcome };
   if (entry.action === "run_command") return { action: entry.outcome === "refused" ? "Asked to run a command" : `Ran its command "${entry.detail}"`, outcome: RUN_OUTCOME[entry.outcome] ?? entry.outcome };
   const owner = OWNER_ACTION[entry.action];
-  if (owner) return { action: owner, outcome: entry.action === "enable" ? trustLabel(entry.detail as TrustLevel) : entry.action === "set_permissions" ? (entry.detail || "Everything withdrawn") : entry.action === "revoke_trusted_automation" ? "Now: changes with confirmation" : entry.action === "install" ? `${SOURCE[entry.detail] ?? entry.detail} · disabled until you enable it` : "" };
+  if (owner) return { action: owner, outcome: entry.action === "enable" ? trustLabel(entry.detail as TrustLevel) : entry.action === "set_permissions" ? (entry.detail || "Everything withdrawn") : entry.action === "revoke_trusted_automation" ? "Now: changes with confirmation" : entry.action === "install" ? `${SOURCE[entry.detail] ?? entry.detail} · disabled until you enable it` : entry.action === "update" ? (entry.outcome === "failed" ? `Not applied (${entry.detail}); the installed version is unchanged` : `Version ${entry.detail}`) : "" };
   const outcome = entry.outcome === "allowed" ? "Allowed" : entry.outcome === "needs_confirmation" ? "Allowed after your confirmation" : `Refused: ${REFUSAL[entry.detail as Refusal] ?? entry.detail}`;
   return { action: `Asked to use ${entry.action}`, outcome };
 }
@@ -133,6 +133,7 @@ function PluginPage({ plugin, servers, busy, run, back, leave, allOff, activity 
 
     <h5>Recent activity</h5>
     <ActivityTable entries={activity} servers={servers} label={`${plugin.name} recent activity`} />
+    <UpdatePanel pluginId={plugin.id} name={plugin.name} busy={busy} updated={message => void run(client.plugins, message)} />
     <h5>Remove</h5>
     <RemovePlugin name={plugin.name} folder={plugin.folder} busy={busy} run={run} done={leave} />
   </section>;
