@@ -53,7 +53,7 @@ Stop if installation would need to run plugin-supplied code.
 
 ## T046 — Updates that re-ask when capabilities grow
 
-<!-- atlas-ticket: {"id":"T046","feature":"F22","status":"todo","depends_on":["T045"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T046","feature":"F22","status":"done","depends_on":["T045"],"evidence":"../evidence/T046-acceptance.md"} -->
 
 ### Outcome and included work
 
@@ -76,9 +76,9 @@ Keep the previous version until the new one validates. Show a capability differe
 
 ### Acceptance criteria
 
-- [ ] An update requesting a new capability stays inactive until reviewed.
-- [ ] An update with the same or fewer capabilities applies and is logged.
-- [ ] A failed update leaves the previous version working.
+- [x] An update requesting a new capability stays inactive until reviewed.
+- [x] An update with the same or fewer capabilities applies and is logged.
+- [x] A failed update leaves the previous version working.
 
 ### Verification
 
@@ -86,7 +86,7 @@ Fixture plugins at two versions for each case.
 
 ### Evidence and closure
 
-None yet.
+Accepted on `379bb0e`: [T046 acceptance](../evidence/T046-acceptance.md). All three criteria are met with fixture plugins at two versions for each case, in core tests and the new `plugin-update` native suite. A new review is also required for any new or changed command, application or access, not only new capabilities. No separate review pass was run.
 
 ### Stop conditions
 
