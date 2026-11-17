@@ -16,7 +16,7 @@ Context: Builds on the isolated window proven for remote applications, where con
 
 ## T047 — Isolated plugin view with a message API
 
-<!-- atlas-ticket: {"id":"T047","feature":"F23","status":"todo","depends_on":["T045"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T047","feature":"F23","status":"done","depends_on":["T045"],"evidence":"../evidence/T047-acceptance.md"} -->
 
 ### Outcome and included work
 
@@ -34,10 +34,10 @@ Serve plugin assets from a per-plugin origin with a strict content security poli
 
 ### Acceptance criteria
 
-- [ ] A fixture view renders and reads only the observations its grants allow.
-- [ ] Attempts to reach IPC, other origins or ungranted data fail and are logged.
-- [ ] Closing, Lock and the kill switch tear the view down.
-- [ ] The message API is documented and versioned.
+- [x] A fixture view renders and reads only the observations its grants allow.
+- [x] Attempts to reach IPC, other origins or ungranted data fail and are logged.
+- [x] Closing, Lock and the kill switch tear the view down.
+- [x] The message API is documented and versioned.
 
 ### Verification
 
@@ -45,7 +45,7 @@ Hostile fixture view attempting each escape; native journey; independent review 
 
 ### Evidence and closure
 
-None yet.
+Accepted on `bec7d39`: [T047 acceptance](../evidence/T047-acceptance.md). Owner decision [D059](../discovery/D059-plugin-views-tab-confirm-and-review.md) first. All four criteria are met in the new `plugin-views` native suite with a hostile view. An independent review found one high (WebRTC), three medium and other findings; all but two informational ones were fixed and re-tested. Remaining: WebRTC is held by the guard script only, and a local program can still deny a view service.
 
 ### Stop conditions
 
