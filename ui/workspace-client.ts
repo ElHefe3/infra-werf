@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { MonitoringState, MonitoringPolicy, TunnelInfo, TunnelRequest, AppDiscovery, ExtensionCatalogue, PluginsState, PluginActivityLog, TrustLevel, Capability, PackServerState, PackMapState, PackAppsState, InstallRequest, InstallReport, UpdatePreview } from "./contracts.gen";
+import type { MonitoringState, MonitoringPolicy, TunnelInfo, TunnelRequest, AppDiscovery, ExtensionCatalogue, PluginsState, PluginActivityLog, TrustLevel, Capability, PackServerState, PackMapState, PackAppsState, InstallRequest, InstallReport, UpdatePreview, PluginViewsState, ViewActionState } from "./contracts.gen";
 import { CONTRACT_VERSION, type AddRelationship, type AddServer, type MapState, type UpdateServer, type WorkspaceStatus, type OperationTicket, type SshVerification, type FileSession, type FileAction, type FileResult, type FileChange, type FileMutationPreview, type FileMutationReceipt, type LocalSelection, type TransferView, type ElevationPreview, type ElevationReceipt, type ProtectedPlacementRequest, type ProtectedPlacementStage, type ProtectedPlacementReceipt, type HealthProbeConfig, type HealthSnapshot, type InventoryRefreshResult, type TerminalPoll, type WorkloadInspection, type WorkloadAction, type WorkloadControlPreview, type WorkloadControlReceipt } from "./contracts.gen.ts";
 
 export type NativeTransport = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
@@ -38,6 +38,12 @@ export function createWorkspaceClient(transport: NativeTransport = invoke) {
     packMap: () => request<PackMapState>("pack_map"),
     packApps: (serverId: string) => request<PackAppsState>("pack_apps", { serverId }),
     openPackApp: (serverId: string, pluginId: string, contributionId: string) => request<TunnelInfo>("pack_app_open", { serverId, pluginId, contributionId }),
+    pluginViews: (serverId: string) => request<PluginViewsState>("plugin_views", { serverId }),
+    openPluginView: (serverId: string, pluginId: string, contributionId: string, bounds: { x: number; y: number; width: number; height: number }) => transport<string>("plugin_view_open", { serverId, pluginId, contributionId, bounds }),
+    pluginViewBounds: (label: string, bounds: { x: number; y: number; width: number; height: number } | null) => transport<void>("plugin_view_bounds", { label, bounds }),
+    closePluginView: (label: string) => transport<void>("plugin_view_close", { label }),
+    openPluginViews: () => transport<{ label: string; plugin_id: string; contribution_id: string; server_id: string }[]>("plugin_views_open"),
+    answerPluginView: (id: string, run: boolean) => transport<ViewActionState>("plugin_view_answer", { id, run }),
     packState: (serverId: string) => request<PackServerState>("pack_state", { serverId }),
     runPack: (serverId: string, pluginId: string, contributionId: string, parameters: Record<string, string>) => request<PackServerState>("pack_run", { serverId, pluginId, contributionId, parameters }),
     setPluginGrant: (pluginId: string, serverId: string, capabilities: Capability[]) => request<PluginsState>("plugin_set_grant", { pluginId, serverId, capabilities }),

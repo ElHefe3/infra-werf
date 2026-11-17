@@ -83,6 +83,7 @@ Each contribution:
 | `app` | for `remote_app` | The application to open: `port` and `path` on the server's own localhost. Needs `api_version` 2. Defined in [packs](packs.md#applications). |
 | `badge` | no | For a `server_badge`: the `observation` it shows, the `id` of a command in the same manifest. Needs `api_version` 2. Defined in [packs](packs.md#badges). |
 | `relationship` | no | For a `relationship_kind`: its `line` and `color`. Needs `api_version` 2. Defined in [packs](packs.md#relationship-kinds). |
+| `view` | no | For a `workspace_tab`: the plugin's own page, `entry`, shown in an isolated view. Needs `api_version` 2. Defined in [views](views.md). |
 
 The file is UTF-8 JSON, 64 KiB at most.
 
@@ -169,6 +170,7 @@ Each problem has a code, the field it concerns and a sentence. Codes are part of
 | `invalid_badge` | A `badge` is on another point, in a v1 manifest, or its `observation` is not a command in the same manifest that reads one value without parameters. |
 | `invalid_relationship_kind` | A `relationship` is on another point, or has a line or colour that is not in the lists. |
 | `invalid_workload_kind` | A `workload_kind` is not on a collector with a table extractor, or names a column the table does not have. |
+| `invalid_view` | A `view` is on another point, in a v1 manifest, or its `entry` is not a plain path inside the plugin ending in `.html`. |
 
 ## Compatibility rule
 
@@ -186,6 +188,7 @@ The plugin API version is one whole number.
 - A contribution may have a `command` ([packs](packs.md)), at the `collector` and `health_check` points only.
 - A `health_check` may use `ssh_session` and `run_approved_command`. In a v1 manifest it may still use only `network_probe`.
 - Two new extension points, `remote_app` and `relationship_kind`, and four new contribution fields: `workload_kind`, `app`, `badge` and `relationship` ([packs](packs.md)).
-- Fourteen new error codes, from `invalid_command` to `invalid_workload_kind`.
+- A `workspace_tab` may carry a `view`, its own page in an isolated view ([views](views.md)).
+- Fifteen new error codes, from `invalid_command` to `invalid_view`.
 
 Nothing was removed and no v1 rule changed, so a v1 manifest means what it always did.

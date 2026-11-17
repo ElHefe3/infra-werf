@@ -1,0 +1,45 @@
+{
+  "id": "org.example.host-dashboard",
+  "name": "Host dashboard",
+  "version": "1.0.0",
+  "api_version": 2,
+  "description": "A small page showing this plugin's readings for a server, and a button that asks to read the kernel version.",
+  "author": "Example Author",
+  "license": "MIT",
+  "capabilities": [
+    "read_saved_state",
+    "ssh_session",
+    "run_approved_command"
+  ],
+  "contributions": [
+    {
+      "id": "kernel",
+      "point": "collector",
+      "title": "Kernel version",
+      "capabilities": [
+        "ssh_session",
+        "run_approved_command"
+      ],
+      "command": {
+        "argv": [
+          "uname",
+          "-r"
+        ],
+        "extract": {
+          "kind": "line"
+        }
+      }
+    },
+    {
+      "id": "dashboard",
+      "point": "workspace_tab",
+      "title": "Host dashboard",
+      "capabilities": [
+        "read_saved_state"
+      ],
+      "view": {
+        "entry": "view/index.html"
+      }
+    }
+  ]
+}

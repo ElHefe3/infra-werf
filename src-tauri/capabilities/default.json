@@ -1,7 +1,13 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "foundation",
-  "description": "Atlas workspace: core window/event capabilities, no shell or filesystem plugins",
-  "windows": ["main"],
-  "permissions": ["core:default", "core:window:allow-close"]
+  "description": "Atlas workspace: core window/event capabilities for InfraWerf's own interface only (the main webview, never a plugin view); no shell or filesystem plugins",
+  "windows": [],
+  "permissions": [
+    "core:default",
+    "core:window:allow-close"
+  ],
+  "webviews": [
+    "main"
+  ]
 }

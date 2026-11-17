@@ -11,6 +11,8 @@ import { MonitoringHub, activeMap, liveStatus } from "./live-monitoring";
 import { bindExtensions, DEFAULT_TAB_FOOTER, ExtensionsContext, PackMapContext, ServerBadges, TAB, useExtensions, type BoundExtensions, type WorkspaceContext } from "./extensions";
 import { date, memory, Notice, SavedInventory } from "./workspace-parts";
 import { SettingsScreen } from "./app-settings";
+import { Dialog } from "./dialog";
+import { PluginActionDialog, PluginViewPanel, usePluginViews, viewTabId } from "./plugin-view";
 import { MenuSystem, useMenu } from "./menu";
 import type { View } from "./menu-model";
 import type { MonitoringState, PackMapState } from "./contracts.gen";
@@ -85,14 +87,6 @@ function MapCanvas({ state, packs, selected, query, busy, select, open, move, co
   </div>;
 }
 
-function Dialog({ title, children, close, busy = false, wide = false }: { title: string; children: React.ReactNode; close: () => void; busy?: boolean; wide?: boolean }) {
-  const ref = useRef<HTMLDialogElement>(null);
-  useEffect(() => { const dialog = ref.current!; dialog.showModal(); return () => dialog.close(); }, []);
-  return <dialog ref={ref} className={wide ? "workspace-dialog" : "form-dialog"} aria-label={title} onCancel={event => { event.preventDefault(); if (!busy) close(); }}>
-    <div className="dialog-title"><div><p className="eyebrow">INFRAWERF WORKSPACE</p><h2>{title}</h2></div><button className="icon-button" aria-label="Close dialog" disabled={busy} onClick={close}>×</button></div>
-    {children}
-  </dialog>;
-}
 
 
 function ServerWorkspace({ server, state, close, edit, reload, openPlugin, initialTab = TAB.services }: { server: MapServer; state: MapState; close: () => void; edit: () => void; reload: () => Promise<void>; openPlugin: (id: string) => void; initialTab?: WorkspaceTab }) {
@@ -118,14 +112,18 @@ function ServerWorkspace({ server, state, close, edit, reload, openPlugin, initi
       setRefreshMessage(`Inventory refresh failed. The last saved observation was retained. ${errorMessage(failure)}`);
     } finally { reportBusy("inventory", false); setRefreshing(false); }
   };
-  const active = extensions.tabs.find(entry => entry.contribution.id === tab) ?? extensions.tabs[0];
+  const views = usePluginViews(server.id);
+  const activeView = views.find(view => viewTabId(view) === tab);
+  const active = activeView ? undefined : extensions.tabs.find(entry => entry.contribution.id === tab) ?? extensions.tabs[0];
   const context: WorkspaceContext = { server, state, busy: checkingSsh, reportBusy, refreshInventory, refreshing, filter, setFilter, transfers, openTab: setTab, edit, openPlugin, settings: extensions.settings };
   return <Dialog title={server.name} close={close} wide busy={checkingSsh}><div className="workspace-server-line"><span>{server.host}</span><span>{observedLabel(server)} · {date(server.inventory?.collected_at)}</span></div>
-    <div className="workspace-tabs" role="tablist" aria-label="Server workspace">{extensions.tabs.map(({ contribution }) => <button key={contribution.id} role="tab" disabled={checkingSsh} aria-selected={active?.contribution.id === contribution.id} onClick={() => setTab(contribution.id)}>{contribution.title}</button>)}</div>
-    <section className="workspace-body" role="tabpanel" aria-label={active?.contribution.title}>
+    <div className="workspace-tabs" role="tablist" aria-label="Server workspace">{extensions.tabs.map(({ contribution }) => <button key={contribution.id} role="tab" disabled={checkingSsh} aria-selected={active?.contribution.id === contribution.id} onClick={() => setTab(contribution.id)}>{contribution.title}</button>)}
+      {views.map(view => <button key={viewTabId(view)} role="tab" className="plugin-tab" disabled={checkingSsh} aria-selected={activeView === view} title={`From the plugin ${view.plugin_name}`} onClick={() => setTab(viewTabId(view))}>{view.title}</button>)}</div>
+    <section className="workspace-body" role="tabpanel" aria-label={activeView?.title ?? active?.contribution.title}>
       {refreshMessage && <p className={`inventory-refresh-status ${refreshFailure ? "form-error" : "muted"}`} role={refreshFailure ? "alert" : "status"}>{refreshMessage}</p>}
+      {activeView && <PluginViewPanel key={viewTabId(activeView)} server={server} view={activeView} />}
       {active && <React.Fragment key={active.contribution.id}>{active.renderer.render(context)}</React.Fragment>}
-    </section><footer className="workspace-footer">{active?.renderer.footer ?? DEFAULT_TAB_FOOTER}</footer>
+    </section><footer className="workspace-footer">{activeView ? "Plugin view · its own page, isolated from InfraWerf · closes with this workspace" : active?.renderer.footer ?? DEFAULT_TAB_FOOTER}</footer>
   </Dialog>;
 }
 
@@ -242,6 +240,7 @@ function App() {
         : modal.kind === "relationship" ? <form onSubmit={formSubmit}><p className="muted">Describe a directed connection between servers. This only updates the map.</p><label>From<select aria-label="From" name="source" defaultValue={modal.source} required onChange={e => setModalState({ ...modal, source: e.target.value })}>{state.servers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label><label>To<select aria-label="To" name="target" defaultValue={modal.target} required onChange={e => setModalState({ ...modal, target: e.target.value })}>{state.servers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label><RelationshipKindField kinds={kindsBetween(packs?.relationship_kinds ?? [], modal.source, modal.target)} /><label>Relationship label<input name="label" maxLength={80} placeholder="e.g. Deploys to" autoFocus /></label><div className="form-actions"><button type="button" disabled={busy} onClick={() => setModal(null)}>Cancel</button><button className="primary" disabled={busy}>{busy ? "Saving…" : "Save relationship"}</button></div></form>
           : <><p>{modal.kind === "remove-server" ? `Permanently delete ${editServer?.name}: ${workloads(editServer!).length} saved workloads, ${state.edges.filter(e=>e.source===modal.id || e.target===modal.id).length} relationships and ${state.events.filter(e=>e.server_id===modal.id).length} retained history events? A configured alias may be rediscovered as a new candidate. Archive or ignore it in Servers to retain its history. No remote data is changed.` : `Remove the “${modal.edge.label || "unlabelled"}” diagram relationship? Server configuration will be unchanged.`}</p><div className="form-actions"><button disabled={busy} onClick={() => setModal(null)}>Cancel</button><button className="danger-button" disabled={busy} onClick={() => void mutate(() => modal.kind === "remove-server" ? client.remove(modal.id) : client.disconnect(modal.edge.id), "Map entry removed.", true)}>{busy ? "Removing…" : "Remove"}</button></div></>}
     </Dialog>}
+    <PluginActionDialog />
   </div></PackMapContext.Provider></ExtensionsContext.Provider>;
 }
 

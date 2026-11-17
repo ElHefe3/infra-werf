@@ -269,6 +269,12 @@ line?: LineStyle | null,
  * Defaults to `green`, the colour of a plain relationship.
  */
 color?: KindColor | null, };
+export type PluginViewSpec = {
+/**
+ * The page to open, relative to the plugin's folder, ending in `.html`,
+ * for example `view/index.html`.
+ */
+entry: string, };
 export type PackOutcome = "ok" | "command_failed" | "unreadable" | "output_limit" | "timed_out";
 export type PackHealth = "healthy" | "unhealthy" | "unknown";
 export type PackResult = { outcome: PackOutcome,
@@ -412,6 +418,16 @@ export type UpdatePreview = { contract_version: number,
  * Pass this to apply exactly what was checked and shown.
  */
 token: string | null, plugin_id: string, plugin_name: string, diff: UpdateDiff | null, problem: InstallProblem | null, };
+export type ViewActionState = "waiting" | "declined" | "done" | "failed" | "cancelled";
+export type ViewActionRequest = { id: string, view: string, plugin_id: string, plugin_name: string, server_id: ServerId, server_name: string, contribution_id: string, title: string,
+/**
+ * The exact command, with `{name}` where a parameter goes.
+ */
+argv: Array<string>,
+/**
+ * Parameter name to the discovered workload's name, as chosen by the view.
+ */
+parameters: { [key in string]: string }, };
 export type TrustLevel = "read_only" | "confirm_changes" | "trusted_automation";
 export type CapabilityKind = "read" | "change" | "elevation";
 export type PluginStatus = "disabled" | "enabled" | "changed_since_review" | "files_changed";
@@ -430,7 +446,7 @@ export type PluginContributionView = { id: string, title: string, point: Extensi
 /**
  * The exact read-only command a pack contribution runs, if any.
  */
-command: PackCommand | null, workload_kind: PackWorkloadKind | null, app: PackApp | null, badge: PackBadge | null, relationship: PackRelationship | null, };
+command: PackCommand | null, workload_kind: PackWorkloadKind | null, app: PackApp | null, badge: PackBadge | null, relationship: PackRelationship | null, view: PluginViewSpec | null, };
 export type ServerGrant = { server_id: ServerId, capabilities: Array<Capability>, };
 export type PluginView = { id: string, name: string, version: string, api_version: number, description: string | null, author: string | null, license: string | null, homepage: string | null,
 /**
@@ -478,3 +494,5 @@ kept: number,
  * Newest first.
  */
 entries: Array<PluginActivity>, };
+export type PluginViewTab = { plugin_id: string, plugin_name: string, contribution_id: string, title: string, };
+export type PluginViewsState = { contract_version: number, server_id: ServerId, views: Array<PluginViewTab>, };

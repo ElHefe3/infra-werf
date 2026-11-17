@@ -460,6 +460,7 @@ pub fn typescript_contracts(config: &Config) -> String {
         crate::plugin::LineStyle::decl(config),
         crate::plugin::KindColor::decl(config),
         crate::plugin::PackRelationship::decl(config),
+        crate::plugin::PluginViewSpec::decl(config),
         PackOutcome::decl(config),
         PackHealth::decl(config),
         PackResult::decl(config),

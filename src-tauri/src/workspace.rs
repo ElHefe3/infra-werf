@@ -7,6 +7,7 @@ use atlas_core::*;
 mod monitoring;
 mod packs;
 mod tunnels;
+mod views;
 use atlas_core::{
     files::{
         FileAction, FileChange, FileMutationPreview, FileMutationReceipt, FileResult, FileSession,
@@ -27,6 +28,7 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
+pub use views::ViewBounds;
 struct LocalGrant {
     value: LocalTransfer,
     target: ServerTarget,
@@ -111,6 +113,7 @@ pub struct Workspace {
     live_contact: Mutex<()>,
     tunnels: Mutex<tunnels::Tunnels>,
     packs: packs::Packs,
+    views: views::Views,
     /// Updates checked and shown to the owner, by token (T046).
     updates: Mutex<HashMap<String, PendingUpdate>>,
 }
@@ -161,6 +164,7 @@ impl Workspace {
             tunnels: Mutex::new(tunnels::Tunnels::default()),
             packs: packs::Packs::default(),
             updates: Mutex::new(HashMap::new()),
+            views: views::Views::default(),
         });
         // The start-up check of installed plugins' files (T045). A store
         // that cannot open is reported where it is used.

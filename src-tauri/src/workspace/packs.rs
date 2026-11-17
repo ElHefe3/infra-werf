@@ -33,6 +33,8 @@ impl Workspace {
             observations.clear();
         }
         self.close_pack_tunnels();
+        // Plugin views close too, and their waiting requests are cancelled.
+        self.close_plugin_views();
     }
 
     /// One observation with its freshness as of now.

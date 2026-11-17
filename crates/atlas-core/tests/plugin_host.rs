@@ -1058,3 +1058,64 @@ fn pack_badges_apps_and_relationship_kinds_appear_only_where_the_owner_allowed_t
         .unwrap();
     assert_eq!(left, 0);
 }
+
+#[test]
+fn a_plugin_view_is_offered_only_where_the_owner_allowed_it() {
+    let mut f = fixture();
+    let example = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../examples/host-dashboard/infrawerf-plugin.json");
+    install(
+        &f.plugins,
+        "host-dashboard",
+        &std::fs::read_to_string(example).unwrap(),
+    );
+    let plugin = "org.example.host-dashboard";
+    let (alpha, beta) = (f.alpha.clone(), f.beta.clone());
+    let views = |f: &Fixture, server: &ServerId| -> Vec<String> {
+        f.store
+            .plugin_views(&f.plugins, server)
+            .unwrap()
+            .into_iter()
+            .map(|v| format!("{}:{}", v.tab.contribution_id, v.entry))
+            .collect()
+    };
+    assert!(views(&f, &alpha).is_empty());
+    f.store
+        .plugin_enable(&f.plugins, plugin, TrustLevel::ReadOnly)
+        .unwrap();
+    assert!(views(&f, &alpha).is_empty());
+    f.store
+        .plugin_set_grant(&f.plugins, plugin, &alpha, &[Capability::ReadSavedState])
+        .unwrap();
+    assert_eq!(views(&f, &alpha), ["dashboard:view/index.html"]);
+    assert!(views(&f, &beta).is_empty());
+    let source = f.store.plugin_views(&f.plugins, &alpha).unwrap().remove(0);
+    assert_eq!(source.folder, f.plugins.join("host-dashboard"));
+    // Turned off, disabled or withdrawn: gone.
+    f.store.plugins_set_all_off(true).unwrap();
+    assert!(views(&f, &alpha).is_empty());
+    f.store.plugins_set_all_off(false).unwrap();
+    assert_eq!(views(&f, &alpha).len(), 1);
+    f.store
+        .plugin_set_grant(&f.plugins, plugin, &alpha, &[])
+        .unwrap();
+    assert!(views(&f, &alpha).is_empty());
+    // What a view does is logged with only a fixed word and a host.
+    f.store
+        .plugin_view_event(
+            &f.plugins,
+            plugin,
+            &alpha,
+            ACTION_VIEW_BLOCKED,
+            ActivityOutcome::Refused,
+            "content_policy: connect-src https://example.com
+",
+        )
+        .unwrap();
+    let entry = f.store.plugin_activity(5).unwrap().entries.remove(0);
+    assert_eq!(entry.action, ACTION_VIEW_BLOCKED);
+    assert_eq!(
+        entry.detail,
+        "content_policy: connect-src https://example.com"
+    );
+}

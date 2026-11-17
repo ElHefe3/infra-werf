@@ -35,7 +35,7 @@ const REFUSAL: Record<Refusal, string> = {
 const OWNER_ACTION: Record<string, string> = {
   enable: "Enabled by you", disable: "Disabled by you", set_permissions: "Permissions set by you", revoke_trusted_automation: "Trusted automation revoked by you",
   all_plugins_off: "All plugins turned off by you", all_plugins_on: "Plugins turned back on by you",
-  install: "Installed by you", remove: "Removed by you, with its permissions", update: "Updated by you",
+  install: "Installed by you", remove: "Removed by you, with its permissions", update: "Updated by you", open_view: "View opened by you",
 };
 const SOURCE: Record<string, string> = { folder: "From a folder", archive: "From an archive file", address: "From an HTTPS address" };
 const RUN_OUTCOME: Record<string, string> = { done: "Finished", cancelled: "Cancelled: its permissions changed while it ran", failed: "Failed: nothing was read", refused: "Refused: the plugin is not installed" };
@@ -50,6 +50,8 @@ export function describeExtract(command: PackCommand): string {
 /** One log entry as two phrases: what happened and how it ended. */
 export function describeActivity(entry: PluginActivity): { action: string; outcome: string } {
   if (entry.action === "open_app") return { action: entry.outcome === "refused" ? "Asked to open an application" : `Opened its application "${entry.detail}"`, outcome: ({ done: "Opened through a private tunnel", cancelled: "Closed: its permissions changed while it opened", failed: "Failed: no tunnel was opened" } as Record<string, string>)[entry.outcome] ?? entry.outcome };
+  if (entry.action === "view_blocked") return { action: "Its view tried something not allowed", outcome: `Blocked: ${entry.detail}` };
+  if (entry.action === "view_request") return { action: `Its view asked to run "${entry.detail}"`, outcome: entry.outcome === "refused" ? "Refused: not allowed on this server" : "Shown to you to decide" };
   if (entry.action === "run_command") return { action: entry.outcome === "refused" ? "Asked to run a command" : `Ran its command "${entry.detail}"`, outcome: RUN_OUTCOME[entry.outcome] ?? entry.outcome };
   const owner = OWNER_ACTION[entry.action];
   if (owner) return { action: owner, outcome: entry.action === "enable" ? trustLabel(entry.detail as TrustLevel) : entry.action === "set_permissions" ? (entry.detail || "Everything withdrawn") : entry.action === "revoke_trusted_automation" ? "Now: changes with confirmation" : entry.action === "install" ? `${SOURCE[entry.detail] ?? entry.detail} · disabled until you enable it` : entry.action === "update" ? (entry.outcome === "failed" ? `Not applied (${entry.detail}); the installed version is unchanged` : `Version ${entry.detail}`) : "" };
@@ -100,6 +102,7 @@ function PluginPage({ plugin, servers, busy, run, back, leave, allOff, activity 
         {entry.command.parameters?.map(parameter => <small key={parameter.name}>{`{${parameter.name}}`} is a {parameter.source} you choose from that server’s inventory.</small>)}<small>{describeExtract(entry.command)} No shell reads the command, and it cannot use sudo.</small>{entry.workload_kind && <small>Shows each row as a workload named by its {entry.workload_kind.name_column} column{entry.workload_kind.state_column ? `, with its ${entry.workload_kind.state_column} as the state` : ""}.</small>}</span>}
         {entry.app && <span className="pack-shown">Opens <code aria-label={`${entry.title} address`}>localhost:{entry.app.port}{entry.app.path ?? "/"}</code> on the server, through the same private tunnel as any application, only when you press Open. It cannot reach another machine.</span>}
         {entry.badge && <span className="pack-shown"><small>Shows the latest result of “{plugin.contributions.find(other => other.id === entry.badge!.observation)?.title ?? entry.badge.observation}” on each server card. It never runs the command itself.</small></span>}
+        {entry.view && <span className="pack-shown"><small>Its own page, <code>{entry.view.entry}</code>, shown in a tab isolated from InfraWerf. It sees only what you allow it on a server, and anything it asks to run is shown to you first.</small></span>}
         {entry.relationship && <span className="pack-shown"><small>A {entry.relationship.line ?? "solid"} {entry.relationship.color ?? "green"} line you can choose when documenting a relationship. It applies nothing.</small></span>}</li>)}</ul>
 
     <h5>What it asks for</h5>

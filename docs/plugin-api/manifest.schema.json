@@ -417,6 +417,17 @@
           "description": "Display name, 40 characters at most.",
           "type": "string"
         },
+        "view": {
+          "description": "For a `workspace_tab`: a web page the plugin ships, shown in an\nisolated view (API v2).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PluginViewSpec"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "workload_kind": {
           "description": "For a `collector` whose command reads a table: present its rows as\nworkloads of a kind named by `title` (API v2).",
           "anyOf": [
@@ -595,6 +606,20 @@
           "type": "string",
           "const": "container"
         }
+      ]
+    },
+    "PluginViewSpec": {
+      "description": "A plugin's own web page for a workspace tab. It runs in an isolated\nview on its own origin, with no access to InfraWerf except the view\nmessage API, which is checked against the plugin's grants.",
+      "type": "object",
+      "properties": {
+        "entry": {
+          "description": "The page to open, relative to the plugin's folder, ending in `.html`,\nfor example `view/index.html`.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "entry"
       ]
     },
     "Separator": {

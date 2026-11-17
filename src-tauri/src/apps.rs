@@ -49,7 +49,7 @@ pub fn close_window(app: &AppHandle, tunnel_id: &str) {
 
 #[tauri::command]
 pub async fn tunnel_open(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     app: AppHandle,
     workspace: State<'_, Arc<Workspace>>,
     server_id: ServerId,
@@ -76,7 +76,7 @@ pub async fn tunnel_open(
 /// which application; the port and path come from the reviewed manifest.
 #[tauri::command]
 pub async fn pack_app_open(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     app: AppHandle,
     workspace: State<'_, Arc<Workspace>>,
     server_id: ServerId,
@@ -102,7 +102,7 @@ pub async fn pack_app_open(
 
 #[tauri::command]
 pub async fn tunnel_discover(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     server_id: ServerId,
 ) -> Result<AppDiscovery, AtlasError> {
@@ -116,7 +116,7 @@ pub async fn tunnel_discover(
 
 #[tauri::command]
 pub fn tunnel_close(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     app: AppHandle,
     workspace: State<'_, Arc<Workspace>>,
     tunnel_id: String,
@@ -131,7 +131,7 @@ pub fn tunnel_close(
 
 #[tauri::command]
 pub fn tunnel_close_all(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     app: AppHandle,
     workspace: State<'_, Arc<Workspace>>,
 ) -> Result<(), AtlasError> {
@@ -146,7 +146,7 @@ pub fn tunnel_close_all(
 
 #[tauri::command]
 pub fn tunnel_list(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
 ) -> Result<Vec<TunnelInfo>, AtlasError> {
     local_desktop(&window)?;
@@ -156,7 +156,7 @@ pub fn tunnel_list(
 
 #[tauri::command]
 pub fn tunnel_focus(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     app: AppHandle,
     workspace: State<'_, Arc<Workspace>>,
     tunnel_id: String,

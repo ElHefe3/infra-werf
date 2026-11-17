@@ -69,6 +69,12 @@ pub const ACTION_REMOVE: &str = "remove";
 /// A plugin was replaced by a newer or older version; the detail says the
 /// versions and whether it needs a new review.
 pub const ACTION_UPDATE: &str = "update";
+/// A plugin view was opened on a server; the detail is its contribution.
+pub const ACTION_OPEN_VIEW: &str = "open_view";
+/// A plugin view tried something that was blocked; the detail says what.
+pub const ACTION_VIEW_BLOCKED: &str = "view_blocked";
+/// A plugin view asked to run a command; the detail is the contribution.
+pub const ACTION_VIEW_REQUEST: &str = "view_request";
 /// A pack application was opened through a tunnel; the detail is its ID.
 pub const ACTION_OPEN_APP: &str = "open_app";
 
@@ -245,6 +251,34 @@ pub struct PluginContributionView {
     pub app: Option<crate::plugin::PackApp>,
     pub badge: Option<crate::plugin::PackBadge>,
     pub relationship: Option<crate::plugin::PackRelationship>,
+    pub view: Option<crate::plugin::PluginViewSpec>,
+}
+
+/// A plugin view tab the owner's settings admit on one server right now.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct PluginViewTab {
+    pub plugin_id: String,
+    pub plugin_name: String,
+    pub contribution_id: String,
+    pub title: String,
+}
+
+/// The plugin view tabs for one server.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct PluginViewsState {
+    pub contract_version: u32,
+    pub server_id: ServerId,
+    pub views: Vec<PluginViewTab>,
+}
+
+/// Where an admitted view's files are.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PluginViewSource {
+    pub tab: PluginViewTab,
+    pub folder: std::path::PathBuf,
+    pub entry: String,
 }
 
 /// A pack badge the owner's settings admit on one server right now, and
@@ -681,6 +715,76 @@ fn plugin_folder(directory: &Path, folder: &str) -> Result<std::path::PathBuf, A
 }
 
 impl Store {
+    /// Plugin views that may open on a server right now: the plugin is
+    /// enabled, unchanged and intact, and the owner allowed every capability
+    /// the view's contribution lists on that server. Nothing is logged.
+    pub fn plugin_views(
+        &self,
+        directory: &Path,
+        server: &ServerId,
+    ) -> Result<Vec<PluginViewSource>, AtlasError> {
+        let (installed, _) = discover(directory);
+        let mut found = Vec::new();
+        for plugin in &installed {
+            for entry in &plugin.manifest.contributions {
+                let Some(view) = &entry.view else { continue };
+                if admits(
+                    &self.db,
+                    &installed,
+                    &plugin.manifest.id,
+                    server,
+                    &entry.capabilities,
+                    false,
+                )? {
+                    found.push(PluginViewSource {
+                        tab: PluginViewTab {
+                            plugin_id: plugin.manifest.id.clone(),
+                            plugin_name: plugin.manifest.name.clone(),
+                            contribution_id: entry.id.clone(),
+                            title: entry.title.clone(),
+                        },
+                        folder: directory.join(&plugin.folder),
+                        entry: view.entry.clone(),
+                    });
+                }
+            }
+        }
+        Ok(found)
+    }
+
+    /// Logs something a plugin view did: it opened, asked to run a command,
+    /// or tried something that was blocked. `detail` is a fixed word and, for
+    /// a block, the scheme and host involved; never page content.
+    pub fn plugin_view_event(
+        &mut self,
+        directory: &Path,
+        plugin: &str,
+        server: &ServerId,
+        action: &str,
+        outcome: ActivityOutcome,
+        detail: &str,
+    ) -> Result<(), AtlasError> {
+        let (installed, _) = discover(directory);
+        let label = installed
+            .iter()
+            .find(|p| p.manifest.id == plugin)
+            .map_or("Unknown plugin".to_owned(), |p| p.manifest.name.clone());
+        let known = server_exists(&self.db, server)?;
+        let detail: String = detail
+            .chars()
+            .filter(|c| !c.is_control())
+            .take(160)
+            .collect();
+        record(
+            &self.db,
+            (plugin, &label),
+            known.then(|| server.as_str()),
+            action,
+            outcome,
+            &detail,
+        )
+    }
+
     /// Publishes a prepared plugin and records how it was installed. It is
     /// disabled: installing grants nothing. Refused if a plugin with the
     /// same ID is already there (updates are T046).
@@ -1326,6 +1430,7 @@ impl Store {
                         app: c.app.clone(),
                         badge: c.badge.clone(),
                         relationship: c.relationship.clone(),
+                        view: c.view.clone(),
                     })
                     .collect(),
                 grants: granted(&self.db, &manifest.id)?
@@ -1764,6 +1869,8 @@ pub fn typescript_contracts(config: &Config) -> String {
         ActivityOutcome::decl(config),
         PluginActivity::decl(config),
         PluginActivityLog::decl(config),
+        PluginViewTab::decl(config),
+        PluginViewsState::decl(config),
     ]
     .into_iter()
     .map(|d| format!("export {d}\n"))

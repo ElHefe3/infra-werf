@@ -102,6 +102,21 @@ pub struct ManifestContribution {
     /// For a `relationship_kind`: how the line is drawn (API v2).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub relationship: Option<PackRelationship>,
+    /// For a `workspace_tab`: a web page the plugin ships, shown in an
+    /// isolated view (API v2).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub view: Option<PluginViewSpec>,
+}
+
+/// A plugin's own web page for a workspace tab. It runs in an isolated
+/// view on its own origin, with no access to InfraWerf except the view
+/// message API, which is checked against the plugin's grants.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct PluginViewSpec {
+    /// The page to open, relative to the plugin's folder, ending in `.html`,
+    /// for example `view/index.html`.
+    pub entry: String,
 }
 
 /// An application a pack names for a server's Apps list. It always listens
@@ -687,6 +702,33 @@ fn check_additions(
         }
     }
 
+    if let Some(view) = &contribution.view {
+        let field = format!("{at}.view");
+        if contribution.point != WorkspaceTab {
+            issues.add(
+                ManifestRule::InvalidView,
+                field,
+                "Only a workspace_tab contribution has a \"view\".",
+            );
+        } else if !v2 {
+            issues.add(
+                ManifestRule::InvalidView,
+                field,
+                format!("A view {needs_v2}."),
+            );
+        } else if crate::plugin_install::clean_path(&view.entry).is_err()
+            || !view.entry.to_ascii_lowercase().ends_with(".html")
+            || view.entry.contains('\\')
+            || view.entry.split('/').any(|part| part.starts_with('.'))
+        {
+            issues.add(
+                ManifestRule::InvalidView,
+                format!("{field}.entry"),
+                "The entry is a path inside the plugin's folder, written with /, ending in .html, for example view/index.html.",
+            );
+        }
+    }
+
     if contribution.relationship.is_some() {
         let field = format!("{at}.relationship");
         if contribution.point != RelationshipKind {
@@ -842,10 +884,13 @@ pub enum ManifestRule {
     /// A workload kind is misplaced or malformed, or names a column the
     /// table does not have.
     InvalidWorkloadKind,
+    /// A view is misplaced, or its entry is not a plain relative path to an
+    /// `.html` file inside the plugin.
+    InvalidView,
 }
 
 impl ManifestRule {
-    pub const ALL: [ManifestRule; 40] = [
+    pub const ALL: [ManifestRule; 41] = [
         Self::MalformedJson,
         Self::TooLarge,
         Self::WrongType,
@@ -886,6 +931,7 @@ impl ManifestRule {
         Self::InvalidBadge,
         Self::InvalidRelationshipKind,
         Self::InvalidWorkloadKind,
+        Self::InvalidView,
     ];
 
     /// The stable code, as written in output and documentation.
@@ -947,6 +993,7 @@ enum Kind {
     App,
     Badge,
     Relationship,
+    View,
 }
 impl Kind {
     fn expects(self) -> &'static str {
@@ -960,6 +1007,7 @@ impl Kind {
             Kind::App => "an application object",
             Kind::Badge => "a badge object",
             Kind::Relationship => "a relationship style object",
+            Kind::View => "a view object",
         }
     }
 }
@@ -989,6 +1037,7 @@ const CONTRIBUTION_FIELDS: &[(&str, Kind, bool)] = &[
     ("app", Kind::App, false),
     ("badge", Kind::Badge, false),
     ("relationship", Kind::Relationship, false),
+    ("view", Kind::View, false),
 ];
 
 /// Field names and required flags, for the schema consistency test.
@@ -1135,7 +1184,7 @@ fn shape(value: &Value, path: &str, fields: &[(&str, Kind, bool)], issues: &mut 
                     );
                 }
             }
-            Kind::WorkloadKind | Kind::App | Kind::Badge | Kind::Relationship => {
+            Kind::WorkloadKind | Kind::App | Kind::Badge | Kind::Relationship | Kind::View => {
                 let (rule, read) = match kind {
                     Kind::WorkloadKind => (
                         ManifestRule::InvalidWorkloadKind,
@@ -1148,6 +1197,10 @@ fn shape(value: &Value, path: &str, fields: &[(&str, Kind, bool)], issues: &mut 
                     Kind::Badge => (
                         ManifestRule::InvalidBadge,
                         serde_json::from_value::<PackBadge>(found.clone()).err(),
+                    ),
+                    Kind::View => (
+                        ManifestRule::InvalidView,
+                        serde_json::from_value::<PluginViewSpec>(found.clone()).err(),
                     ),
                     _ => (
                         ManifestRule::InvalidRelationshipKind,

@@ -9,7 +9,7 @@ use atlas_core::monitoring::{MonitoringPolicy, MonitoringState};
 
 #[tauri::command]
 async fn monitoring_accept_identity(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     server_id: ServerId,
     previous: String,
@@ -41,7 +41,7 @@ use workspace::{Paths, Workspace};
 
 #[tauri::command]
 fn monitoring_state(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
 ) -> Result<MonitoringState, AtlasError> {
     local_desktop(&window)?;
@@ -49,7 +49,7 @@ fn monitoring_state(
 }
 #[tauri::command]
 async fn monitoring_configure(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     server_id: ServerId,
     policy: MonitoringPolicy,
@@ -65,7 +65,7 @@ async fn monitoring_configure(
 }
 #[tauri::command]
 fn monitoring_history_limit(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     limit: u32,
 ) -> Result<MonitoringState, AtlasError> {
@@ -75,7 +75,7 @@ fn monitoring_history_limit(
 }
 #[tauri::command]
 async fn monitoring_discover(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
 ) -> Result<MonitoringState, AtlasError> {
     local_desktop(&window)?;
@@ -88,8 +88,95 @@ async fn monitoring_discover(
     .map_err(|_| AtlasError::new(ErrorCode::IoFailure))?
 }
 
-fn local_desktop(window: &tauri::WebviewWindow) -> Result<(), AtlasError> {
-    if !cfg!(desktop) || window.label() != "main" {
+/// Events go to InfraWerf's own interface only, never to a plugin view in
+/// the same window.
+fn main_webview() -> tauri::EventTarget {
+    tauri::EventTarget::Webview {
+        label: "main".into(),
+    }
+}
+
+/// Plugin view tabs for one server (T047).
+#[tauri::command]
+fn plugin_views(
+    window: tauri::Webview,
+    workspace: State<'_, Arc<Workspace>>,
+    server_id: ServerId,
+) -> Result<atlas_core::plugin_host::PluginViewsState, AtlasError> {
+    local_desktop(&window)?;
+    workspace.plugin_views(&server_id)
+}
+/// Opens a plugin view over the given area of the main window.
+#[tauri::command]
+async fn plugin_view_open(
+    window: tauri::Webview,
+    workspace: State<'_, Arc<Workspace>>,
+    server_id: ServerId,
+    plugin_id: String,
+    contribution_id: String,
+    bounds: workspace::ViewBounds,
+) -> Result<String, AtlasError> {
+    local_desktop(&window)?;
+    let workspace = workspace.inner().clone();
+    let main = window.window();
+    tauri::async_runtime::spawn_blocking(move || {
+        workspace.open_plugin_view(&main, &server_id, &plugin_id, &contribution_id, bounds)
+    })
+    .await
+    .map_err(|_| AtlasError::new(ErrorCode::IoFailure))?
+}
+/// Moves a plugin view, or hides it while InfraWerf shows something over it.
+#[tauri::command]
+fn plugin_view_bounds(
+    window: tauri::Webview,
+    workspace: State<'_, Arc<Workspace>>,
+    label: String,
+    bounds: Option<workspace::ViewBounds>,
+) -> Result<(), AtlasError> {
+    local_desktop(&window)?;
+    workspace.plugin_view_bounds(&label, bounds)
+}
+/// Closes a plugin view: closing its tab, Lock, or closing the workspace.
+#[tauri::command]
+fn plugin_view_close(
+    window: tauri::Webview,
+    workspace: State<'_, Arc<Workspace>>,
+    label: String,
+) -> Result<(), AtlasError> {
+    local_desktop(&window)?;
+    workspace.close_plugin_view(&label);
+    Ok(())
+}
+/// The plugin views open now.
+#[tauri::command]
+fn plugin_views_open(
+    window: tauri::Webview,
+    workspace: State<'_, Arc<Workspace>>,
+) -> Result<Vec<serde_json::Value>, AtlasError> {
+    local_desktop(&window)?;
+    Ok(workspace.open_plugin_views())
+}
+/// The owner's answer to a view's request, given in InfraWerf's own dialog.
+#[tauri::command]
+async fn plugin_view_answer(
+    window: tauri::Webview,
+    workspace: State<'_, Arc<Workspace>>,
+    id: String,
+    run: bool,
+) -> Result<atlas_core::plugin_view::ViewActionState, AtlasError> {
+    local_desktop(&window)?;
+    let workspace = workspace.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || workspace.answer_view_action(&id, run))
+        .await
+        .map_err(|_| AtlasError::new(ErrorCode::IoFailure))?
+}
+
+/// Admits a command only from InfraWerf's own interface: the webview
+/// labelled "main" in the window labelled "main", showing the bundled app.
+/// Plugin views are child webviews of the same window (T047), so the
+/// window's label alone is not enough.
+pub(crate) fn local_desktop(window: &tauri::Webview) -> Result<(), AtlasError> {
+    if !cfg!(desktop) || window.label() != "main" || window.window().label() != "main" {
         return Err(AtlasError::new(ErrorCode::Denied));
     }
     let url = window
@@ -109,7 +196,7 @@ fn local_desktop(window: &tauri::WebviewWindow) -> Result<(), AtlasError> {
 }
 #[tauri::command]
 fn ssh_prepare(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     server_id: ServerId,
 ) -> Result<OperationTicket, AtlasError> {
@@ -118,7 +205,7 @@ fn ssh_prepare(
 }
 #[tauri::command]
 async fn ssh_verify(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     server_id: ServerId,
     operation_id: OperationId,
@@ -131,7 +218,7 @@ async fn ssh_verify(
 }
 #[tauri::command]
 fn ssh_cancel(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     operation_id: OperationId,
 ) -> Result<(), AtlasError> {
@@ -141,7 +228,7 @@ fn ssh_cancel(
 
 #[tauri::command]
 async fn health_configure(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     server_id: ServerId,
     config: HealthProbeConfig,
@@ -154,7 +241,7 @@ async fn health_configure(
 }
 #[tauri::command]
 fn health_status(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     server_id: ServerId,
 ) -> Result<HealthSnapshot, AtlasError> {
@@ -163,7 +250,7 @@ fn health_status(
 }
 #[tauri::command]
 fn health_cancel(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     server_id: ServerId,
 ) -> Result<(), AtlasError> {
@@ -173,7 +260,7 @@ fn health_cancel(
 
 #[tauri::command]
 async fn inventory_refresh(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     server_id: ServerId,
 ) -> Result<InventoryRefreshResult, AtlasError> {
@@ -186,7 +273,7 @@ async fn inventory_refresh(
 
 #[tauri::command]
 fn files_prepare(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     server_id: ServerId,
 ) -> Result<OperationTicket, AtlasError> {
@@ -195,7 +282,7 @@ fn files_prepare(
 }
 #[tauri::command]
 async fn files_open(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     server_id: ServerId,
     operation_id: OperationId,
@@ -208,7 +295,7 @@ async fn files_open(
 }
 #[tauri::command]
 async fn files_read(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     server_id: ServerId,
     session_id: SessionId,
@@ -224,7 +311,7 @@ async fn files_read(
 }
 #[tauri::command]
 async fn workload_inspect(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     server_id: ServerId,
     session_id: SessionId,
@@ -241,7 +328,7 @@ async fn workload_inspect(
 
 #[tauri::command]
 async fn workload_control_preview(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     server_id: ServerId,
     session_id: SessionId,
@@ -259,7 +346,7 @@ async fn workload_control_preview(
 
 #[tauri::command]
 async fn workload_control_confirm(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     server_id: ServerId,
     session_id: SessionId,
@@ -277,7 +364,7 @@ async fn workload_control_confirm(
 }
 #[tauri::command]
 async fn files_lock(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     session_id: SessionId,
 ) -> Result<(), AtlasError> {
@@ -290,7 +377,7 @@ async fn files_lock(
 
 #[tauri::command]
 async fn files_terminal_start(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     server_id: ServerId,
     session_id: SessionId,
@@ -308,7 +395,7 @@ async fn files_terminal_start(
 
 #[tauri::command]
 async fn files_terminal_poll(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     server_id: ServerId,
     session_id: SessionId,
@@ -322,7 +409,7 @@ async fn files_terminal_poll(
 
 #[tauri::command]
 async fn files_terminal_write(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     server_id: ServerId,
     session_id: SessionId,
@@ -339,7 +426,7 @@ async fn files_terminal_write(
 
 #[tauri::command]
 async fn files_terminal_resize(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     server_id: ServerId,
     session_id: SessionId,
@@ -356,18 +443,19 @@ async fn files_terminal_resize(
 }
 
 #[tauri::command]
-fn foundation_status() -> FoundationStatus {
-    FoundationStatus {
+fn foundation_status(window: tauri::Webview) -> Result<FoundationStatus, AtlasError> {
+    local_desktop(&window)?;
+    Ok(FoundationStatus {
         contract_version: CONTRACT_VERSION,
         version: env!("CARGO_PKG_VERSION").into(),
         platform: std::env::consts::OS.into(),
         phase: "desktop workspace; remote coordinator not yet available".into(),
-    }
+    })
 }
 
 #[tauri::command]
 async fn files_pick_upload(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     server_id: ServerId,
     session_id: SessionId,
@@ -383,7 +471,7 @@ async fn files_pick_upload(
             let selected = window
                 .dialog()
                 .file()
-                .set_parent(&window)
+                .set_parent(&window.window())
                 .set_title("Choose file to upload")
                 .blocking_pick_file();
             selected
@@ -408,7 +496,7 @@ async fn files_pick_upload(
 }
 #[tauri::command]
 async fn files_pick_download(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     server_id: ServerId,
     session_id: SessionId,
@@ -425,7 +513,7 @@ async fn files_pick_download(
             let selected = window
                 .dialog()
                 .file()
-                .set_parent(&window)
+                .set_parent(&window.window())
                 .set_file_name(name)
                 .set_title("Save downloaded file")
                 .blocking_save_file();
@@ -452,7 +540,7 @@ async fn files_pick_download(
 }
 #[tauri::command]
 fn files_selection_discard(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     grant_id: String,
 ) -> Result<(), AtlasError> {
@@ -461,7 +549,7 @@ fn files_selection_discard(
 }
 #[tauri::command]
 async fn files_transfer(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     server_id: ServerId,
     session_id: SessionId,
@@ -478,7 +566,7 @@ async fn files_transfer(
 }
 #[tauri::command]
 async fn files_stage_protected(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     server_id: ServerId,
     session_id: SessionId,
@@ -495,7 +583,7 @@ async fn files_stage_protected(
 }
 #[tauri::command]
 fn transfer_list(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
 ) -> Result<Vec<TransferView>, AtlasError> {
     local_desktop(&window)?;
@@ -503,7 +591,7 @@ fn transfer_list(
 }
 #[tauri::command]
 fn transfer_cancel(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     operation_id: OperationId,
 ) -> Result<(), AtlasError> {
@@ -512,7 +600,7 @@ fn transfer_cancel(
 }
 #[tauri::command]
 async fn files_release(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     session_id: SessionId,
 ) -> Result<(), AtlasError> {
@@ -525,7 +613,7 @@ async fn files_release(
 
 #[tauri::command]
 async fn files_preview(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     server_id: ServerId,
     session_id: SessionId,
@@ -541,7 +629,7 @@ async fn files_preview(
 }
 #[tauri::command]
 async fn files_commit(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     server_id: ServerId,
     session_id: SessionId,
@@ -557,7 +645,7 @@ async fn files_commit(
 }
 #[tauri::command]
 async fn files_discard(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     server_id: ServerId,
     session_id: SessionId,
@@ -574,7 +662,7 @@ async fn files_discard(
 
 #[tauri::command]
 async fn elevation_preview(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     server_id: ServerId,
     session_id: SessionId,
@@ -589,7 +677,7 @@ async fn elevation_preview(
 }
 #[tauri::command]
 async fn elevation_confirm(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     server_id: ServerId,
     session_id: SessionId,
@@ -607,7 +695,7 @@ async fn elevation_confirm(
 }
 #[tauri::command]
 async fn elevation_cancel(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     server_id: ServerId,
     session_id: SessionId,
@@ -623,7 +711,7 @@ async fn elevation_cancel(
 }
 #[tauri::command]
 async fn protected_placement_preview(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     server_id: ServerId,
     session_id: SessionId,
@@ -639,7 +727,7 @@ async fn protected_placement_preview(
 }
 #[tauri::command]
 async fn protected_placement_confirm(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     server_id: ServerId,
     session_id: SessionId,
@@ -657,7 +745,7 @@ async fn protected_placement_confirm(
 }
 #[tauri::command]
 async fn protected_placement_cancel(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     server_id: ServerId,
     session_id: SessionId,
@@ -673,7 +761,7 @@ async fn protected_placement_cancel(
 }
 #[tauri::command]
 fn plugins_state(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
 ) -> Result<atlas_core::plugin_host::PluginsState, AtlasError> {
     local_desktop(&window)?;
@@ -681,7 +769,7 @@ fn plugins_state(
 }
 #[tauri::command]
 fn plugin_enable(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     plugin_id: String,
     trust: atlas_core::plugin_host::TrustLevel,
@@ -694,7 +782,7 @@ fn plugin_enable(
 /// It arrives disabled.
 #[tauri::command]
 async fn plugin_install(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     request: atlas_core::plugin_install::InstallRequest,
 ) -> Result<atlas_core::plugin_install::InstallReport, AtlasError> {
@@ -711,7 +799,7 @@ async fn plugin_install(
 /// Checks an update for an installed plugin and shows what it changes (T046).
 #[tauri::command]
 async fn plugin_update_check(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     plugin_id: String,
     request: atlas_core::plugin_install::InstallRequest,
@@ -729,7 +817,7 @@ async fn plugin_update_check(
 /// Applies a checked update (T046).
 #[tauri::command]
 fn plugin_update_apply(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     token: String,
     allow_downgrade: bool,
@@ -740,7 +828,7 @@ fn plugin_update_apply(
 }
 #[tauri::command]
 fn plugin_update_discard(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     token: String,
 ) -> Result<(), AtlasError> {
@@ -750,7 +838,7 @@ fn plugin_update_discard(
 /// Removes a plugin folder, its permissions and its install record (T045).
 #[tauri::command]
 fn plugin_remove(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     folder: String,
 ) -> Result<atlas_core::plugin_host::PluginsState, AtlasError> {
@@ -761,14 +849,14 @@ fn plugin_remove(
 /// Lets the owner choose a plugin folder or archive on this PC.
 #[tauri::command]
 async fn plugin_pick_source(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     folder: bool,
 ) -> Result<Option<String>, AtlasError> {
     local_desktop(&window)?;
     tauri::async_runtime::spawn_blocking(move || {
         #[cfg(desktop)]
         {
-            let dialog = window.dialog().file().set_parent(&window);
+            let dialog = window.dialog().file().set_parent(&window.window());
             let picked = if folder {
                 dialog
                     .set_title("Choose a plugin folder")
@@ -798,7 +886,7 @@ async fn plugin_pick_source(
 }
 #[tauri::command]
 fn plugin_disable(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     plugin_id: String,
 ) -> Result<atlas_core::plugin_host::PluginsState, AtlasError> {
@@ -808,7 +896,7 @@ fn plugin_disable(
 }
 #[tauri::command]
 fn plugin_set_grant(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     plugin_id: String,
     server_id: ServerId,
@@ -820,7 +908,7 @@ fn plugin_set_grant(
 }
 #[tauri::command]
 fn plugin_activity(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     limit: u32,
 ) -> Result<atlas_core::plugin_host::PluginActivityLog, AtlasError> {
@@ -831,7 +919,7 @@ fn plugin_activity(
 /// other work is in flight.
 #[tauri::command]
 fn plugins_set_all_off(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     off: bool,
 ) -> Result<atlas_core::plugin_host::PluginsState, AtlasError> {
@@ -840,7 +928,7 @@ fn plugins_set_all_off(
 }
 #[tauri::command]
 fn plugin_revoke_trusted(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     plugin_id: String,
 ) -> Result<atlas_core::plugin_host::PluginsState, AtlasError> {
@@ -851,7 +939,7 @@ fn plugin_revoke_trusted(
 /// The pack commands allowed on a server, with what they last observed.
 #[tauri::command]
 fn pack_state(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     server_id: ServerId,
 ) -> Result<atlas_core::pack::PackServerState, AtlasError> {
@@ -862,7 +950,7 @@ fn pack_state(
 /// What packs add to the map: badges and relationship kinds (T044).
 #[tauri::command]
 fn pack_map(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
 ) -> Result<atlas_core::pack::PackMapState, AtlasError> {
     local_desktop(&window)?;
@@ -871,7 +959,7 @@ fn pack_map(
 /// The pack applications the owner allowed on one server (T044).
 #[tauri::command]
 fn pack_apps(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     server_id: ServerId,
 ) -> Result<atlas_core::pack::PackAppsState, AtlasError> {
@@ -881,7 +969,7 @@ fn pack_apps(
 /// Runs one pack command now, if the owner's settings admit it (T043).
 #[tauri::command]
 async fn pack_run(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     server_id: ServerId,
     plugin_id: String,
@@ -900,7 +988,7 @@ async fn pack_run(
 /// the call a plugin runtime makes before acting; a refusal is logged.
 #[tauri::command]
 fn plugin_authorize(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     plugin_id: String,
     server_id: ServerId,
@@ -912,14 +1000,18 @@ fn plugin_authorize(
 }
 #[tauri::command]
 fn extensions_state(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
 ) -> Result<atlas_core::extensions::ExtensionCatalogue, AtlasError> {
     local_desktop(&window)?;
     Ok(workspace.extensions())
 }
 #[tauri::command]
-fn workspace_status(workspace: State<'_, Arc<Workspace>>) -> Result<WorkspaceStatus, AtlasError> {
+fn workspace_status(
+    window: tauri::Webview,
+    workspace: State<'_, Arc<Workspace>>,
+) -> Result<WorkspaceStatus, AtlasError> {
+    local_desktop(&window)?;
     workspace.status()
 }
 
@@ -938,21 +1030,31 @@ async fn run_store(
 }
 
 #[tauri::command]
-async fn map_state(workspace: State<'_, Arc<Workspace>>) -> Result<MapState, AtlasError> {
+async fn map_state(
+    window: tauri::Webview,
+    workspace: State<'_, Arc<Workspace>>,
+) -> Result<MapState, AtlasError> {
+    local_desktop(&window)?;
     run_store(workspace.inner().clone(), move |w| {
         w.with_store(|s| s.snapshot())
     })
     .await
 }
 #[tauri::command]
-async fn retry_workspace(workspace: State<'_, Arc<Workspace>>) -> Result<MapState, AtlasError> {
+async fn retry_workspace(
+    window: tauri::Webview,
+    workspace: State<'_, Arc<Workspace>>,
+) -> Result<MapState, AtlasError> {
+    local_desktop(&window)?;
     run_store(workspace.inner().clone(), Workspace::retry).await
 }
 #[tauri::command]
 async fn add_server(
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     input: AddServer,
 ) -> Result<MapState, AtlasError> {
+    local_desktop(&window)?;
     run_store(workspace.inner().clone(), move |w| {
         w.with_store(|s| {
             s.add_server(input)?;
@@ -963,10 +1065,12 @@ async fn add_server(
 }
 #[tauri::command]
 async fn update_server(
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     id: ServerId,
     input: UpdateServer,
 ) -> Result<MapState, AtlasError> {
+    local_desktop(&window)?;
     run_store(workspace.inner().clone(), move |w| {
         let host_changed = input.host.is_some();
         let _contact = host_changed.then(|| w.live_contact_guard()).transpose()?;
@@ -990,9 +1094,11 @@ async fn update_server(
 }
 #[tauri::command]
 async fn remove_server(
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     id: ServerId,
 ) -> Result<MapState, AtlasError> {
+    local_desktop(&window)?;
     run_store(workspace.inner().clone(), move |w| {
         let _contact = w.live_contact_guard()?;
         let state = w.with_store(|s| {
@@ -1007,9 +1113,11 @@ async fn remove_server(
 }
 #[tauri::command]
 async fn add_relationship(
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     input: AddRelationship,
 ) -> Result<MapState, AtlasError> {
+    local_desktop(&window)?;
     run_store(workspace.inner().clone(), move |w| {
         w.add_relationship(input)
     })
@@ -1017,9 +1125,11 @@ async fn add_relationship(
 }
 #[tauri::command]
 async fn remove_relationship(
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     id: EdgeId,
 ) -> Result<MapState, AtlasError> {
+    local_desktop(&window)?;
     run_store(workspace.inner().clone(), move |w| {
         w.with_store(|s| {
             s.remove_relationship(&id)?;
@@ -1029,7 +1139,11 @@ async fn remove_relationship(
     .await
 }
 #[tauri::command]
-async fn import_reports(workspace: State<'_, Arc<Workspace>>) -> Result<MapState, AtlasError> {
+async fn import_reports(
+    window: tauri::Webview,
+    workspace: State<'_, Arc<Workspace>>,
+) -> Result<MapState, AtlasError> {
+    local_desktop(&window)?;
     run_store(workspace.inner().clone(), Workspace::import).await
 }
 
@@ -1058,10 +1172,15 @@ pub fn run() {
                 if workspace.is_closing() { break; }
                 workspace.tick_health();
                 workspace.tick_live();
-                for session in workspace.reap_files() { let _ = handle.emit("atlas-session-closed", session); }
+                for session in workspace.reap_files() { let _ = handle.emit_to(main_webview(), "atlas-session-closed", session); }
                 apps::reap(&handle, &workspace);
             }
         });
+        // A plugin view's request reaches only InfraWerf's own interface.
+        let views_handle = app.handle().clone();
+        workspace.set_view_emitter(Box::new(move |request| {
+            let _ = views_handle.emit_to(main_webview(), "atlas-plugin-action", request);
+        }));
         app.manage(workspace);
         Ok(())
     })
@@ -1077,11 +1196,11 @@ pub fn run() {
         if let tauri::WindowEvent::CloseRequested { api, .. } = event {
             if !window.state::<Arc<Workspace>>().request_close() {
                 api.prevent_close();
-                let _ = window.emit("atlas-close-blocked", "InfraWerf is finishing a local operation or has an open SSH session. Lock open sessions and wait for work to finish, then close again.");
+                let _ = window.emit_to(main_webview(), "atlas-close-blocked", "InfraWerf is finishing a local operation or has an open SSH session. Lock open sessions and wait for work to finish, then close again.");
             }
         }
     })
-    .invoke_handler(tauri::generate_handler![extensions_state, plugins_state, plugin_enable, plugin_disable, plugin_install, plugin_update_check, plugin_update_apply, plugin_update_discard, plugin_remove, plugin_pick_source, plugin_set_grant, plugin_authorize, plugin_activity, plugins_set_all_off, plugin_revoke_trusted, pack_state, pack_run, pack_map, pack_apps, apps::pack_app_open, apps::tunnel_open, apps::tunnel_discover, apps::tunnel_close, apps::tunnel_close_all, apps::tunnel_list, apps::tunnel_focus, monitoring_accept_identity, monitoring_state, monitoring_configure, monitoring_history_limit, monitoring_discover, foundation_status, workspace_status, map_state, retry_workspace, add_server, update_server, remove_server, add_relationship, remove_relationship, import_reports, ssh_prepare, ssh_verify, ssh_cancel, health_configure, health_status, health_cancel, inventory_refresh, files_prepare, files_open, files_read, workload_inspect, workload_control_preview, workload_control_confirm, files_lock, files_terminal_start, files_terminal_poll, files_terminal_write, files_terminal_resize, files_preview, files_commit, files_discard, files_release, files_pick_upload, files_pick_download, files_selection_discard, files_transfer, files_stage_protected, transfer_list, transfer_cancel, elevation_preview, elevation_confirm, elevation_cancel, protected_placement_preview, protected_placement_confirm, protected_placement_cancel])
+    .invoke_handler(tauri::generate_handler![extensions_state, plugins_state, plugin_enable, plugin_disable, plugin_install, plugin_update_check, plugin_update_apply, plugin_update_discard, plugin_remove, plugin_pick_source, plugin_set_grant, plugin_authorize, plugin_activity, plugins_set_all_off, plugin_revoke_trusted, pack_state, pack_run, plugin_views, plugin_view_open, plugin_view_bounds, plugin_view_close, plugin_views_open, plugin_view_answer, pack_map, pack_apps, apps::pack_app_open, apps::tunnel_open, apps::tunnel_discover, apps::tunnel_close, apps::tunnel_close_all, apps::tunnel_list, apps::tunnel_focus, monitoring_accept_identity, monitoring_state, monitoring_configure, monitoring_history_limit, monitoring_discover, foundation_status, workspace_status, map_state, retry_workspace, add_server, update_server, remove_server, add_relationship, remove_relationship, import_reports, ssh_prepare, ssh_verify, ssh_cancel, health_configure, health_status, health_cancel, inventory_refresh, files_prepare, files_open, files_read, workload_inspect, workload_control_preview, workload_control_confirm, files_lock, files_terminal_start, files_terminal_poll, files_terminal_write, files_terminal_resize, files_preview, files_commit, files_discard, files_release, files_pick_upload, files_pick_download, files_selection_discard, files_transfer, files_stage_protected, transfer_list, transfer_cancel, elevation_preview, elevation_confirm, elevation_cancel, protected_placement_preview, protected_placement_confirm, protected_placement_cancel])
     .run(tauri::generate_context!())
     .expect("InfraWerf native runtime failed");
 }
