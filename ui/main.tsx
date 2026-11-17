@@ -8,12 +8,13 @@ import { createWorkspaceClient } from "./workspace-client";
 import { TransferQueue, useTransfers } from "./transfer-queue";
 import { BrandMark } from "./brand";
 import { MonitoringHub, activeMap, liveStatus } from "./live-monitoring";
-import { bindExtensions, DEFAULT_TAB_FOOTER, ExtensionsContext, ServerBadges, TAB, useExtensions, type BoundExtensions, type WorkspaceContext } from "./extensions";
+import { bindExtensions, DEFAULT_TAB_FOOTER, ExtensionsContext, PackMapContext, ServerBadges, TAB, useExtensions, type BoundExtensions, type WorkspaceContext } from "./extensions";
 import { date, memory, Notice, SavedInventory } from "./workspace-parts";
 import { SettingsScreen } from "./app-settings";
 import { MenuSystem, useMenu } from "./menu";
 import type { View } from "./menu-model";
-import type { MonitoringState } from "./contracts.gen";
+import type { MonitoringState, PackMapState } from "./contracts.gen";
+import { edgeLook, kindKey, kindsBetween } from "./pack-map-model";
 import type { MapServer, MapState, Relationship, WorkspaceStatus } from "./contracts.gen";
 import { errorMessage, matches, observedLabel, reachabilityLabel, workloads } from "./map-model";
 import "@xyflow/react/dist/style.css";
@@ -40,7 +41,7 @@ function ServerNode({ data, selected }: NodeProps<ServerFlowNode>) {
 }
 const nodeTypes = { server: ServerNode };
 
-function MapCanvas({ state, selected, query, busy, select, open, move, connect }: { state: MapState; selected: string | null; query: string; busy: boolean; select: (id: string | null) => void; open: (id: string) => void; move: (id: string, x: number, y: number) => Promise<boolean>; connect: (connection: Connection) => void }) {
+function MapCanvas({ state, packs, selected, query, busy, select, open, move, connect }: { state: MapState; packs: PackMapState | null; selected: string | null; query: string; busy: boolean; select: (id: string | null) => void; open: (id: string) => void; move: (id: string, x: number, y: number) => Promise<boolean>; connect: (connection: Connection) => void }) {
   const [nodes, setNodes, onNodesChange] = useNodesState<ServerFlowNode>([]);
   const flow = useReactFlow();
   const measured = useNodesInitialized();
@@ -48,7 +49,7 @@ function MapCanvas({ state, selected, query, busy, select, open, move, connect }
   const dragging=useRef(false);
   useEffect(() => { if (measured && !fitted.current) { fitted.current = true; void flow.fitView({ padding: .15, maxZoom: 1 }); } }, [measured, flow]);
   useEffect(() => {if(!dragging.current) setNodes(state.servers.map(server => ({ id: server.id, type: "server", ariaLabel: server.name, position: { x: server.x, y: server.y }, selected: server.id === selected, data: { server, matched: matches(server, query), open } })));}, [state, selected, query, open, setNodes]);
-  const edges = state.edges.map(edge => ({ ...edge, type: "smoothstep", markerEnd: { type: MarkerType.ArrowClosed, color: "#89a28e" }, style: { stroke: "#89a28e", strokeWidth: 1.5 }, labelStyle: { fill: "#51685a", fontSize: 11 }, labelBgStyle: { fill: "#f4f8f2" }, labelBgPadding: [7, 4] as [number, number], labelBgBorderRadius: 5 }));
+  const edges = state.edges.map(edge => { const look = edgeLook(edge, packs?.relationship_kinds ?? []); return { ...edge, label: look.label, type: "smoothstep", markerEnd: { type: MarkerType.ArrowClosed, color: look.color }, style: { stroke: look.color, strokeWidth: 1.5, strokeDasharray: look.dash }, labelStyle: { fill: "#51685a", fontSize: 11 }, labelBgStyle: { fill: "#f4f8f2" }, labelBgPadding: [7, 4] as [number, number], labelBgBorderRadius: 5 }; });
   useEffect(() => {
     if (query.trim()) void flow.fitView({ nodes: state.servers.filter(s => matches(s, query)).map(s => ({ id: s.id })), padding: .25, maxZoom: 1, duration: 200 });
   }, [query, flow, state.servers]);
@@ -137,6 +138,7 @@ function App() {
   // without its badges, or a workspace that cannot open, is worse than none.
   const extensionsReady = useRef(false);
   const [monitoring,setMonitoring]=useState<MonitoringState|null>(null);
+  const [packs, setPacks] = useState<PackMapState | null>(null);
   const [,setLiveClock]=useState(0);
   const [status, setStatus] = useState<WorkspaceStatus | null>(null);
   const [error, setError] = useState("");
@@ -156,12 +158,12 @@ function App() {
   const search = useRef<HTMLInputElement>(null);
   const refresh = useCallback(async () => {
     setError("");
-    try { const value = await client.retry(); const bound = bindExtensions(await client.extensions()); const live = await client.monitoring(); setExtensions(bound); extensionsReady.current = true; setMonitoring(live); setState(value); setStatus(await client.status()); setSelected(current => current && value.servers.some(s => s.id === current) ? current : value.servers[0]?.id ?? null); }
+    try { const value = await client.retry(); const bound = bindExtensions(await client.extensions()); const live = await client.monitoring(); setPacks(await client.packMap().catch(() => null)); setExtensions(bound); extensionsReady.current = true; setMonitoring(live); setState(value); setStatus(await client.status()); setSelected(current => current && value.servers.some(s => s.id === current) ? current : value.servers[0]?.id ?? null); }
     catch (e) { setError(errorMessage(e)); }
   }, []);
   const reloadLive=useCallback(async()=>{
-    const [map,live]=await Promise.all([client.load(),client.monitoring()]);
-    if (!busyRef.current && extensionsReady.current) {setState(map);setMonitoring(live);}
+    const [map,live,pack]=await Promise.all([client.load(),client.monitoring(),client.packMap().catch(() => null)]);
+    if (!busyRef.current && extensionsReady.current) {setState(map);setMonitoring(live);setPacks(pack);}
   },[]);
   useEffect(()=>{
     if (!isTauri()) return;
@@ -202,9 +204,9 @@ function App() {
     e.preventDefault(); const fields = new FormData(e.currentTarget); const value = (key: string) => String(fields.get(key) ?? "").trim();
     if (modal?.kind === "add") void mutate(() => client.add({ name: value("name"), host: value("host") }), "Server added to your map.", true);
     if (modal?.kind === "edit") void mutate(() => client.update(modal.id, { name: value("name"), host: value("host") }), "Server details saved.", true);
-    if (modal?.kind === "relationship") void mutate(() => client.connect({ source: value("source"), target: value("target"), label: value("label") }), "Relationship documented. No server configuration changed.", true);
+    if (modal?.kind === "relationship") { const [plugin_id, contribution_id] = value("kind").split("/"); void mutate(() => client.connect({ source: value("source"), target: value("target"), label: value("label"), ...(plugin_id && contribution_id ? { kind: { plugin_id, contribution_id } } : {}) }), "Relationship documented. No server configuration changed.", true); }
   }
-  return <ExtensionsContext.Provider value={extensions}><div className={`app-shell ${menu.layout.open ? "" : "menu-hidden"}`}>
+  return <ExtensionsContext.Provider value={extensions}><PackMapContext.Provider value={packs}><div className={`app-shell ${menu.layout.open ? "" : "menu-hidden"}`}>
     <MenuSystem groups={extensions?.menu ?? []} view={view} go={setView} menu={menu} quit={() => { if (isTauri()) void getCurrentWindow().close().catch(e => setError(errorMessage(e))); }} />
     <div className="app-main"><header className="topbar"><div><strong className="wordmark">InfraWerf</strong><span>/</span> Homelab</div><span className="local-badge"><i /> LOCAL WORKSPACE</span></header>
       <main className="desktop-main"><section className="intro"><div><p className="eyebrow">YOUR INFRASTRUCTURE, CONNECTED</p><h1>A little clarity. <span>Across every server.</span></h1><p>Your infrastructure, thoughtfully mapped. One place to see how it all connects.</p></div><button className="primary" disabled={!available} onClick={() => setModal({ kind: "add" })}><span>＋</span> Add server</button></section>
@@ -213,7 +215,7 @@ function App() {
         <section className={`workspace-grid ${inspector && view === "topology" ? "with-inspector" : ""}`}>
           <div className="map-panel"><div className="map-toolbar"><div className="view-tabs" aria-label="Map view"><button className={view === "topology" ? "active" : ""} onClick={() => setView("topology")}>Topology</button><button className={view === "inventory" ? "active" : ""} onClick={() => setView("inventory")}>Inventory</button></div><div className="search-box"><span aria-hidden>⌕</span><input ref={search} aria-label="Find a server or workload" placeholder="Find a server or workload…" value={query} onChange={e => setQuery(e.target.value)} />{query ? <button aria-label="Clear search" onClick={() => setQuery("")}>×</button> : <kbd>/</kbd>}</div>{view === "topology" && <button className="icon-button" aria-label="Toggle inspector" aria-pressed={inspector} onClick={() => setInspector(v => !v)}>◧</button>}</div>
             {!state ? <div className="loading-state"><BrandMark /><h2>{error ? "Your workspace couldn’t be opened." : "Opening your workspace…"}</h2><p>{error ? "Resolve the message above, then retry. Your saved data has not been replaced." : "Reading the native Rust store on this PC."}</p></div> : <>
-              {view === "topology" && <ReactFlowProvider><MapCanvas state={visibleState!} selected={selected} query={query} busy={busy} select={setSelected} open={open} move={(id, x, y) => mutate(() => client.update(id, { x, y }), "Map position saved.")} connect={c => relationship(c.source, c.target)} /></ReactFlowProvider>}
+              {view === "topology" && <ReactFlowProvider><MapCanvas state={visibleState!} packs={packs} selected={selected} query={query} busy={busy} select={setSelected} open={open} move={(id, x, y) => mutate(() => client.update(id, { x, y }), "Map position saved.")} connect={c => relationship(c.source, c.target)} /></ReactFlowProvider>}
               {view === "servers" && <MonitoringHub state={state} monitoring={monitoring} client={client} reload={reloadLive} remove={id=>setModal({kind:"remove-server",id})} open={open} openSettings={()=>setView("settings")} />}
               {view === "settings" && extensions && <SettingsScreen sections={extensions.appSettings} monitoring={monitoring} client={client} reload={reloadLive} resetMenu={menu.reset} servers={state.servers} pluginFocus={pluginFocus} setPluginFocus={setPluginFocus} />}
               {view === "inventory" && <SavedInventory state={state} query={query} open={open} />}
@@ -225,7 +227,7 @@ function App() {
           {inspector && view === "topology" && <aside className="inspector"><div className="inspector-title"><span>INSPECTOR</span><span>⌘</span></div><div className="inspector-tabs">{["Overview", "Relationships", "Activity"].map(name => <button className={inspectorTab === name ? "active" : ""} key={name} onClick={() => setInspectorTab(name)}>{name}</button>)}</div><div className="inspector-body">{server ? <>
             <div className="selected-heading"><span className="server-icon">▤</span><span className={`observation-tag ${server.freshness}`}>{observedLabel(server)}</span></div><h2>{server.name}</h2><p className="hostname">{server.host}</p>
             {inspectorTab === "Overview" && <><p className="section-label">SAVED OBSERVATION</p><dl className="facts"><div><dt>Collected</dt><dd>{date(server.inventory?.collected_at)}</dd></div><div><dt>Logical CPUs</dt><dd>{server.inventory?.cpus ?? "Unknown"}</dd></div><div><dt>Total memory</dt><dd>{server.inventory ? memory(server.inventory.memory_total_kib) : "Unknown"}</dd></div><div><dt>Workloads</dt><dd>{workloads(server).length}</dd></div><div><dt>Reachability</dt><dd>{reachabilityLabel(server)}</dd></div></dl><Notice>Files, live metrics and controls become available through an authenticated SSH session.</Notice><div className="inspector-actions"><button disabled={busy} onClick={() => setModal({ kind: "edit", id: server.id })}>Edit details</button><button disabled={!available || state!.servers.length < 2} onClick={() => relationship()}>＋ Document relationship</button></div></>}
-            {inspectorTab === "Relationships" && <><p className="section-label">DOCUMENTED CONNECTIONS</p>{related.map(edge => <div className="relationship-item" key={edge.id}><strong>{state!.servers.find(s => s.id === edge.source)?.name} → {state!.servers.find(s => s.id === edge.target)?.name}</strong><span>{edge.label || "Unlabelled"}</span><button className="text-button" disabled={busy} onClick={() => setModal({ kind: "remove-edge", edge })}>Remove relationship</button></div>)}{!related.length && <p>No relationships documented.</p>}<button disabled={!available || state!.servers.length < 2} onClick={() => relationship()}>＋ Document relationship</button><p className="muted">Diagram links describe your infrastructure. They do not change server configuration.</p></>}
+            {inspectorTab === "Relationships" && <><p className="section-label">DOCUMENTED CONNECTIONS</p>{related.map(edge => <div className="relationship-item" key={edge.id}><strong>{state!.servers.find(s => s.id === edge.source)?.name} → {state!.servers.find(s => s.id === edge.target)?.name}</strong><span>{edgeLook(edge, packs?.relationship_kinds ?? []).label || "Unlabelled"}</span><button className="text-button" disabled={busy} onClick={() => setModal({ kind: "remove-edge", edge })}>Remove relationship</button></div>)}{!related.length && <p>No relationships documented.</p>}<button disabled={!available || state!.servers.length < 2} onClick={() => relationship()}>＋ Document relationship</button><p className="muted">Diagram links describe your infrastructure. They do not change server configuration.</p></>}
             {inspectorTab === "Activity" && state && <ActivityList state={{ ...state, events: state.events.filter(e => e.server_id === server.id) }} />}
           </> : <p className="empty-copy">Select a server to inspect its saved details.</p>}</div>{server && <footer className="inspector-footer"><button className="primary" onClick={() => open(server.id)}>Open workspace <span>↗</span></button></footer>}</aside>}
         </section>
@@ -237,10 +239,16 @@ function App() {
     {modal && state && <Dialog title={modal.kind === "add" ? "Add a server" : modal.kind === "edit" ? "Edit server" : modal.kind === "relationship" ? "Document a relationship" : modal.kind === "remove-server" ? "Remove server from map?" : "Remove relationship?"} close={() => setModal(null)} busy={busy}>
       {error && <p role="alert" className="form-error">{error}</p>}
       {modal.kind === "add" || modal.kind === "edit" ? <form onSubmit={formSubmit}><p className="muted">A map entry stores a name and address. It does not connect to the server.</p><label>Server name<input name="name" required maxLength={80} autoFocus defaultValue={editServer?.name} placeholder="e.g. Forgejo" /></label><label>Host or IP address<input name="host" required maxLength={253} defaultValue={editServer?.host} placeholder="server.example or 192.168.1.10" spellCheck={false} /></label><div className="form-actions">{modal.kind === "edit" && <button type="button" className="danger text-button" disabled={busy} onClick={() => setModal({ kind: "remove-server", id: modal.id })}>Remove from map</button>}<button type="button" disabled={busy} onClick={() => setModal(null)}>Cancel</button><button className="primary" disabled={busy}>{busy ? "Saving…" : "Save server"}</button></div></form>
-        : modal.kind === "relationship" ? <form onSubmit={formSubmit}><p className="muted">Describe a directed connection between servers. This only updates the map.</p><label>From<select aria-label="From" name="source" defaultValue={modal.source} required>{state.servers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label><label>To<select aria-label="To" name="target" defaultValue={modal.target} required>{state.servers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label><label>Relationship label<input name="label" maxLength={80} placeholder="e.g. Deploys to" autoFocus /></label><div className="form-actions"><button type="button" disabled={busy} onClick={() => setModal(null)}>Cancel</button><button className="primary" disabled={busy}>{busy ? "Saving…" : "Save relationship"}</button></div></form>
+        : modal.kind === "relationship" ? <form onSubmit={formSubmit}><p className="muted">Describe a directed connection between servers. This only updates the map.</p><label>From<select aria-label="From" name="source" defaultValue={modal.source} required onChange={e => setModalState({ ...modal, source: e.target.value })}>{state.servers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label><label>To<select aria-label="To" name="target" defaultValue={modal.target} required onChange={e => setModalState({ ...modal, target: e.target.value })}>{state.servers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label><RelationshipKindField kinds={kindsBetween(packs?.relationship_kinds ?? [], modal.source, modal.target)} /><label>Relationship label<input name="label" maxLength={80} placeholder="e.g. Deploys to" autoFocus /></label><div className="form-actions"><button type="button" disabled={busy} onClick={() => setModal(null)}>Cancel</button><button className="primary" disabled={busy}>{busy ? "Saving…" : "Save relationship"}</button></div></form>
           : <><p>{modal.kind === "remove-server" ? `Permanently delete ${editServer?.name}: ${workloads(editServer!).length} saved workloads, ${state.edges.filter(e=>e.source===modal.id || e.target===modal.id).length} relationships and ${state.events.filter(e=>e.server_id===modal.id).length} retained history events? A configured alias may be rediscovered as a new candidate. Archive or ignore it in Servers to retain its history. No remote data is changed.` : `Remove the “${modal.edge.label || "unlabelled"}” diagram relationship? Server configuration will be unchanged.`}</p><div className="form-actions"><button disabled={busy} onClick={() => setModal(null)}>Cancel</button><button className="danger-button" disabled={busy} onClick={() => void mutate(() => modal.kind === "remove-server" ? client.remove(modal.id) : client.disconnect(modal.edge.id), "Map entry removed.", true)}>{busy ? "Removing…" : "Remove"}</button></div></>}
     </Dialog>}
-  </div></ExtensionsContext.Provider>;
+  </div></PackMapContext.Provider></ExtensionsContext.Provider>;
+}
+
+/** The kinds plugins offer for this pair of servers; choosing one only changes how the map shows it. */
+function RelationshipKindField({ kinds }: { kinds: PackMapState["relationship_kinds"] }) {
+  if (!kinds.length) return null;
+  return <label>Kind<select aria-label="Relationship kind" name="kind" defaultValue=""><option value="">Plain relationship</option>{kinds.map(kind => <option key={kindKey(kind)} value={kindKey(kind)}>{kind.title} · from {kind.plugin_name}</option>)}</select><small className="muted">A kind is a label and a line style on your map. It applies nothing.</small></label>;
 }
 
 function ActivityList({ state }: { state: MapState }) { return <ol className="activity-list">{state.events.length ? state.events.map(event => <li key={event.id}><span>{event.server_id && <strong>{state.servers.find(s=>s.id===event.server_id)?.name ?? "Removed server"}: </strong>}{event.message}</span><time dateTime={event.at}>{date(event.at)}</time></li>) : <li>No recorded activity yet.</li>}</ol>; }

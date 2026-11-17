@@ -6,9 +6,11 @@
 //! dropped whenever what plugins may do changes.
 use super::*;
 use atlas_core::pack::{
-    PackCommandView, PackObservation, PackOutcome, PackParameterView, PackResult, PackServerState,
+    PackAppsState, PackBadgeView, PackCommandView, PackMapState, PackObservation, PackOutcome,
+    PackParameterView, PackResult, PackServerState,
 };
 use atlas_core::plugin_host::{ActivityOutcome, PackRun};
+use atlas_core::tunnel::{TunnelInfo, TunnelRequest};
 use atlas_core::workloads::WorkloadIdentity;
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -30,6 +32,123 @@ impl Workspace {
         if let Ok(mut observations) = self.packs.observations.lock() {
             observations.clear();
         }
+        self.close_pack_tunnels();
+    }
+
+    /// One observation with its freshness as of now.
+    fn observation(
+        observations: &HashMap<(ServerId, String, String), PackObservation>,
+        key: &(ServerId, String, String),
+    ) -> Option<PackObservation> {
+        let now = chrono::Utc::now();
+        observations.get(key).cloned().map(|mut observation| {
+            observation.fresh = atlas_core::observation_time(&observation.observed_at, now)
+                .is_ok_and(|at| {
+                    now.signed_duration_since(at).num_seconds() <= atlas_core::STALE_AFTER_SECONDS
+                });
+            observation
+        })
+    }
+
+    /// What packs add to the map: a badge per allowed server, from the
+    /// latest observation in memory, and the relationship kinds on offer.
+    /// It reads saved settings and memory only and contacts no server.
+    pub fn pack_map(&self) -> Result<PackMapState, AtlasError> {
+        let directory = self.plugins_directory();
+        let (bindings, relationship_kinds) = self.with_store(|store| {
+            Ok((
+                store.pack_badges(&directory)?,
+                store.relationship_kinds(&directory)?,
+            ))
+        })?;
+        let observations = self.packs.observations.lock().map_err(|_| failure())?;
+        let badges = bindings
+            .into_iter()
+            .map(|binding| {
+                let key = (
+                    binding.server_id.clone(),
+                    binding.plugin_id.clone(),
+                    binding.observation,
+                );
+                let observation = Self::observation(&observations, &key);
+                let (state, value) = atlas_core::pack::badge_state(observation.as_ref());
+                PackBadgeView {
+                    server_id: binding.server_id,
+                    plugin_id: binding.plugin_id,
+                    plugin_name: binding.plugin_name,
+                    contribution_id: binding.contribution_id,
+                    title: binding.title,
+                    state,
+                    value,
+                    observed_at: observation.map(|observation| observation.observed_at),
+                }
+            })
+            .collect();
+        Ok(PackMapState {
+            contract_version: CONTRACT_VERSION,
+            badges,
+            relationship_kinds,
+        })
+    }
+
+    /// Documents a relationship, with a plugin kind if one was chosen.
+    pub fn add_relationship(&self, input: AddRelationship) -> Result<MapState, AtlasError> {
+        let directory = self.plugins_directory();
+        self.with_store(|store| {
+            store.add_relationship_with_kinds(&directory, input)?;
+            store.snapshot()
+        })
+    }
+
+    /// The pack applications the owner allowed on this server.
+    pub fn pack_apps(&self, id: &ServerId) -> Result<PackAppsState, AtlasError> {
+        let directory = self.plugins_directory();
+        Ok(PackAppsState {
+            contract_version: CONTRACT_VERSION,
+            server_id: id.clone(),
+            apps: self.with_store(|store| store.pack_apps(&directory, id))?,
+        })
+    }
+
+    /// Open a pack application. The port and path come from the manifest
+    /// the owner reviewed, the destination is always the server's own
+    /// localhost, and the tunnel is the same loopback-only forward, with
+    /// the same checks, as any other application.
+    pub fn open_pack_app(
+        self: &Arc<Self>,
+        id: &ServerId,
+        plugin: &str,
+        contribution: &str,
+    ) -> Result<TunnelInfo, AtlasError> {
+        let directory = self.plugins_directory();
+        let epoch = self.packs.epoch.load(Ordering::SeqCst);
+        let app = self
+            .with_store(|store| store.plugin_begin_app(&directory, plugin, id, contribution))?
+            .map_err(|_| AtlasError::new(ErrorCode::Denied))?;
+        let opened = self.open_tunnel(
+            id,
+            TunnelRequest {
+                remote_port: app.port,
+                path: app.path.clone(),
+                remote_host: None,
+            },
+        );
+        let opened = opened.and_then(|info| {
+            self.mark_pack_tunnel(&info.tunnel_id)?;
+            // The permissions may have changed while the tunnel started.
+            if self.packs.epoch.load(Ordering::SeqCst) != epoch {
+                self.close_pack_tunnels();
+                return Err(AtlasError::new(ErrorCode::Cancelled));
+            }
+            Ok(info)
+        });
+        let logged = match &opened {
+            Ok(_) => ActivityOutcome::Done,
+            Err(failure) if failure.code == ErrorCode::Cancelled => ActivityOutcome::Cancelled,
+            Err(_) => ActivityOutcome::Failed,
+        };
+        self.with_store(|store| store.plugin_finish_app(&app, id, logged))?;
+        opened
     }
 
     /// The pack commands the owner allowed on this server, each with its
@@ -50,7 +169,6 @@ impl Workspace {
             ))
         })?;
         let observations = self.packs.observations.lock().map_err(|_| failure())?;
-        let now = chrono::Utc::now();
         let commands = runs
             .into_iter()
             .map(|run| {
@@ -59,14 +177,7 @@ impl Workspace {
                     run.plugin_id.clone(),
                     run.contribution.id.clone(),
                 );
-                let observation = observations.get(&key).cloned().map(|mut observation| {
-                    observation.fresh = atlas_core::observation_time(&observation.observed_at, now)
-                        .is_ok_and(|at| {
-                            now.signed_duration_since(at).num_seconds()
-                                <= atlas_core::STALE_AFTER_SECONDS
-                        });
-                    observation
-                });
+                let observation = Self::observation(&observations, &key);
                 PackCommandView {
                     plugin_id: run.plugin_id,
                     plugin_name: run.plugin_name,
@@ -85,6 +196,7 @@ impl Workspace {
                             choices: atlas_core::pack::choices(parameter.source, &workloads),
                         })
                         .collect(),
+                    workload_kind: run.contribution.workload_kind.clone(),
                     observation,
                 }
             })

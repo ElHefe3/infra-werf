@@ -753,6 +753,25 @@ fn pack_state(
     let _operation = workspace.inner().begin()?;
     workspace.pack_state(&server_id)
 }
+/// What packs add to the map: badges and relationship kinds (T044).
+#[tauri::command]
+fn pack_map(
+    window: tauri::WebviewWindow,
+    workspace: State<'_, Arc<Workspace>>,
+) -> Result<atlas_core::pack::PackMapState, AtlasError> {
+    local_desktop(&window)?;
+    workspace.pack_map()
+}
+/// The pack applications the owner allowed on one server (T044).
+#[tauri::command]
+fn pack_apps(
+    window: tauri::WebviewWindow,
+    workspace: State<'_, Arc<Workspace>>,
+    server_id: ServerId,
+) -> Result<atlas_core::pack::PackAppsState, AtlasError> {
+    local_desktop(&window)?;
+    workspace.pack_apps(&server_id)
+}
 /// Runs one pack command now, if the owner's settings admit it (T043).
 #[tauri::command]
 async fn pack_run(
@@ -886,10 +905,7 @@ async fn add_relationship(
     input: AddRelationship,
 ) -> Result<MapState, AtlasError> {
     run_store(workspace.inner().clone(), move |w| {
-        w.with_store(|s| {
-            s.add_relationship(input)?;
-            s.snapshot()
-        })
+        w.add_relationship(input)
     })
     .await
 }
@@ -959,7 +975,7 @@ pub fn run() {
             }
         }
     })
-    .invoke_handler(tauri::generate_handler![extensions_state, plugins_state, plugin_enable, plugin_disable, plugin_set_grant, plugin_authorize, plugin_activity, plugins_set_all_off, plugin_revoke_trusted, pack_state, pack_run, apps::tunnel_open, apps::tunnel_discover, apps::tunnel_close, apps::tunnel_close_all, apps::tunnel_list, apps::tunnel_focus, monitoring_accept_identity, monitoring_state, monitoring_configure, monitoring_history_limit, monitoring_discover, foundation_status, workspace_status, map_state, retry_workspace, add_server, update_server, remove_server, add_relationship, remove_relationship, import_reports, ssh_prepare, ssh_verify, ssh_cancel, health_configure, health_status, health_cancel, inventory_refresh, files_prepare, files_open, files_read, workload_inspect, workload_control_preview, workload_control_confirm, files_lock, files_terminal_start, files_terminal_poll, files_terminal_write, files_terminal_resize, files_preview, files_commit, files_discard, files_release, files_pick_upload, files_pick_download, files_selection_discard, files_transfer, files_stage_protected, transfer_list, transfer_cancel, elevation_preview, elevation_confirm, elevation_cancel, protected_placement_preview, protected_placement_confirm, protected_placement_cancel])
+    .invoke_handler(tauri::generate_handler![extensions_state, plugins_state, plugin_enable, plugin_disable, plugin_set_grant, plugin_authorize, plugin_activity, plugins_set_all_off, plugin_revoke_trusted, pack_state, pack_run, pack_map, pack_apps, apps::pack_app_open, apps::tunnel_open, apps::tunnel_discover, apps::tunnel_close, apps::tunnel_close_all, apps::tunnel_list, apps::tunnel_focus, monitoring_accept_identity, monitoring_state, monitoring_configure, monitoring_history_limit, monitoring_discover, foundation_status, workspace_status, map_state, retry_workspace, add_server, update_server, remove_server, add_relationship, remove_relationship, import_reports, ssh_prepare, ssh_verify, ssh_cancel, health_configure, health_status, health_cancel, inventory_refresh, files_prepare, files_open, files_read, workload_inspect, workload_control_preview, workload_control_confirm, files_lock, files_terminal_start, files_terminal_poll, files_terminal_write, files_terminal_resize, files_preview, files_commit, files_discard, files_release, files_pick_upload, files_pick_download, files_selection_discard, files_transfer, files_stage_protected, transfer_list, transfer_cancel, elevation_preview, elevation_confirm, elevation_cancel, protected_placement_preview, protected_placement_confirm, protected_placement_cancel])
     .run(tauri::generate_context!())
     .expect("InfraWerf native runtime failed");
 }

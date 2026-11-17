@@ -491,6 +491,7 @@ mod tests {
         let linked = store.add_monitoring_candidate("lab-linked").unwrap();
         store
             .add_relationship(AddRelationship {
+                kind: None,
                 source: server.clone(),
                 target: linked.clone(),
                 label: "Backs up to".into(),

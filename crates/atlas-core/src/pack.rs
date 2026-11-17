@@ -154,7 +154,108 @@ pub struct PackCommandView {
     /// The exact command, with `{name}` where a parameter goes.
     pub argv: Vec<String>,
     pub parameters: Vec<PackParameterView>,
+    /// Set when the pack presents this table's rows as workloads of a kind
+    /// named by `title`.
+    pub workload_kind: Option<crate::plugin::PackWorkloadKind>,
     pub observation: Option<PackObservation>,
+}
+
+/// What a pack badge says about one server. A small fixed set: a pack
+/// chooses which observation a badge shows, never how a state looks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum PackBadgeState {
+    /// A fresh health check that read a healthy value.
+    Healthy,
+    /// A fresh health check that read any other value.
+    Unhealthy,
+    /// A fresh collector value; it is shown and not judged.
+    Value,
+    /// The observation is older than the staleness limit.
+    Stale,
+    /// Not read since InfraWerf started, or the last run read nothing.
+    Unknown,
+}
+
+/// The state a badge shows for one observation, and the value beside it.
+/// A stale badge keeps the old value so the owner can see what it was.
+pub fn badge_state(observation: Option<&PackObservation>) -> (PackBadgeState, Option<String>) {
+    let Some(observation) = observation else {
+        return (PackBadgeState::Unknown, None);
+    };
+    let value = observation.result.value.clone();
+    if !observation.fresh {
+        return (PackBadgeState::Stale, value);
+    }
+    match (observation.result.health, &value) {
+        (Some(PackHealth::Healthy), _) => (PackBadgeState::Healthy, value),
+        (Some(PackHealth::Unhealthy), _) => (PackBadgeState::Unhealthy, value),
+        (None, Some(_)) if observation.result.outcome == PackOutcome::Ok => {
+            (PackBadgeState::Value, value)
+        }
+        _ => (PackBadgeState::Unknown, None),
+    }
+}
+
+/// One pack badge on one server's card.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct PackBadgeView {
+    pub server_id: ServerId,
+    pub plugin_id: String,
+    pub plugin_name: String,
+    pub contribution_id: String,
+    pub title: String,
+    pub state: PackBadgeState,
+    pub value: Option<String>,
+    /// When the observation was read; absent if there is none.
+    pub observed_at: Option<String>,
+}
+
+/// A relationship kind from an enabled plugin.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct PackRelationshipKindView {
+    pub plugin_id: String,
+    pub plugin_name: String,
+    pub contribution_id: String,
+    pub title: String,
+    pub line: crate::plugin::LineStyle,
+    pub color: crate::plugin::KindColor,
+    /// Servers the owner allowed this plugin on. The kind can be chosen for
+    /// a relationship only when both of its servers are listed.
+    pub server_ids: Vec<ServerId>,
+}
+
+/// What packs add to the map: badges and relationship kinds.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct PackMapState {
+    pub contract_version: u32,
+    pub badges: Vec<PackBadgeView>,
+    pub relationship_kinds: Vec<PackRelationshipKindView>,
+}
+
+/// An application a pack names, allowed on one server. It is always on the
+/// server's own localhost.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct PackAppView {
+    pub plugin_id: String,
+    pub plugin_name: String,
+    pub contribution_id: String,
+    pub title: String,
+    pub port: u16,
+    pub path: String,
+}
+
+/// Every pack application the owner allowed on one server.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct PackAppsState {
+    pub contract_version: u32,
+    pub server_id: ServerId,
+    pub apps: Vec<PackAppView>,
 }
 
 /// Every pack command the owner allowed on one server.
@@ -353,6 +454,12 @@ pub fn typescript_contracts(config: &Config) -> String {
         Extractor::decl(config),
         crate::plugin::PackParameter::decl(config),
         PackCommand::decl(config),
+        crate::plugin::PackWorkloadKind::decl(config),
+        crate::plugin::PackApp::decl(config),
+        crate::plugin::PackBadge::decl(config),
+        crate::plugin::LineStyle::decl(config),
+        crate::plugin::KindColor::decl(config),
+        crate::plugin::PackRelationship::decl(config),
         PackOutcome::decl(config),
         PackHealth::decl(config),
         PackResult::decl(config),
@@ -361,6 +468,12 @@ pub fn typescript_contracts(config: &Config) -> String {
         PackParameterView::decl(config),
         PackCommandView::decl(config),
         PackServerState::decl(config),
+        PackBadgeState::decl(config),
+        PackBadgeView::decl(config),
+        PackRelationshipKindView::decl(config),
+        PackMapState::decl(config),
+        PackAppView::decl(config),
+        PackAppsState::decl(config),
     ]
     .into_iter()
     .map(|d| format!("export {d}\n"))
@@ -550,5 +663,82 @@ mod tests {
             interpret(&reader("pool.state"), true, "not json").outcome,
             PackOutcome::Unreadable
         );
+    }
+
+    #[test]
+    fn a_badge_shows_one_of_five_states_and_keeps_a_stale_value_visible() {
+        let observed = |health: Option<PackHealth>,
+                        outcome: PackOutcome,
+                        value: Option<&str>,
+                        fresh: bool| PackObservation {
+            observed_at: "2026-11-17T08:00:00Z".into(),
+            fresh,
+            source: "org.example.pack.check".into(),
+            source_binding: "binding".into(),
+            parameters: BTreeMap::new(),
+            result: PackResult {
+                outcome,
+                value: value.map(str::to_owned),
+                columns: Vec::new(),
+                rows: Vec::new(),
+                truncated: false,
+                health,
+            },
+        };
+        use PackBadgeState::*;
+        let cases = [
+            (
+                Some(observed(
+                    Some(PackHealth::Healthy),
+                    PackOutcome::Ok,
+                    Some("running"),
+                    true,
+                )),
+                (Healthy, Some("running")),
+            ),
+            (
+                Some(observed(
+                    Some(PackHealth::Unhealthy),
+                    PackOutcome::CommandFailed,
+                    Some("degraded"),
+                    true,
+                )),
+                (Unhealthy, Some("degraded")),
+            ),
+            (
+                Some(observed(None, PackOutcome::Ok, Some("6.8.0"), true)),
+                (Value, Some("6.8.0")),
+            ),
+            (
+                Some(observed(
+                    Some(PackHealth::Healthy),
+                    PackOutcome::Ok,
+                    Some("running"),
+                    false,
+                )),
+                (Stale, Some("running")),
+            ),
+            (
+                Some(observed(
+                    Some(PackHealth::Unknown),
+                    PackOutcome::TimedOut,
+                    None,
+                    true,
+                )),
+                (Unknown, None),
+            ),
+            (
+                Some(observed(None, PackOutcome::OutputLimit, None, true)),
+                (Unknown, None),
+            ),
+            (None, (Unknown, None)),
+        ];
+        for (observation, (state, value)) in cases {
+            assert_eq!(
+                badge_state(observation.as_ref()),
+                (state, value.map(str::to_owned)),
+                "{observation:?}"
+            );
+        }
     }
 }

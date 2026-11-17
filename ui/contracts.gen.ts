@@ -42,12 +42,22 @@ refreshed_at: string, };
 export type ServiceSummary = { scope: string, name: string, state: string, substate: string, };
 export type ContainerSummary = { scope: string, engine: string, name: string, image: string, state: string, };
 export type MapServer = { id: ServerId, name: string, host: string, x: number, y: number, created_at: string, inventory: BaselineInventory | null, freshness: Freshness, reachability: HostReachability, };
-export type Relationship = { id: EdgeId, source: ServerId, target: ServerId, label: string, };
+export type RelationshipKindRef = { plugin_id: string, kind_id: string, title: string, };
+export type Relationship = { id: EdgeId, source: ServerId, target: ServerId, label: string,
+/**
+ * The plugin relationship kind chosen when it was documented, if any.
+ */
+kind: RelationshipKindRef | null, };
 export type Activity = { id: string, at: string, message: string, server_id: ServerId | null, };
 export type MapState = { contract_version: number, servers: Array<MapServer>, edges: Array<Relationship>, events: Array<Activity>, served_at: string, };
 export type AddServer = { name: string, host: string, };
 export type UpdateServer = { name?: string, host?: string, x?: number, y?: number, };
-export type AddRelationship = { source: ServerId, target: ServerId, label: string, };
+export type RelationshipKindChoice = { plugin_id: string, contribution_id: string, };
+export type AddRelationship = { source: ServerId, target: ServerId, label: string,
+/**
+ * A relationship kind from an enabled plugin; absent for a plain one.
+ */
+kind?: RelationshipKindChoice, };
 export type ProtectedText = { session_id: SessionId, operation_id: OperationId, expires_at: string, text: string, };
 export type LiveMetrics = { cpu_percent: number | null, memory_used_kib: number | null, disk_used_bytes: number | null, };
 export type OperationPhase = "queued" | "running" | "completed" | "failed" | "cancelled";
@@ -135,7 +145,7 @@ export type WorkloadControlPreview = { contract_version: number, operation_id: O
 export type WorkloadControlReceipt = { contract_version: number, operation_id: OperationId, workload_id: string, action: WorkloadAction, outcome: WorkloadActionOutcome, observed_state: WorkloadState, observed_at: string, message: string, };
 export type WorkloadDetail = { label: string, value: string, };
 export type WorkloadInspection = { contract_version: number, workload_id: string, inspected_at: string, state: WorkloadState, details: Array<WorkloadDetail>, logs_state: WorkloadLogState, logs: string, logs_truncated: boolean, };
-export type ExtensionPoint = "workspace_tab" | "server_badge" | "settings_section" | "app_settings_section" | "menu_item" | "collector" | "health_check" | "operation";
+export type ExtensionPoint = "workspace_tab" | "server_badge" | "settings_section" | "app_settings_section" | "menu_item" | "collector" | "health_check" | "operation" | "remote_app" | "relationship_kind";
 export type Capability = "read_saved_state" | "edit_map" | "network_probe" | "ssh_session" | "run_approved_command" | "read_files" | "write_files" | "transfer_files" | "interactive_terminal" | "elevate" | "control_workloads" | "loopback_tunnel";
 export type ExtensionInfo = {
 /**
@@ -223,6 +233,42 @@ extract: Extractor,
  * `health_check`, not allowed at `collector`.
  */
 healthy?: Array<string> | null, };
+export type PackWorkloadKind = {
+/**
+ * The column that holds each workload's name.
+ */
+name_column: string,
+/**
+ * The column that holds its state, if the table has one.
+ */
+state_column?: string | null, };
+export type PackApp = {
+/**
+ * The port on the server's localhost, 1 to 65535.
+ */
+port: number,
+/**
+ * The page to open first, starting with `/`; 512 characters at most.
+ * Defaults to `/`. Never a scheme or a host.
+ */
+path?: string | null, };
+export type PackBadge = {
+/**
+ * The `id` of a contribution in this manifest whose command reads one
+ * value (a `line` or `json` extractor) and has no parameters.
+ */
+observation: string, };
+export type LineStyle = "solid" | "dashed" | "dotted";
+export type KindColor = "green" | "blue" | "amber" | "red" | "purple" | "grey";
+export type PackRelationship = {
+/**
+ * Defaults to `solid`.
+ */
+line?: LineStyle | null,
+/**
+ * Defaults to `green`, the colour of a plain relationship.
+ */
+color?: KindColor | null, };
 export type PackOutcome = "ok" | "command_failed" | "unreadable" | "output_limit" | "timed_out";
 export type PackHealth = "healthy" | "unhealthy" | "unknown";
 export type PackResult = { outcome: PackOutcome,
@@ -277,8 +323,28 @@ export type PackCommandView = { plugin_id: string, plugin_name: string, contribu
 /**
  * The exact command, with `{name}` where a parameter goes.
  */
-argv: Array<string>, parameters: Array<PackParameterView>, observation: PackObservation | null, };
+argv: Array<string>, parameters: Array<PackParameterView>,
+/**
+ * Set when the pack presents this table's rows as workloads of a kind
+ * named by `title`.
+ */
+workload_kind: PackWorkloadKind | null, observation: PackObservation | null, };
 export type PackServerState = { contract_version: number, server_id: ServerId, commands: Array<PackCommandView>, };
+export type PackBadgeState = "healthy" | "unhealthy" | "value" | "stale" | "unknown";
+export type PackBadgeView = { server_id: ServerId, plugin_id: string, plugin_name: string, contribution_id: string, title: string, state: PackBadgeState, value: string | null,
+/**
+ * When the observation was read; absent if there is none.
+ */
+observed_at: string | null, };
+export type PackRelationshipKindView = { plugin_id: string, plugin_name: string, contribution_id: string, title: string, line: LineStyle, color: KindColor,
+/**
+ * Servers the owner allowed this plugin on. The kind can be chosen for
+ * a relationship only when both of its servers are listed.
+ */
+server_ids: Array<ServerId>, };
+export type PackMapState = { contract_version: number, badges: Array<PackBadgeView>, relationship_kinds: Array<PackRelationshipKindView>, };
+export type PackAppView = { plugin_id: string, plugin_name: string, contribution_id: string, title: string, port: number, path: string, };
+export type PackAppsState = { contract_version: number, server_id: ServerId, apps: Array<PackAppView>, };
 export type TrustLevel = "read_only" | "confirm_changes" | "trusted_automation";
 export type CapabilityKind = "read" | "change" | "elevation";
 export type PluginStatus = "disabled" | "enabled" | "changed_since_review";
@@ -297,7 +363,7 @@ export type PluginContributionView = { id: string, title: string, point: Extensi
 /**
  * The exact read-only command a pack contribution runs, if any.
  */
-command: PackCommand | null, };
+command: PackCommand | null, workload_kind: PackWorkloadKind | null, app: PackApp | null, badge: PackBadge | null, relationship: PackRelationship | null, };
 export type ServerGrant = { server_id: ServerId, capabilities: Array<Capability>, };
 export type PluginView = { id: string, name: string, version: string, api_version: number, description: string | null, author: string | null, license: string | null, homepage: string | null,
 /**

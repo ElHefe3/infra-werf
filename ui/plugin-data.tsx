@@ -3,6 +3,7 @@ import type { MapServer, PackCommandView, PackObservation, PackOutcome, PackServ
 import { createWorkspaceClient } from "./workspace-client";
 import { errorMessage } from "./map-model";
 import { date } from "./workspace-parts";
+import { packWorkloads } from "./pack-map-model";
 const client = createWorkspaceClient();
 
 const OUTCOME: Record<PackOutcome, string> = {
@@ -29,9 +30,11 @@ export function describeResult(observation: PackObservation): string {
 function Result({ command, observation }: { command: PackCommandView; observation: PackObservation }) {
   const { result } = observation;
   const chosen = Object.values(observation.parameters);
+  const kind = packWorkloads(command);
   return <div className="pack-result">
     <p className={`pack-value ${result.health ?? (result.outcome === "ok" ? "ok" : "unknown")}`}>{chosen.length > 0 && <span className="muted">{chosen.join(", ")}: </span>}{describeResult(observation)}</p>
-    {result.rows.length > 0 && <div className="table-scroll"><table aria-label={`${command.title} result`}><thead><tr>{result.columns.map(column => <th key={column}>{column.replaceAll("_", " ")}</th>)}</tr></thead>
+    {kind && kind.length > 0 && <ul className="pack-workloads" aria-label={`${command.title} workloads`}>{kind.map((row, index) => <li key={`${row.name}.${index}`}><span className="workload-icon">◆</span><span>{row.name}</span>{row.state && <span className="small-state">{row.state}</span>}</li>)}</ul>}
+    {!kind && result.rows.length > 0 && <div className="table-scroll"><table aria-label={`${command.title} result`}><thead><tr>{result.columns.map(column => <th key={column}>{column.replaceAll("_", " ")}</th>)}</tr></thead>
       <tbody>{result.rows.map((row, index) => <tr key={index}>{row.map((cell, at) => <td key={at}>{cell}</td>)}</tr>)}</tbody></table></div>}
     <small>Read <time dateTime={observation.observed_at}>{date(observation.observed_at)}</time> · {observation.fresh ? "Fresh" : "Stale: run it again for a current answer"} · Source: {command.plugin_name} (<code>{observation.source}</code>) over your SSH access · Kept in memory only</small>
   </div>;
@@ -67,7 +70,7 @@ export function PluginData({ server, disabled, onBusy, openPlugin }: { server: M
       {state?.commands.filter(command => command.plugin_id === id).map(command => {
         const missing = command.parameters.some(parameter => !choices[`${key(command)}.${parameter.name}`]);
         return <article className="pack-command" key={key(command)} aria-label={command.title}>
-          <header><strong>{command.title}</strong><span className="kind">{command.health_check ? "Health check" : "Collector"}</span>
+          <header><strong>{command.title}</strong><span className="kind">{command.health_check ? "Health check" : command.workload_kind ? "Workload kind" : "Collector"}</span>
             <button className="primary" disabled={disabled || Boolean(running) || missing} aria-label={`Run ${command.title}`} onClick={() => void run(command)}>{running === key(command) ? "Running…" : "Run"}</button></header>
           <code className="pack-argv" aria-label={`${command.title} command`}>{commandLine(command.argv)}</code>
           {command.parameters.map(parameter => { const id = `${key(command)}.${parameter.name}`; return <label key={parameter.name}><span>{`{${parameter.name}}`} is a {parameter.source} from this server’s saved inventory</span>

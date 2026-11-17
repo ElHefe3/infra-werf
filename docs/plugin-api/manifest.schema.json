@@ -182,6 +182,16 @@
           "description": "A brokered operation on a server.",
           "type": "string",
           "const": "operation"
+        },
+        {
+          "description": "A named application in a server's Apps list, opened through the\nsame loopback tunnel as any other (plugin API v2).",
+          "type": "string",
+          "const": "remote_app"
+        },
+        {
+          "description": "A named kind of relationship for the map: a label and a line style.\nIt documents intent and applies nothing (plugin API v2).",
+          "type": "string",
+          "const": "relationship_kind"
         }
       ]
     },
@@ -276,10 +286,87 @@
         }
       ]
     },
+    "KindColor": {
+      "description": "The colour of a relationship kind, from a fixed set.",
+      "oneOf": [
+        {
+          "description": "The colour of a plain relationship.",
+          "type": "string",
+          "const": "green"
+        },
+        {
+          "description": "Blue.",
+          "type": "string",
+          "const": "blue"
+        },
+        {
+          "description": "Amber.",
+          "type": "string",
+          "const": "amber"
+        },
+        {
+          "description": "Red.",
+          "type": "string",
+          "const": "red"
+        },
+        {
+          "description": "Purple.",
+          "type": "string",
+          "const": "purple"
+        },
+        {
+          "description": "Grey.",
+          "type": "string",
+          "const": "grey"
+        }
+      ]
+    },
+    "LineStyle": {
+      "description": "The line of a relationship kind.",
+      "oneOf": [
+        {
+          "description": "An unbroken line.",
+          "type": "string",
+          "const": "solid"
+        },
+        {
+          "description": "A line of dashes.",
+          "type": "string",
+          "const": "dashed"
+        },
+        {
+          "description": "A line of dots.",
+          "type": "string",
+          "const": "dotted"
+        }
+      ]
+    },
     "ManifestContribution": {
       "description": "One thing a plugin adds at an extension point.",
       "type": "object",
       "properties": {
+        "app": {
+          "description": "Required for a `remote_app`: the application to open (API v2).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PackApp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "badge": {
+          "description": "For a `server_badge`: the pack observation the badge shows (API v2).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PackBadge"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "capabilities": {
           "description": "The capabilities this contribution uses: at least one, each\nrequested by the manifest and permitted at this extension point.",
           "type": "array",
@@ -315,9 +402,31 @@
         "point": {
           "$ref": "#/$defs/ExtensionPoint"
         },
+        "relationship": {
+          "description": "For a `relationship_kind`: how the line is drawn (API v2).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PackRelationship"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "title": {
           "description": "Display name, 40 characters at most.",
           "type": "string"
+        },
+        "workload_kind": {
+          "description": "For a `collector` whose command reads a table: present its rows as\nworkloads of a kind named by `title` (API v2).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PackWorkloadKind"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "additionalProperties": false,
@@ -326,6 +435,44 @@
         "point",
         "title",
         "capabilities"
+      ]
+    },
+    "PackApp": {
+      "description": "An application a pack names for a server's Apps list. It always listens\non the server's own localhost: there is no host field, and InfraWerf\nopens it through the same loopback-only tunnel as any other application.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "description": "The page to open first, starting with `/`; 512 characters at most.\nDefaults to `/`. Never a scheme or a host.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "port": {
+          "description": "The port on the server's localhost, 1 to 65535.",
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "port"
+      ]
+    },
+    "PackBadge": {
+      "description": "Which pack observation a server badge shows.",
+      "type": "object",
+      "properties": {
+        "observation": {
+          "description": "The `id` of a contribution in this manifest whose command reads one\nvalue (a `line` or `json` extractor) and has no parameters.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "observation"
       ]
     },
     "PackCommand": {
@@ -383,6 +530,56 @@
       "required": [
         "name",
         "source"
+      ]
+    },
+    "PackRelationship": {
+      "description": "How a relationship of this kind is drawn. It is decoration only.",
+      "type": "object",
+      "properties": {
+        "color": {
+          "description": "Defaults to `green`, the colour of a plain relationship.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KindColor"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "line": {
+          "description": "Defaults to `solid`.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LineStyle"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "PackWorkloadKind": {
+      "description": "Which columns of a collector's table name a workload and give its state.",
+      "type": "object",
+      "properties": {
+        "name_column": {
+          "description": "The column that holds each workload's name.",
+          "type": "string"
+        },
+        "state_column": {
+          "description": "The column that holds its state, if the table has one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name_column"
       ]
     },
     "ParameterSource": {

@@ -907,3 +907,154 @@ fn a_pack_command_is_listed_and_admitted_only_where_the_owner_allowed_it() {
         Refusal::ChangedSinceReview
     );
 }
+
+const MAP_PACK: &str = "org.example.homelab-map";
+
+fn map_fixture() -> Fixture {
+    let f = fixture();
+    let example = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../examples/homelab-map/infrawerf-plugin.json");
+    install(
+        &f.plugins,
+        "homelab-map",
+        &std::fs::read_to_string(example).unwrap(),
+    );
+    f
+}
+
+#[test]
+fn pack_badges_apps_and_relationship_kinds_appear_only_where_the_owner_allowed_them() {
+    let mut f = map_fixture();
+    let (alpha, beta) = (f.alpha.clone(), f.beta.clone());
+    let badges = |f: &Fixture| -> Vec<(ServerId, String)> {
+        f.store
+            .pack_badges(&f.plugins)
+            .unwrap()
+            .into_iter()
+            .map(|b| (b.server_id, b.observation))
+            .collect()
+    };
+    let kinds = |f: &Fixture| f.store.relationship_kinds(&f.plugins).unwrap();
+    let apps = |f: &Fixture, server: &ServerId| -> Vec<(u16, String)> {
+        f.store
+            .pack_apps(&f.plugins, server)
+            .unwrap()
+            .into_iter()
+            .map(|a| (a.port, a.path))
+            .collect()
+    };
+    // Found, not enabled: nothing anywhere, and an open is refused.
+    assert!(badges(&f).is_empty() && kinds(&f).is_empty() && apps(&f, &alpha).is_empty());
+    assert_eq!(
+        f.store
+            .plugin_begin_app(&f.plugins, MAP_PACK, &alpha, "status-page")
+            .unwrap()
+            .unwrap_err(),
+        Refusal::PluginDisabled
+    );
+    // Read-only, everything allowed on alpha: badge and kind, but no app,
+    // because opening a tunnel is a change.
+    f.store
+        .plugin_enable(&f.plugins, MAP_PACK, TrustLevel::ReadOnly)
+        .unwrap();
+    let all = [
+        Capability::ReadSavedState,
+        Capability::SshSession,
+        Capability::RunApprovedCommand,
+        Capability::LoopbackTunnel,
+    ];
+    f.store
+        .plugin_set_grant(&f.plugins, MAP_PACK, &alpha, &all)
+        .unwrap();
+    assert_eq!(badges(&f), [(alpha.clone(), "system-state".to_owned())]);
+    assert_eq!(kinds(&f).len(), 1);
+    assert_eq!(kinds(&f)[0].server_ids, [alpha.clone()]);
+    assert!(apps(&f, &alpha).is_empty());
+    assert_eq!(
+        f.store
+            .plugin_begin_app(&f.plugins, MAP_PACK, &alpha, "status-page")
+            .unwrap()
+            .unwrap_err(),
+        Refusal::TrustTooLow
+    );
+    // A badge needs the command it shows to be allowed too.
+    f.store
+        .plugin_set_grant(&f.plugins, MAP_PACK, &beta, &[Capability::ReadSavedState])
+        .unwrap();
+    assert_eq!(badges(&f).len(), 1);
+    // The kind can be chosen only between two servers it is allowed on.
+    let choice = || AddRelationship {
+        source: f.alpha.clone(),
+        target: f.beta.clone(),
+        label: "nightly".into(),
+        kind: Some(RelationshipKindChoice {
+            plugin_id: MAP_PACK.into(),
+            contribution_id: "backs-up-to".into(),
+        }),
+    };
+    let first = choice();
+    assert_eq!(kinds(&f)[0].server_ids, [alpha.clone(), beta.clone()]);
+    f.store
+        .add_relationship_with_kinds(&f.plugins, first)
+        .unwrap();
+    let edge = f.store.snapshot().unwrap().edges.pop().unwrap();
+    assert_eq!(
+        edge.kind,
+        Some(RelationshipKindRef {
+            plugin_id: MAP_PACK.into(),
+            kind_id: "backs-up-to".into(),
+            title: "Backs up to".into()
+        })
+    );
+    // A kind cannot be sent through the plain path, nor made up.
+    let mut plain = choice();
+    plain.label = "other".into();
+    assert_eq!(
+        f.store.add_relationship(plain).unwrap_err().code,
+        ErrorCode::InvalidInput
+    );
+    let mut made_up = choice();
+    made_up.label = "made up".into();
+    made_up.kind.as_mut().unwrap().contribution_id = "state-badge".into();
+    assert_eq!(
+        f.store
+            .add_relationship_with_kinds(&f.plugins, made_up)
+            .unwrap_err()
+            .code,
+        ErrorCode::Denied
+    );
+    // Confirm each change: the app is listed with the reviewed port and
+    // path, and the press of Open is the confirmation.
+    f.store
+        .plugin_enable(&f.plugins, MAP_PACK, TrustLevel::ConfirmChanges)
+        .unwrap();
+    assert_eq!(apps(&f, &alpha), [(8099, "/status".to_owned())]);
+    assert!(apps(&f, &beta).is_empty());
+    let app = f
+        .store
+        .plugin_begin_app(&f.plugins, MAP_PACK, &alpha, "status-page")
+        .unwrap()
+        .unwrap();
+    f.store
+        .plugin_finish_app(&app, &alpha, ActivityOutcome::Done)
+        .unwrap();
+    let log = f.store.plugin_activity(500).unwrap().entries;
+    assert_eq!(log[0].action, ACTION_OPEN_APP);
+    assert_eq!(log[0].detail, "status-page");
+    // Disabling removes everything, but the documented relationship keeps
+    // its kind's title.
+    f.store.plugin_disable(&f.plugins, MAP_PACK).unwrap();
+    assert!(badges(&f).is_empty() && kinds(&f).is_empty() && apps(&f, &alpha).is_empty());
+    let edge = f.store.snapshot().unwrap().edges.pop().unwrap();
+    assert_eq!(edge.kind.unwrap().title, "Backs up to");
+    // Removing the relationship removes its kind.
+    f.store.remove_relationship(&edge.id).unwrap();
+    assert!(f.store.snapshot().unwrap().edges.is_empty());
+    let database = f.database.clone();
+    drop(f.store);
+    let left: i64 = Connection::open(database)
+        .unwrap()
+        .query_row("SELECT count(*) FROM edge_kind", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(left, 0);
+}

@@ -18,7 +18,8 @@ $steps = @(
     @{ Name='workload-control'; File='scripts/verify_native_workload_control.mjs'; Arguments=@() },
     @{ Name='monitoring'; File='scripts/verify_native_monitoring.mjs'; Arguments=@() },
     @{ Name='apps'; File='scripts/verify_native_apps.mjs'; Arguments=@() },
-    @{ Name='packs'; File='scripts/verify_native_packs.mjs'; Arguments=@() }
+    @{ Name='packs'; File='scripts/verify_native_packs.mjs'; Arguments=@() },
+    @{ Name='pack-map'; File='scripts/verify_native_pack_map.mjs'; Arguments=@() }
 )
 if ($steps.Name -notcontains $StartAt) { throw 'Unknown starting suite.' }
 $started = $false

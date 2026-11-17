@@ -206,7 +206,8 @@ impl Store {
                 reachability: HostReachability::default(),
             });
         }
-        let edges = read_edges(&self.db)?;
+        let mut edges = read_edges(&self.db)?;
+        attach_kinds(&self.db, &mut edges)?;
         let events = read_events(&self.db, true)?;
         Ok(MapState {
             contract_version: CONTRACT_VERSION,
@@ -293,7 +294,21 @@ impl Store {
         tx.commit().map_err(sql_error)
     }
 
+    /// Documents a plain relationship. One with a plugin kind goes through
+    /// `add_relationship_with_kinds`, which checks the kind is available.
     pub fn add_relationship(&mut self, input: AddRelationship) -> Result<EdgeId, AtlasError> {
+        if input.kind.is_some() {
+            return Err(AtlasError::new(ErrorCode::InvalidInput));
+        }
+        self.insert_relationship(input, None)
+    }
+
+    /// `kind` is the plugin ID, the kind's ID and its title, already checked.
+    pub(crate) fn insert_relationship(
+        &mut self,
+        input: AddRelationship,
+        kind: Option<(&str, &str, &str)>,
+    ) -> Result<EdgeId, AtlasError> {
         if input.source == input.target {
             return Err(AtlasError::new(ErrorCode::InvalidInput));
         }
@@ -320,9 +335,24 @@ impl Store {
             ],
         )
         .map_err(sql_error)?;
+        let described = match kind {
+            Some((plugin, kind_id, title)) => {
+                tx.execute(
+                    "INSERT INTO edge_kind VALUES(?,?,?,?)",
+                    params![id.as_str(), plugin, kind_id, title],
+                )
+                .map_err(sql_error)?;
+                if label.is_empty() {
+                    title.to_owned()
+                } else {
+                    format!("{title}: {label}")
+                }
+            }
+            None => label.clone(),
+        };
         event(
             &tx,
-            &format!("Relationship documented: {label}"),
+            &format!("Relationship documented: {described}"),
             Some(input.source.as_str()),
         )?;
         tx.commit().map_err(sql_error)?;
@@ -394,9 +424,35 @@ fn read_edges(db: &Connection) -> Result<Vec<Relationship>, AtlasError> {
                 source: ServerId::parse(&source)?,
                 target: ServerId::parse(&target)?,
                 label,
+                kind: None,
             })
         })
         .collect()
+}
+
+/// Adds the plugin relationship kind each relationship was documented with.
+fn attach_kinds(db: &Connection, edges: &mut [Relationship]) -> Result<(), AtlasError> {
+    let mut statement = db
+        .prepare("SELECT edge_id,plugin_id,kind_id,title FROM edge_kind")
+        .map_err(sql_error)?;
+    let rows = statement
+        .query_map([], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                RelationshipKindRef {
+                    plugin_id: r.get(1)?,
+                    kind_id: r.get(2)?,
+                    title: r.get(3)?,
+                },
+            ))
+        })
+        .map_err(sql_error)?
+        .collect::<Result<std::collections::HashMap<_, _>, _>>()
+        .map_err(sql_error)?;
+    for edge in edges {
+        edge.kind = rows.get(edge.id.as_str()).cloned();
+    }
+    Ok(())
 }
 fn read_events(db: &Connection, limit: bool) -> Result<Vec<Activity>, AtlasError> {
     let sql = if limit {

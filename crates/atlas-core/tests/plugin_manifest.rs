@@ -34,12 +34,15 @@ fn codes(bytes: &[u8]) -> Vec<String> {
 #[test]
 fn valid_manifests_load_and_register_like_built_in_contributions() {
     let valid = fixtures("valid");
-    assert_eq!(valid.len(), 3);
+    assert_eq!(valid.len(), 4);
     for (name, bytes) in valid {
         let manifest =
             validate_manifest(&bytes).unwrap_or_else(|issues| panic!("{name}: {issues:?}"));
         // Manifests written for API v1 are still accepted as they are.
-        assert_eq!(manifest.api_version, if name == "pack" { 2 } else { 1 });
+        assert_eq!(
+            manifest.api_version,
+            if name.starts_with("pack") { 2 } else { 1 }
+        );
         assert!((MIN_PLUGIN_API_VERSION..=PLUGIN_API_VERSION).contains(&manifest.api_version));
         // The same registry that holds built-in contributions accepts them.
         let mut registry = builtin();
@@ -409,7 +412,7 @@ fn the_guide_and_reference_document_everything_in_the_api() {
     };
     let points = names("ExtensionPoint");
     let capabilities = names("Capability");
-    assert_eq!(points.len(), 8);
+    assert_eq!(points.len(), 10);
     assert_eq!(capabilities.len(), 12);
     let fields = declared_fields();
     let everything: Vec<String> = fields
@@ -456,7 +459,19 @@ fn the_guide_and_reference_document_everything_in_the_api() {
     for definition in ["ParameterSource", "Separator"] {
         pack_names.extend(names(definition));
     }
-    assert_eq!(pack_names.len(), 19, "{pack_names:?}");
+    // And everything API v2 added besides commands (T044).
+    for definition in [
+        "PackApp",
+        "PackBadge",
+        "PackRelationship",
+        "PackWorkloadKind",
+    ] {
+        properties(&schema["$defs"][definition], &mut pack_names);
+    }
+    for definition in ["LineStyle", "KindColor"] {
+        pack_names.extend(names(definition));
+    }
+    assert_eq!(pack_names.len(), 33, "{pack_names:?}");
     for name in &pack_names {
         assert!(
             packs.contains(&format!("`{name}`")),
@@ -480,7 +495,7 @@ fn the_example_pack_is_the_documented_one_and_runs_only_what_it_shows() {
     assert_eq!(manifest.api_version, 2);
     let packs = std::fs::read_to_string(repository("docs/plugin-api/packs.md")).unwrap();
     let blocks = json_blocks(&packs);
-    assert_eq!(blocks.len(), 2);
+    assert_eq!(blocks.len(), 3);
     assert_eq!(validate_manifest(blocks[0].1.as_bytes()).unwrap(), manifest);
     let refused = validate_manifest(blocks[1].1.as_bytes()).unwrap_err();
     assert_eq!(blocks[1].0.as_deref(), Some("unsafe_argument"));
@@ -504,6 +519,77 @@ fn the_example_pack_is_the_documented_one_and_runs_only_what_it_shows() {
             "systemctl is-active {unit}"
         ]
     );
+}
+
+#[test]
+fn the_map_example_is_the_documented_one_and_opens_only_on_localhost() {
+    let example = std::fs::read(repository("examples/homelab-map/infrawerf-plugin.json")).unwrap();
+    let manifest = validate_manifest(&example).unwrap();
+    let packs = std::fs::read_to_string(repository("docs/plugin-api/packs.md")).unwrap();
+    let blocks = json_blocks(&packs);
+    assert_eq!(validate_manifest(blocks[2].1.as_bytes()).unwrap(), manifest);
+    let points: Vec<ExtensionPoint> = manifest.contributions.iter().map(|c| c.point).collect();
+    assert_eq!(
+        points,
+        [
+            ExtensionPoint::Collector,
+            ExtensionPoint::HealthCheck,
+            ExtensionPoint::ServerBadge,
+            ExtensionPoint::RemoteApp,
+            ExtensionPoint::RelationshipKind
+        ]
+    );
+    // An application has no field that could name another host: anything
+    // that tries is refused, whether as a field or inside the path.
+    let base: serde_json::Value = serde_json::from_slice(&example).unwrap();
+    let with = |change: &dyn Fn(&mut serde_json::Value)| {
+        let mut value = base.clone();
+        change(&mut value["contributions"][3]);
+        codes(&serde_json::to_vec(&value).unwrap())
+    };
+    for field in ["host", "remote_host", "url", "bind"] {
+        assert_eq!(
+            with(&|c| c["app"][field] = "192.168.1.10".into()),
+            ["invalid_app"],
+            "{field}"
+        );
+    }
+    for path in [
+        "//192.168.1.10/",
+        "http://192.168.1.10/",
+        "relative",
+        "/a b",
+        "",
+    ] {
+        assert_eq!(
+            with(&|c| c["app"]["path"] = path.into()),
+            ["invalid_app"],
+            "{path}"
+        );
+    }
+    assert_eq!(with(&|c| c["app"]["port"] = 0.into()), ["invalid_app"]);
+    assert_eq!(with(&|c| c["app"]["port"] = 70000.into()), ["invalid_app"]);
+    // It opens through SSH, so it asks for both.
+    assert_eq!(
+        with(&|c| c["capabilities"] = serde_json::json!(["loopback_tunnel"])),
+        ["invalid_app"]
+    );
+    // A v1 manifest cannot use the new points.
+    let mut old = base.clone();
+    old["api_version"] = 1.into();
+    old["contributions"] = serde_json::json!([base["contributions"][4]]);
+    old["capabilities"] = serde_json::json!(["read_saved_state"]);
+    assert_eq!(codes(&serde_json::to_vec(&old).unwrap()), ["unknown_point"]);
+    // A badge must name a single-value command in the same manifest.
+    for observation in ["missing", "state-badge", "sockets"] {
+        let mut value = base.clone();
+        value["contributions"][2]["badge"]["observation"] = observation.into();
+        assert_eq!(
+            codes(&serde_json::to_vec(&value).unwrap()),
+            ["invalid_badge"],
+            "{observation}"
+        );
+    }
 }
 
 #[test]

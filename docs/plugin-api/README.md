@@ -79,6 +79,10 @@ Each contribution:
 | `order` | no | Position among contributions at the same point, 0 to 65535. Defaults to 1000, after everything built in. |
 | `capabilities` | yes | The capabilities this contribution uses. At least one, no duplicates, each listed in the manifest's `capabilities` and permitted at its extension point. |
 | `command` | no | A read-only command for a `collector` or `health_check`, with `argv`, `parameters`, `extract` and `healthy`. Needs `api_version` 2. Defined in [packs](packs.md). |
+| `workload_kind` | no | For a `collector` whose command reads a table: show its rows as workloads, with `name_column` and `state_column`. Needs `api_version` 2. Defined in [packs](packs.md#workload-kinds). |
+| `app` | for `remote_app` | The application to open: `port` and `path` on the server's own localhost. Needs `api_version` 2. Defined in [packs](packs.md#applications). |
+| `badge` | no | For a `server_badge`: the `observation` it shows, the `id` of a command in the same manifest. Needs `api_version` 2. Defined in [packs](packs.md#badges). |
+| `relationship` | no | For a `relationship_kind`: its `line` and `color`. Needs `api_version` 2. Defined in [packs](packs.md#relationship-kinds). |
 
 The file is UTF-8 JSON, 64 KiB at most.
 
@@ -96,8 +100,10 @@ A contribution may only use capabilities its extension point permits.
 | `collector` | Reads something from a server with a `command`. | `ssh_session`, `run_approved_command` |
 | `health_check` | A check of a server: an unauthenticated probe, or from v2 a `command`. | `network_probe`; from v2 also `ssh_session`, `run_approved_command` |
 | `operation` | A brokered operation on a server. | `ssh_session`, `run_approved_command`, `read_files`, `write_files`, `transfer_files`, `elevate`, `control_workloads`, `loopback_tunnel` |
+| `remote_app` | From v2: an application in a server's Apps list, opened through a private tunnel to the server's own localhost. | `ssh_session`, `loopback_tunnel` |
+| `relationship_kind` | From v2: a kind of relationship the owner can choose when documenting one on the map, with its own line style. | `read_saved_state` |
 
-API v2 defines content for two points: a `collector` and a `health_check` may each carry a `command` ([packs](packs.md)). The content behind the other points (views, sandboxed logic) is defined by later parts of the API and will raise the API version.
+API v2 defines content for these points: a `collector` and a `health_check` may carry a `command`, a `collector` may also describe a `workload_kind`, a `server_badge` may show a command's result, a `remote_app` names an application and a `relationship_kind` names a line style ([packs](packs.md)). The content behind the other points (views, sandboxed logic) is defined by later parts of the API and will raise the API version.
 
 ## Capabilities
 
@@ -159,6 +165,10 @@ Each problem has a code, the field it concerns and a sentence. Codes are part of
 | `invalid_parameter` | A parameter name is malformed or repeated, or there are more than 4. |
 | `invalid_extractor` | A line number, column list, skip count or JSON path is malformed. |
 | `invalid_health_rule` | The `healthy` values are missing on a health check, present on a collector, used with a table, or malformed. |
+| `invalid_app` | An `app` is missing on a `remote_app`, present elsewhere, has a field other than `port` and `path`, a port of 0, a path that is not a plain path on the server, or the contribution does not list `ssh_session` and `loopback_tunnel`. |
+| `invalid_badge` | A `badge` is on another point, in a v1 manifest, or its `observation` is not a command in the same manifest that reads one value without parameters. |
+| `invalid_relationship_kind` | A `relationship` is on another point, or has a line or colour that is not in the lists. |
+| `invalid_workload_kind` | A `workload_kind` is not on a collector with a table extractor, or names a column the table does not have. |
 
 ## Compatibility rule
 
@@ -175,6 +185,7 @@ The plugin API version is one whole number.
 
 - A contribution may have a `command` ([packs](packs.md)), at the `collector` and `health_check` points only.
 - A `health_check` may use `ssh_session` and `run_approved_command`. In a v1 manifest it may still use only `network_probe`.
-- Ten new error codes, from `invalid_command` to `invalid_health_rule`.
+- Two new extension points, `remote_app` and `relationship_kind`, and four new contribution fields: `workload_kind`, `app`, `badge` and `relationship` ([packs](packs.md)).
+- Fourteen new error codes, from `invalid_command` to `invalid_workload_kind`.
 
 Nothing was removed and no v1 rule changed, so a v1 manifest means what it always did.

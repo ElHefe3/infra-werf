@@ -89,6 +89,95 @@ pub struct ManifestContribution {
     /// `run_approved_command`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub command: Option<PackCommand>,
+    /// For a `collector` whose command reads a table: present its rows as
+    /// workloads of a kind named by `title` (API v2).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workload_kind: Option<PackWorkloadKind>,
+    /// Required for a `remote_app`: the application to open (API v2).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub app: Option<PackApp>,
+    /// For a `server_badge`: the pack observation the badge shows (API v2).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub badge: Option<PackBadge>,
+    /// For a `relationship_kind`: how the line is drawn (API v2).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relationship: Option<PackRelationship>,
+}
+
+/// An application a pack names for a server's Apps list. It always listens
+/// on the server's own localhost: there is no host field, and InfraWerf
+/// opens it through the same loopback-only tunnel as any other application.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct PackApp {
+    /// The port on the server's localhost, 1 to 65535.
+    pub port: u16,
+    /// The page to open first, starting with `/`; 512 characters at most.
+    /// Defaults to `/`. Never a scheme or a host.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+}
+
+/// Which pack observation a server badge shows.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct PackBadge {
+    /// The `id` of a contribution in this manifest whose command reads one
+    /// value (a `line` or `json` extractor) and has no parameters.
+    pub observation: String,
+}
+
+/// How a relationship of this kind is drawn. It is decoration only.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct PackRelationship {
+    /// Defaults to `solid`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub line: Option<LineStyle>,
+    /// Defaults to `green`, the colour of a plain relationship.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<KindColor>,
+}
+
+/// The line of a relationship kind.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum LineStyle {
+    /// An unbroken line.
+    Solid,
+    /// A line of dashes.
+    Dashed,
+    /// A line of dots.
+    Dotted,
+}
+
+/// The colour of a relationship kind, from a fixed set.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum KindColor {
+    /// The colour of a plain relationship.
+    Green,
+    /// Blue.
+    Blue,
+    /// Amber.
+    Amber,
+    /// Red.
+    Red,
+    /// Purple.
+    Purple,
+    /// Grey.
+    Grey,
+}
+
+/// Which columns of a collector's table name a workload and give its state.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct PackWorkloadKind {
+    /// The column that holds each workload's name.
+    pub name_column: String,
+    /// The column that holds its state, if the table has one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state_column: Option<String>,
 }
 
 /// One read-only command a pack contribution runs, and how its output is
@@ -495,6 +584,160 @@ fn check_command(
     }
 }
 
+/// Checks what API v2 added besides commands: applications, badges,
+/// relationship kinds and workload kinds. `at` is the contribution's path.
+fn check_additions(
+    manifest: &PluginManifest,
+    contribution: &ManifestContribution,
+    at: &str,
+    issues: &mut Issues,
+) {
+    use ExtensionPoint::*;
+    let v2 = manifest.api_version >= PACK_API_VERSION;
+    let needs_v2 = format!("needs \"api_version\": {PACK_API_VERSION} or newer");
+    if !v2 && matches!(contribution.point, RemoteApp | RelationshipKind) {
+        issues.add(
+            ManifestRule::UnknownPoint,
+            format!("{at}.point"),
+            format!("This extension point {needs_v2}."),
+        );
+    }
+
+    let field = format!("{at}.app");
+    match (&contribution.app, contribution.point == RemoteApp) {
+        (None, true) => issues.add(
+            ManifestRule::InvalidApp,
+            field,
+            "A remote_app contribution has an \"app\" that gives the port to open.",
+        ),
+        (Some(_), false) => issues.add(
+            ManifestRule::InvalidApp,
+            field,
+            "Only a remote_app contribution has an \"app\".",
+        ),
+        (Some(app), true) => {
+            for needed in [Capability::SshSession, Capability::LoopbackTunnel] {
+                if !contribution.capabilities.contains(&needed) {
+                    issues.add(
+                        ManifestRule::InvalidApp,
+                        format!("{at}.capabilities"),
+                        format!(
+                            "A remote_app lists \"{}\" in its capabilities: it opens through your SSH access.",
+                            capability_name(needed)
+                        ),
+                    );
+                }
+            }
+            if app.port == 0 {
+                issues.add(
+                    ManifestRule::InvalidApp,
+                    format!("{field}.port"),
+                    "A port is a whole number from 1 to 65535.",
+                );
+            }
+            if app
+                .path
+                .as_deref()
+                .is_some_and(|path| !crate::tunnel::valid_path(path))
+            {
+                issues.add(
+                    ManifestRule::InvalidApp,
+                    format!("{field}.path"),
+                    "A path starts with one / and is at most 512 characters, for example /login. It is never a full address: an application is always opened on the server's own localhost.",
+                );
+            }
+        }
+        (None, false) => {}
+    }
+
+    if let Some(badge) = &contribution.badge {
+        let field = format!("{at}.badge");
+        if contribution.point != ServerBadge {
+            issues.add(
+                ManifestRule::InvalidBadge,
+                field,
+                "Only a server_badge contribution has a \"badge\".",
+            );
+        } else if !v2 {
+            issues.add(
+                ManifestRule::InvalidBadge,
+                field,
+                format!("A badge {needs_v2}."),
+            );
+        } else {
+            let single_value = manifest
+                .contributions
+                .iter()
+                .find(|other| other.id == badge.observation)
+                .and_then(|other| other.command.as_ref())
+                .is_some_and(|command| {
+                    command.parameters.is_empty()
+                        && !matches!(command.extract, Extractor::Table { .. })
+                });
+            if !single_value {
+                issues.add(
+                    ManifestRule::InvalidBadge,
+                    format!("{field}.observation"),
+                    format!(
+                        "\"{}\" must be the id of a contribution in this manifest whose command reads one value (a line or json extractor) and has no parameters.",
+                        badge.observation
+                    ),
+                );
+            }
+        }
+    }
+
+    if contribution.relationship.is_some() {
+        let field = format!("{at}.relationship");
+        if contribution.point != RelationshipKind {
+            issues.add(
+                ManifestRule::InvalidRelationshipKind,
+                field,
+                "Only a relationship_kind contribution has a \"relationship\".",
+            );
+        }
+    }
+
+    if let Some(kind) = &contribution.workload_kind {
+        let field = format!("{at}.workload_kind");
+        let columns = match (&contribution.command, contribution.point) {
+            (Some(command), Collector) => match &command.extract {
+                Extractor::Table { columns, .. } => Some(columns),
+                _ => None,
+            },
+            _ => None,
+        };
+        match columns {
+            None => issues.add(
+                ManifestRule::InvalidWorkloadKind,
+                field,
+                "Only a collector whose command has a table extractor can describe a workload kind.",
+            ),
+            Some(columns) => {
+                if !columns.contains(&kind.name_column) {
+                    issues.add(
+                        ManifestRule::InvalidWorkloadKind,
+                        format!("{field}.name_column"),
+                        format!(
+                            "\"{}\" is not one of the table's columns.",
+                            kind.name_column
+                        ),
+                    );
+                }
+                if kind.state_column.as_ref().is_some_and(|state| {
+                    !columns.contains(state) || *state == kind.name_column
+                }) {
+                    issues.add(
+                        ManifestRule::InvalidWorkloadKind,
+                        format!("{field}.state_column"),
+                        "The state column is another one of the table's columns, or is left out.",
+                    );
+                }
+            }
+        }
+    }
+}
+
 impl std::fmt::Display for PackCommand {
     /// The command as the owner reads it: the arguments separated by spaces.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -588,10 +831,21 @@ pub enum ManifestRule {
     InvalidExtractor,
     /// The healthy values are missing, misplaced or malformed.
     InvalidHealthRule,
+    /// An application is missing, misplaced or malformed: it gives a port
+    /// and a path on the server's own localhost and nothing else.
+    InvalidApp,
+    /// A badge is misplaced or malformed, or does not name a contribution
+    /// in the same manifest that reads one value without parameters.
+    InvalidBadge,
+    /// A relationship style is misplaced or malformed.
+    InvalidRelationshipKind,
+    /// A workload kind is misplaced or malformed, or names a column the
+    /// table does not have.
+    InvalidWorkloadKind,
 }
 
 impl ManifestRule {
-    pub const ALL: [ManifestRule; 36] = [
+    pub const ALL: [ManifestRule; 40] = [
         Self::MalformedJson,
         Self::TooLarge,
         Self::WrongType,
@@ -628,6 +882,10 @@ impl ManifestRule {
         Self::InvalidParameter,
         Self::InvalidExtractor,
         Self::InvalidHealthRule,
+        Self::InvalidApp,
+        Self::InvalidBadge,
+        Self::InvalidRelationshipKind,
+        Self::InvalidWorkloadKind,
     ];
 
     /// The stable code, as written in output and documentation.
@@ -685,6 +943,10 @@ enum Kind {
     Point,
     Contributions,
     Command,
+    WorkloadKind,
+    App,
+    Badge,
+    Relationship,
 }
 impl Kind {
     fn expects(self) -> &'static str {
@@ -694,6 +956,10 @@ impl Kind {
             Kind::Capabilities => "a list of capability names",
             Kind::Contributions => "a list of contributions",
             Kind::Command => "a command object",
+            Kind::WorkloadKind => "a workload kind object",
+            Kind::App => "an application object",
+            Kind::Badge => "a badge object",
+            Kind::Relationship => "a relationship style object",
         }
     }
 }
@@ -719,6 +985,10 @@ const CONTRIBUTION_FIELDS: &[(&str, Kind, bool)] = &[
     ("order", Kind::Integer, false),
     ("capabilities", Kind::Capabilities, true),
     ("command", Kind::Command, false),
+    ("workload_kind", Kind::WorkloadKind, false),
+    ("app", Kind::App, false),
+    ("badge", Kind::Badge, false),
+    ("relationship", Kind::Relationship, false),
 ];
 
 /// Field names and required flags, for the schema consistency test.
@@ -862,6 +1132,37 @@ fn shape(value: &Value, path: &str, fields: &[(&str, Kind, bool)], issues: &mut 
                         ManifestRule::InvalidCommand,
                         field,
                         format!("The command is not written as plugin API v{PLUGIN_API_VERSION} describes: {reason}."),
+                    );
+                }
+            }
+            Kind::WorkloadKind | Kind::App | Kind::Badge | Kind::Relationship => {
+                let (rule, read) = match kind {
+                    Kind::WorkloadKind => (
+                        ManifestRule::InvalidWorkloadKind,
+                        serde_json::from_value::<PackWorkloadKind>(found.clone()).err(),
+                    ),
+                    Kind::App => (
+                        ManifestRule::InvalidApp,
+                        serde_json::from_value::<PackApp>(found.clone()).err(),
+                    ),
+                    Kind::Badge => (
+                        ManifestRule::InvalidBadge,
+                        serde_json::from_value::<PackBadge>(found.clone()).err(),
+                    ),
+                    _ => (
+                        ManifestRule::InvalidRelationshipKind,
+                        serde_json::from_value::<PackRelationship>(found.clone()).err(),
+                    ),
+                };
+                if !found.is_object() {
+                    wrong(issues, field);
+                } else if let Some(error) = read {
+                    let reason = error.to_string();
+                    let reason = reason.split(" at line ").next().unwrap_or_default();
+                    issues.add(
+                        rule,
+                        field,
+                        format!("This is not written as plugin API v{PLUGIN_API_VERSION} describes: {reason}."),
                     );
                 }
             }
@@ -1175,6 +1476,7 @@ pub fn validate_manifest(bytes: &[u8]) -> Result<PluginManifest, Vec<ManifestIss
                 &mut issues,
             );
         }
+        check_additions(&manifest, contribution, &at, &mut issues);
     }
     for (index, capability) in manifest.capabilities.iter().enumerate() {
         if !used.contains(capability) {

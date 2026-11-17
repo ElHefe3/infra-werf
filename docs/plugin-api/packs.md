@@ -1,6 +1,6 @@
 # InfraWerf plugin packs — commands and extractors (plugin API v2)
 
-A pack is a plugin made only of data. From plugin API v2, a contribution at the `collector` or `health_check` point may carry one `command`: a read-only program to run on a server and a rule for reading its output. This page defines that. The rest of the manifest is in the [manifest reference](README.md); the finished example is in [`examples/host-basics`](../../examples/host-basics).
+A pack is a plugin made only of data. From plugin API v2, a contribution at the `collector` or `health_check` point may carry one `command`: a read-only program to run on a server and a rule for reading its output. A pack can also add to screens InfraWerf already has: [workload kinds](#workload-kinds), [badges](#badges) on server cards, [applications](#applications) in the Apps list and [relationship kinds](#relationship-kinds) for the map. This page defines all of that. The rest of the manifest is in the [manifest reference](README.md); finished examples are in [`examples/host-basics`](../../examples/host-basics) and [`examples/homelab-map`](../../examples/homelab-map).
 
 ## What a pack can and cannot do
 
@@ -222,6 +222,175 @@ These are the limits of InfraWerf's built-in collectors, enforced by the same co
 - **Settings → Plugins → your plugin** lists each command exactly as written, with its parameters and how its output is read, before the plugin is enabled.
 - **A server's Plugin data tab** lists the commands allowed on that server. Each has a Run button and shows its latest result with when it was read, whether it is still fresh (15 minutes) and which plugin produced it.
 - **Settings → Plugin activity** records every run: what was asked, whether it was allowed, and whether the run finished, failed or was cancelled.
+
+## Adding to existing screens
+
+These four additions change how InfraWerf shows what it already has. None of them runs anything new on a server, and none of them changes one.
+
+```json
+{
+  "id": "org.example.homelab-map",
+  "name": "Homelab map",
+  "version": "1.0.0",
+  "api_version": 2,
+  "description": "Socket units as a workload kind, a system state badge, a web page in Apps and a Backs up to relationship.",
+  "author": "Example Author",
+  "license": "MIT",
+  "capabilities": [
+    "read_saved_state",
+    "ssh_session",
+    "run_approved_command",
+    "loopback_tunnel"
+  ],
+  "contributions": [
+    {
+      "id": "sockets",
+      "point": "collector",
+      "title": "Socket units",
+      "capabilities": [
+        "ssh_session",
+        "run_approved_command"
+      ],
+      "command": {
+        "argv": [
+          "systemctl",
+          "list-units",
+          "--type=socket",
+          "--all",
+          "--no-legend",
+          "--plain"
+        ],
+        "extract": {
+          "kind": "table",
+          "columns": [
+            "unit",
+            "load",
+            "active",
+            "sub",
+            "description"
+          ]
+        }
+      },
+      "workload_kind": {
+        "name_column": "unit",
+        "state_column": "active"
+      }
+    },
+    {
+      "id": "system-state",
+      "point": "health_check",
+      "title": "System state",
+      "capabilities": [
+        "ssh_session",
+        "run_approved_command"
+      ],
+      "command": {
+        "argv": [
+          "systemctl",
+          "is-system-running"
+        ],
+        "extract": {
+          "kind": "line"
+        },
+        "healthy": [
+          "running"
+        ]
+      }
+    },
+    {
+      "id": "state-badge",
+      "point": "server_badge",
+      "title": "System state",
+      "capabilities": [
+        "read_saved_state"
+      ],
+      "badge": {
+        "observation": "system-state"
+      }
+    },
+    {
+      "id": "status-page",
+      "point": "remote_app",
+      "title": "Status page",
+      "capabilities": [
+        "ssh_session",
+        "loopback_tunnel"
+      ],
+      "app": {
+        "port": 8099,
+        "path": "/status"
+      }
+    },
+    {
+      "id": "backs-up-to",
+      "point": "relationship_kind",
+      "title": "Backs up to",
+      "capabilities": [
+        "read_saved_state"
+      ],
+      "relationship": {
+        "line": "dashed",
+        "color": "blue"
+      }
+    }
+  ]
+}
+```
+
+### Workload kinds
+
+A `collector` whose command reads a `table` may present its rows as workloads of a new kind, named by the contribution's `title`.
+
+| Field | Required | Rule |
+| --- | --- | --- |
+| `name_column` | yes | The column that holds each workload's name. |
+| `state_column` | no | Another column that holds its state. |
+
+The rows appear in the Plugin data tab as a list of workloads of that kind, with their state. They are a view of the command's latest result: kept in memory only like every pack result, with no inspection or controls. Refused with `invalid_workload_kind` when the command does not read a table or a column is not one of its `columns`.
+
+### Badges
+
+A `server_badge` with a `badge` shows the latest result of one of the pack's own commands on each server card.
+
+| Field | Required | Rule |
+| --- | --- | --- |
+| `observation` | yes | The `id` of a contribution in the same manifest whose command reads one value (`line` or `json`) and has no parameters. |
+
+A badge shows one of a fixed set of states; the pack chooses which result it shows, never how it looks:
+
+| State | When |
+| --- | --- |
+| Healthy | A fresh health check read a healthy value. |
+| Unhealthy | A fresh health check read any other value. |
+| Value | A fresh collector value, shown as it is. |
+| Stale | The result is older than 15 minutes. The old value is shown beside it. |
+| Unknown | Not run since InfraWerf started, or the last run read nothing. |
+
+A badge appears only on servers where the owner allowed both the badge (`read_saved_state`) and the command it shows. It never runs the command itself: the owner runs it from the Plugin data tab. Refused with `invalid_badge` otherwise.
+
+### Applications
+
+A `remote_app` names an application that listens on a server's own localhost. It appears in that server's Apps list, and opening it uses exactly the same private tunnel as any other application: a random port on 127.0.0.1 on this PC, forwarded to `localhost` on the server, in its own isolated window.
+
+| Field | Required | Rule |
+| --- | --- | --- |
+| `port` | yes | 1 to 65535. |
+| `path` | no | The first page, starting with one `/`, 512 characters at most. Defaults to `/`. |
+
+There is no host field. An application in a pack can only ever be on the server's own localhost, so a pack can never open a connection to another machine. Anything that tries, as a field or inside the path, is refused with `invalid_app`.
+
+Opening a tunnel is a change, so a `remote_app` needs `ssh_session` and `loopback_tunnel`, and a plugin enabled as read-only does not list its applications. Pressing Open is the confirmation a "confirm each change" plugin needs. Every open is logged, and changing the plugin's permissions closes its tunnels.
+
+### Relationship kinds
+
+A `relationship_kind` is a kind the owner can choose when documenting a relationship on the map. Its `title` is the kind's name.
+
+| Field | Required | Rule |
+| --- | --- | --- |
+| `line` | no | `solid` (default), `dashed` or `dotted`. |
+| `color` | no | `green` (default), `blue`, `amber`, `red`, `purple` or `grey`. |
+
+Choosing a kind documents intent and applies nothing: it is a label and a line on the owner's map. A kind can be chosen only for two servers the owner allowed the plugin on. The kind's title is saved with the relationship, so it reads the same if the plugin is later disabled or removed; only its line style then goes back to the plain one. Refused with `invalid_relationship_kind` when misplaced or when a value is not in the lists.
 
 ## Error codes
 

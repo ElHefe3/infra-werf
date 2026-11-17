@@ -88,7 +88,7 @@ switch ($Action) {
             Run-AtlasCommand 'cargo' @('run', '-p', 'atlas-core', '--bin', 'export-contracts', '--locked', '--', '--check')
             Run-AtlasCommand 'pnpm' @('check')
             Run-AtlasCommand 'node' @('--test', 'ui/remote-apps-model.test.ts')
-        } elseif ($Feature -in @('F21', 'T043')) {
+        } elseif ($Feature -in @('F21', 'T043', 'T044')) {
             Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-core', '--lib', 'pack::', '--locked')
             Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-core', '--test', 'plugin_manifest', '--locked')
             Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-core', '--test', 'plugin_host', '--locked')
@@ -96,6 +96,7 @@ switch ($Action) {
             Run-AtlasCommand 'cargo' @('run', '-p', 'atlas-core', '--bin', 'infrawerf-plugin', '--locked', '--', 'schema', '--check')
             Run-AtlasCommand 'cargo' @('run', '-p', 'atlas-core', '--bin', 'export-contracts', '--locked', '--', '--check')
             Run-AtlasCommand 'pnpm' @('check')
+            Run-AtlasCommand 'node' @('--test', 'ui/pack-map-model.test.ts')
         } elseif ($Feature -in @('F20', 'T041')) {
             Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-core', '--test', 'plugin_host', '--locked')
             Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-core', '--lib', 'extensions::', '--locked')

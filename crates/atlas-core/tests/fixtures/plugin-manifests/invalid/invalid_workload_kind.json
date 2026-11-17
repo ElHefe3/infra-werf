@@ -1,0 +1,107 @@
+{
+  "id": "org.example.homelab-map",
+  "name": "Homelab map",
+  "version": "1.0.0",
+  "api_version": 2,
+  "description": "Socket units as a workload kind, a system state badge, a web page in Apps and a Backs up to relationship.",
+  "author": "Example Author",
+  "license": "MIT",
+  "capabilities": [
+    "read_saved_state",
+    "ssh_session",
+    "run_approved_command",
+    "loopback_tunnel"
+  ],
+  "contributions": [
+    {
+      "id": "sockets",
+      "point": "collector",
+      "title": "Socket units",
+      "capabilities": [
+        "ssh_session",
+        "run_approved_command"
+      ],
+      "command": {
+        "argv": [
+          "systemctl",
+          "list-units",
+          "--type=socket",
+          "--all",
+          "--no-legend",
+          "--plain"
+        ],
+        "extract": {
+          "kind": "table",
+          "columns": [
+            "unit",
+            "load",
+            "active",
+            "sub",
+            "description"
+          ]
+        }
+      },
+      "workload_kind": {
+        "name_column": "name",
+        "state_column": "active"
+      }
+    },
+    {
+      "id": "system-state",
+      "point": "health_check",
+      "title": "System state",
+      "capabilities": [
+        "ssh_session",
+        "run_approved_command"
+      ],
+      "command": {
+        "argv": [
+          "systemctl",
+          "is-system-running"
+        ],
+        "extract": {
+          "kind": "line"
+        },
+        "healthy": [
+          "running"
+        ]
+      }
+    },
+    {
+      "id": "state-badge",
+      "point": "server_badge",
+      "title": "System state",
+      "capabilities": [
+        "read_saved_state"
+      ],
+      "badge": {
+        "observation": "system-state"
+      }
+    },
+    {
+      "id": "status-page",
+      "point": "remote_app",
+      "title": "Status page",
+      "capabilities": [
+        "ssh_session",
+        "loopback_tunnel"
+      ],
+      "app": {
+        "port": 8099,
+        "path": "/status"
+      }
+    },
+    {
+      "id": "backs-up-to",
+      "point": "relationship_kind",
+      "title": "Backs up to",
+      "capabilities": [
+        "read_saved_state"
+      ],
+      "relationship": {
+        "line": "dashed",
+        "color": "blue"
+      }
+    }
+  ]
+}

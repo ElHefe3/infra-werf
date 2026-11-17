@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import type { AppDiscovery, MapServer, TunnelInfo } from "./contracts.gen";
+import type { AppDiscovery, MapServer, PackAppView, TunnelInfo } from "./contracts.gen";
 import { createWorkspaceClient } from "./workspace-client";
 import { errorMessage } from "./map-model";
 import { type AppShortcut, appKey, describeApp, loadShortcuts, parseTarget, saveShortcuts } from "./remote-apps-model";
@@ -13,6 +13,7 @@ export function RemoteApps({ server, disabled }: { server: MapServer; disabled: 
   const [port, setPort] = useState(""), [path, setPath] = useState("/"), [name, setName] = useState("");
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState("");
   const [discovery, setDiscovery] = useState<AppDiscovery | null>(null), [discovering, setDiscovering] = useState(false), [choice, setChoice] = useState("");
+  const [packApps, setPackApps] = useState<PackAppView[]>([]);
   async function discover() {
     setDiscovering(true); setError("");
     try {
@@ -24,6 +25,7 @@ export function RemoteApps({ server, disabled }: { server: MapServer; disabled: 
   useEffect(() => {
     let disposed = false, unlisten: (() => void) | undefined;
     void refresh(); if (!disabled) void discover();
+    void client.packApps(server.id).then(found => { if (!disposed) setPackApps(found.apps); }, () => {});
     void listen("atlas-tunnels-changed", () => void refresh()).then(fn => { if (disposed) fn(); else unlisten = fn; }).catch(() => {});
     const timer = setInterval(() => void refresh(), 5000);
     return () => { disposed = true; clearInterval(timer); unlisten?.(); };
@@ -35,6 +37,18 @@ export function RemoteApps({ server, disabled }: { server: MapServer; disabled: 
       setNotice(`${target.name || `${target.remote_host ?? "localhost"}:${target.port}`} opened in its own window through a private tunnel.`);
       setTunnels(current => [...current.filter(t => t.tunnel_id !== info.tunnel_id), info]);
     } catch (e) { setError(errorMessage(e)); } finally { setBusy(false); }
+  }
+  async function openPack(app: PackAppView) {
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const info = await client.openPackApp(server.id, app.plugin_id, app.contribution_id);
+      setNotice(`${app.title} opened in its own window through a private tunnel.`);
+      setTunnels(current => [...current.filter(t => t.tunnel_id !== info.tunnel_id), info]);
+    } catch (e) {
+      const code = typeof e === "object" && e && "code" in e ? (e as { code: string }).code : "";
+      setError(code === "denied" ? `InfraWerf refused to open ${app.title}: ${app.plugin_name} is no longer allowed to open applications on ${server.name}. Check the plugin’s page in Settings.` : errorMessage(e));
+      void client.packApps(server.id).then(found => setPackApps(found.apps), () => {});
+    } finally { setBusy(false); }
   }
   function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -70,6 +84,8 @@ export function RemoteApps({ server, disabled }: { server: MapServer; disabled: 
       <button disabled={locked || discovering} onClick={() => void discover()}>{discovering ? "Checking…" : "Refresh"}</button>
     </div>
     {discovery && <p className="muted">{openable.length} web application{openable.length === 1 ? "" : "s"} found {new Date(discovery.discovered_at).toLocaleTimeString()}{discovery.complete ? "" : " · the server has no ss tool, so the list may be incomplete"}. Discovery only lists listening ports and reads each page title from the server; nothing is changed.</p>}
+    {packApps.length > 0 && <><p className="section-label">FROM PLUGINS</p><div className="app-shortcuts" aria-label="Applications from plugins">{packApps.map(app => <div className="app-shortcut" key={`${app.plugin_id}.${app.contribution_id}`}>
+      <button className="app-launch" disabled={locked} aria-label={`Open ${app.title}`} onClick={() => void openPack(app)}><strong>{app.title}</strong><span>localhost:{app.port}{app.path !== "/" ? app.path : ""} · from {app.plugin_name}</span></button></div>)}</div></>}
     {shortcuts.length > 0 && <><p className="section-label">SAVED APPLICATIONS</p><div className="app-shortcuts">{shortcuts.map(item => <div className="app-shortcut" key={item.name}>
       <button className="app-launch" disabled={locked} onClick={() => void open(item)}><strong>{item.name}</strong><span>localhost:{item.port}{item.path !== "/" ? item.path : ""}</span></button>
       <button className="text-button" aria-label={`Forget ${item.name}`} onClick={() => forget(item)}>Forget</button></div>)}</div></>}

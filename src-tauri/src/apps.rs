@@ -71,6 +71,35 @@ pub async fn tunnel_open(
     Ok(info)
 }
 
+/// Opens an application a plugin pack names, in the same isolated window
+/// through the same loopback tunnel (F21/T044). The interface sends only
+/// which application; the port and path come from the reviewed manifest.
+#[tauri::command]
+pub async fn pack_app_open(
+    window: tauri::WebviewWindow,
+    app: AppHandle,
+    workspace: State<'_, Arc<Workspace>>,
+    server_id: ServerId,
+    plugin_id: String,
+    contribution_id: String,
+) -> Result<TunnelInfo, AtlasError> {
+    local_desktop(&window)?;
+    workspace.require_extension(atlas_core::extensions::REMOTE_APPS_OWNER)?;
+    let workspace = workspace.inner().clone();
+    let opened = workspace.clone();
+    let info = tauri::async_runtime::spawn_blocking(move || {
+        opened.open_pack_app(&server_id, &plugin_id, &contribution_id)
+    })
+    .await
+    .map_err(|_| AtlasError::new(ErrorCode::IoFailure))??;
+    if let Err(error) = open_window(&app, &info) {
+        let _ = workspace.close_tunnel(&info.tunnel_id);
+        return Err(error);
+    }
+    let _ = app.emit_to("main", CHANGED, ());
+    Ok(info)
+}
+
 #[tauri::command]
 pub async fn tunnel_discover(
     window: tauri::WebviewWindow,

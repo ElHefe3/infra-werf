@@ -15,6 +15,7 @@
 //! cannot request the interactive terminal, and elevation is refused until
 //! the owner can name an exception for one action (T042).
 use crate::extensions::{Capability, ExtensionPoint};
+use crate::pack::{PackAppView, PackRelationshipKindView};
 use crate::plugin::{MANIFEST_FILE, MAX_MANIFEST_BYTES, PluginManifest, validate_manifest};
 use crate::store::sql_error;
 use crate::*;
@@ -42,6 +43,9 @@ CREATE TABLE IF NOT EXISTS plugin_activity (
   id INTEGER PRIMARY KEY, at TEXT NOT NULL, plugin_id TEXT NOT NULL, plugin_name TEXT NOT NULL,
   server_id TEXT, action TEXT NOT NULL, outcome TEXT NOT NULL, detail TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS plugin_switch (id INTEGER PRIMARY KEY CHECK(id=1), all_off INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS edge_kind (
+ edge_id TEXT PRIMARY KEY REFERENCES edges(id) ON DELETE CASCADE,
+ plugin_id TEXT NOT NULL, kind_id TEXT NOT NULL, title TEXT NOT NULL);
 ";
 /// The most log entries returned to the interface at once.
 pub const MAX_ACTIVITY_PAGE: u32 = 500;
@@ -54,6 +58,8 @@ pub const ACTION_ALL_OFF: &str = "all_plugins_off";
 pub const ACTION_ALL_ON: &str = "all_plugins_on";
 /// One run of a pack command; the log's detail is the contribution's ID.
 pub const ACTION_RUN_COMMAND: &str = "run_command";
+/// A pack application was opened through a tunnel; the detail is its ID.
+pub const ACTION_OPEN_APP: &str = "open_app";
 
 /// How far an enabled plugin may act. Chosen by the owner each time a plugin
 /// is enabled; there is no default.
@@ -218,6 +224,22 @@ pub struct PluginContributionView {
     pub capabilities: Vec<Capability>,
     /// The exact read-only command a pack contribution runs, if any.
     pub command: Option<crate::plugin::PackCommand>,
+    pub workload_kind: Option<crate::plugin::PackWorkloadKind>,
+    pub app: Option<crate::plugin::PackApp>,
+    pub badge: Option<crate::plugin::PackBadge>,
+    pub relationship: Option<crate::plugin::PackRelationship>,
+}
+
+/// A pack badge the owner's settings admit on one server right now, and
+/// the contribution whose observation it shows.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PackBadgeBinding {
+    pub server_id: ServerId,
+    pub plugin_id: String,
+    pub plugin_name: String,
+    pub contribution_id: String,
+    pub title: String,
+    pub observation: String,
 }
 
 /// A pack command the owner's settings admit right now.
@@ -444,6 +466,18 @@ fn server_exists(db: &Connection, server: &ServerId) -> Result<bool, AtlasError>
     .map_err(sql_error)
 }
 
+fn server_ids(db: &Connection) -> Result<Vec<ServerId>, AtlasError> {
+    let mut statement = db
+        .prepare("SELECT id FROM servers ORDER BY created_at,id")
+        .map_err(sql_error)?;
+    let rows = statement
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(sql_error)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(sql_error)?;
+    rows.iter().map(|id| ServerId::parse(id)).collect()
+}
+
 fn all_off(db: &Connection) -> Result<bool, AtlasError> {
     db.query_row(
         "SELECT COALESCE((SELECT all_off FROM plugin_switch WHERE id=1),0)",
@@ -513,7 +547,269 @@ fn decide(
     Ok(trust_admits(trust, capability_kind(capability)))
 }
 
+/// Whether the owner's settings admit every listed capability for a plugin
+/// on a server right now. `owner_starts` is for something that happens only
+/// when the owner presses its button: that press is the confirmation a
+/// "confirm each change" plugin needs. Nothing is logged.
+fn admits(
+    db: &Connection,
+    installed: &[Installed],
+    plugin: &str,
+    server: &ServerId,
+    capabilities: &[Capability],
+    owner_starts: bool,
+) -> Result<bool, AtlasError> {
+    for capability in capabilities {
+        match decide(db, installed, plugin, server, *capability)? {
+            Ok(false) => {}
+            Ok(true) if owner_starts => {}
+            _ => return Ok(false),
+        }
+    }
+    Ok(true)
+}
+
+fn app_view(
+    plugin: &PluginManifest,
+    entry: &crate::plugin::ManifestContribution,
+) -> Option<PackAppView> {
+    let app = entry.app.as_ref()?;
+    Some(PackAppView {
+        plugin_id: plugin.id.clone(),
+        plugin_name: plugin.name.clone(),
+        contribution_id: entry.id.clone(),
+        title: entry.title.clone(),
+        port: app.port,
+        path: app.path.clone().unwrap_or_else(|| "/".into()),
+    })
+}
+
 impl Store {
+    /// Every pack badge to draw: the plugin is enabled and unchanged, and
+    /// on that server the owner allowed both the badge and the command
+    /// whose observation it shows. Nothing is logged.
+    pub fn pack_badges(&self, directory: &Path) -> Result<Vec<PackBadgeBinding>, AtlasError> {
+        let (installed, _) = discover(directory);
+        let servers = server_ids(&self.db)?;
+        let mut found = Vec::new();
+        for plugin in &installed {
+            let manifest = &plugin.manifest;
+            for entry in &manifest.contributions {
+                let Some(badge) = &entry.badge else { continue };
+                let Some(source) = manifest
+                    .contributions
+                    .iter()
+                    .find(|other| other.id == badge.observation && other.command.is_some())
+                else {
+                    continue;
+                };
+                for server in &servers {
+                    if admits(
+                        &self.db,
+                        &installed,
+                        &manifest.id,
+                        server,
+                        &entry.capabilities,
+                        false,
+                    )? && admits(
+                        &self.db,
+                        &installed,
+                        &manifest.id,
+                        server,
+                        &source.capabilities,
+                        false,
+                    )? {
+                        found.push(PackBadgeBinding {
+                            server_id: server.clone(),
+                            plugin_id: manifest.id.clone(),
+                            plugin_name: manifest.name.clone(),
+                            contribution_id: entry.id.clone(),
+                            title: entry.title.clone(),
+                            observation: source.id.clone(),
+                        });
+                    }
+                }
+            }
+        }
+        Ok(found)
+    }
+
+    /// Relationship kinds from enabled plugins, each with the servers the
+    /// owner allowed it on. Nothing is logged.
+    pub fn relationship_kinds(
+        &self,
+        directory: &Path,
+    ) -> Result<Vec<PackRelationshipKindView>, AtlasError> {
+        use crate::plugin::{KindColor, LineStyle};
+        let (installed, _) = discover(directory);
+        let servers = server_ids(&self.db)?;
+        let mut found = Vec::new();
+        for plugin in &installed {
+            let manifest = &plugin.manifest;
+            for entry in &manifest.contributions {
+                if entry.point != crate::extensions::ExtensionPoint::RelationshipKind {
+                    continue;
+                }
+                let mut allowed = Vec::new();
+                for server in &servers {
+                    if admits(
+                        &self.db,
+                        &installed,
+                        &manifest.id,
+                        server,
+                        &entry.capabilities,
+                        false,
+                    )? {
+                        allowed.push(server.clone());
+                    }
+                }
+                if allowed.is_empty() {
+                    continue;
+                }
+                let style = entry.relationship.as_ref();
+                found.push(PackRelationshipKindView {
+                    plugin_id: manifest.id.clone(),
+                    plugin_name: manifest.name.clone(),
+                    contribution_id: entry.id.clone(),
+                    title: entry.title.clone(),
+                    line: style.and_then(|s| s.line).unwrap_or(LineStyle::Solid),
+                    color: style.and_then(|s| s.color).unwrap_or(KindColor::Green),
+                    server_ids: allowed,
+                });
+            }
+        }
+        Ok(found)
+    }
+
+    /// Documents a relationship. A plugin kind is accepted only if its
+    /// plugin is enabled and the owner allowed it on both servers; the
+    /// relationship itself is the owner's map entry and applies nothing.
+    pub fn add_relationship_with_kinds(
+        &mut self,
+        directory: &Path,
+        input: AddRelationship,
+    ) -> Result<EdgeId, AtlasError> {
+        let Some(choice) = input.kind.clone() else {
+            return self.add_relationship(input);
+        };
+        let kind = self
+            .relationship_kinds(directory)?
+            .into_iter()
+            .find(|kind| {
+                kind.plugin_id == choice.plugin_id
+                    && kind.contribution_id == choice.contribution_id
+                    && kind.server_ids.contains(&input.source)
+                    && kind.server_ids.contains(&input.target)
+            })
+            .ok_or_else(|| AtlasError::new(ErrorCode::Denied))?;
+        self.insert_relationship(
+            input,
+            Some((&kind.plugin_id, &kind.contribution_id, &kind.title)),
+        )
+    }
+
+    /// Every pack application the owner allowed on a server. Opening a
+    /// tunnel is a change, so a read-only plugin's applications are not
+    /// listed. Nothing is logged.
+    pub fn pack_apps(
+        &self,
+        directory: &Path,
+        server: &ServerId,
+    ) -> Result<Vec<PackAppView>, AtlasError> {
+        let (installed, _) = discover(directory);
+        let mut found = Vec::new();
+        for plugin in &installed {
+            for entry in &plugin.manifest.contributions {
+                let Some(view) = app_view(&plugin.manifest, entry) else {
+                    continue;
+                };
+                if admits(
+                    &self.db,
+                    &installed,
+                    &plugin.manifest.id,
+                    server,
+                    &entry.capabilities,
+                    true,
+                )? {
+                    found.push(view);
+                }
+            }
+        }
+        Ok(found)
+    }
+
+    /// The check before a pack application is opened. The manifest is read
+    /// once, so the port and path returned are the ones authorised. Each
+    /// capability is decided and logged; the first refusal ends it. The
+    /// owner pressing Open is the confirmation a "confirm each change"
+    /// plugin needs.
+    pub fn plugin_begin_app(
+        &mut self,
+        directory: &Path,
+        plugin: &str,
+        server: &ServerId,
+        contribution: &str,
+    ) -> Result<Result<PackAppView, Refusal>, AtlasError> {
+        let (installed, _) = discover(directory);
+        let Some(found) = installed.iter().find(|p| p.manifest.id == plugin) else {
+            record(
+                &self.db,
+                ("", "Unknown plugin"),
+                None,
+                ACTION_OPEN_APP,
+                ActivityOutcome::Refused,
+                &name(Refusal::UnknownPlugin),
+            )?;
+            return Ok(Err(Refusal::UnknownPlugin));
+        };
+        let entry = found
+            .manifest
+            .contributions
+            .iter()
+            .find(|c| c.id == contribution)
+            .ok_or_else(|| AtlasError::new(ErrorCode::NotFound))?;
+        let view =
+            app_view(&found.manifest, entry).ok_or_else(|| AtlasError::new(ErrorCode::NotFound))?;
+        let label = (found.manifest.id.as_str(), found.manifest.name.as_str());
+        let known = server_exists(&self.db, server)?;
+        for capability in &entry.capabilities {
+            let outcome = decide(&self.db, &installed, plugin, server, *capability)?;
+            record(
+                &self.db,
+                label,
+                known.then(|| server.as_str()),
+                &name(*capability),
+                if outcome.is_ok() {
+                    ActivityOutcome::Allowed
+                } else {
+                    ActivityOutcome::Refused
+                },
+                &outcome.err().map(name).unwrap_or_default(),
+            )?;
+            if let Err(refusal) = outcome {
+                return Ok(Err(refusal));
+            }
+        }
+        Ok(Ok(view))
+    }
+
+    /// Log whether a pack application's tunnel opened.
+    pub fn plugin_finish_app(
+        &mut self,
+        app: &PackAppView,
+        server: &ServerId,
+        outcome: ActivityOutcome,
+    ) -> Result<(), AtlasError> {
+        record(
+            &self.db,
+            (&app.plugin_id, &app.plugin_name),
+            server_exists(&self.db, server)?.then(|| server.as_str()),
+            ACTION_OPEN_APP,
+            outcome,
+            &app.contribution_id,
+        )
+    }
+
     /// Every plugin found, with what it asks for and what the owner allowed.
     pub fn plugins_state(&self, directory: &Path) -> Result<PluginsState, AtlasError> {
         let (installed, invalid) = discover(directory);
@@ -561,6 +857,10 @@ impl Store {
                         point: c.point,
                         capabilities: c.capabilities.clone(),
                         command: c.command.clone(),
+                        workload_kind: c.workload_kind.clone(),
+                        app: c.app.clone(),
+                        badge: c.badge.clone(),
+                        relationship: c.relationship.clone(),
                     })
                     .collect(),
                 grants: granted(&self.db, &manifest.id)?

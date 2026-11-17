@@ -23,6 +23,7 @@ const POINT: Record<ExtensionPoint, string> = {
   workspace_tab: "a tab in a server's workspace", server_badge: "a badge on a server's card", settings_section: "a section of a server's Settings tab",
   app_settings_section: "a section of this Settings screen", menu_item: "an entry in the main menu", collector: "an inventory collector",
   health_check: "a reachability check", operation: "an operation on a server",
+  remote_app: "an application in a server's Apps list", relationship_kind: "a kind of relationship for your map",
 };
 const REFUSAL: Record<Refusal, string> = {
   unknown_plugin: "the plugin is not installed", plugin_disabled: "the plugin is not enabled", changed_since_review: "the plugin changed after you reviewed it",
@@ -44,6 +45,7 @@ export function describeExtract(command: PackCommand): string {
 }
 /** One log entry as two phrases: what happened and how it ended. */
 export function describeActivity(entry: PluginActivity): { action: string; outcome: string } {
+  if (entry.action === "open_app") return { action: entry.outcome === "refused" ? "Asked to open an application" : `Opened its application "${entry.detail}"`, outcome: ({ done: "Opened through a private tunnel", cancelled: "Closed: its permissions changed while it opened", failed: "Failed: no tunnel was opened" } as Record<string, string>)[entry.outcome] ?? entry.outcome };
   if (entry.action === "run_command") return { action: entry.outcome === "refused" ? "Asked to run a command" : `Ran its command "${entry.detail}"`, outcome: RUN_OUTCOME[entry.outcome] ?? entry.outcome };
   const owner = OWNER_ACTION[entry.action];
   if (owner) return { action: owner, outcome: entry.action === "enable" ? trustLabel(entry.detail as TrustLevel) : entry.action === "set_permissions" ? (entry.detail || "Everything withdrawn") : entry.action === "revoke_trusted_automation" ? "Now: changes with confirmation" : "" };
@@ -80,7 +82,10 @@ function PluginPage({ plugin, servers, busy, run, back, allOff, activity }: { pl
 
     <h5>What it adds</h5>
     <ul className="plugin-adds">{plugin.contributions.map(entry => <li key={entry.id}><strong>{entry.title}</strong>: {POINT[entry.point]}{entry.command && <span className="pack-shown">Runs exactly this on a server, only when you press Run: <code aria-label={`${entry.title} command`}>{commandLine(entry.command.argv)}</code>
-        {entry.command.parameters?.map(parameter => <small key={parameter.name}>{`{${parameter.name}}`} is a {parameter.source} you choose from that server’s inventory.</small>)}<small>{describeExtract(entry.command)} No shell reads the command, and it cannot use sudo.</small></span>}</li>)}</ul>
+        {entry.command.parameters?.map(parameter => <small key={parameter.name}>{`{${parameter.name}}`} is a {parameter.source} you choose from that server’s inventory.</small>)}<small>{describeExtract(entry.command)} No shell reads the command, and it cannot use sudo.</small>{entry.workload_kind && <small>Shows each row as a workload named by its {entry.workload_kind.name_column} column{entry.workload_kind.state_column ? `, with its ${entry.workload_kind.state_column} as the state` : ""}.</small>}</span>}
+        {entry.app && <span className="pack-shown">Opens <code aria-label={`${entry.title} address`}>localhost:{entry.app.port}{entry.app.path ?? "/"}</code> on the server, through the same private tunnel as any application, only when you press Open. It cannot reach another machine.</span>}
+        {entry.badge && <span className="pack-shown"><small>Shows the latest result of “{plugin.contributions.find(other => other.id === entry.badge!.observation)?.title ?? entry.badge.observation}” on each server card. It never runs the command itself.</small></span>}
+        {entry.relationship && <span className="pack-shown"><small>A {entry.relationship.line ?? "solid"} {entry.relationship.color ?? "green"} line you can choose when documenting a relationship. It applies nothing.</small></span>}</li>)}</ul>
 
     <h5>What it asks for</h5>
     <p className="muted">This is everything the plugin can ever use. It can use each item only on the servers where you allow it below.</p>

@@ -1,5 +1,6 @@
 import React, { createContext, lazy, Suspense, useContext } from "react";
-import type { ExtensionCatalogue, MapServer, MapState } from "./contracts.gen";
+import type { ExtensionCatalogue, MapServer, MapState, PackMapState } from "./contracts.gen";
+import { badgeLabel, badgesFor } from "./pack-map-model";
 import { bind, forEnabled, type Bound } from "./extensions-model";
 import { SshConnection } from "./ssh-connection";
 import { FileBrowser } from "./file-browser";
@@ -80,7 +81,18 @@ const badges: Record<string, BadgeRenderer> = {
     const preview = [...workloads(server)].sort((a, b) => Number(["active", "running"].includes(b.state)) - Number(["active", "running"].includes(a.state))).slice(0, 3);
     return <div className="node-workloads">{preview.length ? preview.map(item => <div key={item.id}><span className="workload-icon">{item.kind === "container" ? "◇" : "·"}</span><span title={`${item.scope} / ${item.name}`}>{item.name}</span><span className="small-state">{item.state}</span></div>) : <p>No saved inventory yet</p>}</div>;
   } },
+  "builtin.badge.plugins": { slot: "body", render: server => <PackBadges server={server} /> },
 };
+
+/** What plugin packs add to the map, loaded by the shell (T044). */
+export const PackMapContext = createContext<PackMapState | null>(null);
+
+function PackBadges({ server }: { server: MapServer }) {
+  const map = useContext(PackMapContext);
+  const shown = badgesFor(map?.badges ?? [], server.id);
+  if (!shown.length) return null;
+  return <div className="pack-badges">{shown.map(badge => { const label = badgeLabel(badge); return <span key={`${badge.plugin_id}.${badge.contribution_id}`} className={`pack-badge ${badge.state}`} title={label.detail} aria-label={label.text}>{label.text}</span>; })}</div>;
+}
 
 // Main menu items (T053). The core registers each item; this says which category it sits in and which view it opens.
 const menu: Record<string, MenuRenderer> = {

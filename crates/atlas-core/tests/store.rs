@@ -13,6 +13,7 @@ fn add(store: &mut Store, name: &str, host: &str) -> ServerId {
 }
 fn relation(a: &ServerId, b: &ServerId) -> AddRelationship {
     AddRelationship {
+        kind: None,
         source: a.clone(),
         target: b.clone(),
         label: "Backs up to".into(),

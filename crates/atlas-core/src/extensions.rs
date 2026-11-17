@@ -51,6 +51,12 @@ pub enum ExtensionPoint {
     HealthCheck,
     /// A brokered operation on a server.
     Operation,
+    /// A named application in a server's Apps list, opened through the
+    /// same loopback tunnel as any other (plugin API v2).
+    RemoteApp,
+    /// A named kind of relationship for the map: a label and a line style.
+    /// It documents intent and applies nothing (plugin API v2).
+    RelationshipKind,
 }
 
 /// What a contribution may use. A contribution must declare every capability
@@ -107,7 +113,8 @@ impl ExtensionPoint {
                 ControlWorkloads,
                 LoopbackTunnel,
             ],
-            Self::ServerBadge | Self::MenuItem => &[ReadSavedState],
+            Self::ServerBadge | Self::MenuItem | Self::RelationshipKind => &[ReadSavedState],
+            Self::RemoteApp => &[SshSession, LoopbackTunnel],
             // Application-wide settings change what InfraWerf stores on this
             // PC; they never contact a server.
             Self::AppSettingsSection => &[ReadSavedState, EditMap],
@@ -469,6 +476,13 @@ pub fn builtin_with(disabled: &[String]) -> ExtensionRegistry {
             ServerBadge,
             "Workload preview",
             30,
+            &[ReadSavedState],
+        ),
+        (
+            "builtin.badge.plugins",
+            ServerBadge,
+            "Plugin badges",
+            40,
             &[ReadSavedState],
         ),
         // Sections of the Settings tab.
