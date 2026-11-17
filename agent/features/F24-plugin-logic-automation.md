@@ -52,7 +52,7 @@ Stop if no runtime can enforce the limits on Windows.
 
 ## T049 — Plugin actions and scheduled jobs under trusted automation
 
-<!-- atlas-ticket: {"id":"T049","feature":"F24","status":"todo","depends_on":["T048"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T049","feature":"F24","status":"done","depends_on":["T048"],"evidence":"../evidence/T049-acceptance.md"} -->
 
 ### Outcome and included work
 
@@ -85,10 +85,10 @@ Actions are declared in the manifest with their target and effect so the consent
 
 ### Acceptance criteria
 
-- [ ] An action runs with confirmation when trust is not granted and unattended when it is.
-- [ ] A schedule fires while the app is open, is visible, and stops on revoke or disable.
-- [ ] An action needing elevation follows the elevation rules or its named exception.
-- [ ] Every run and failure is in the activity log.
+- [x] An action runs with confirmation when trust is not granted and unattended when it is.
+- [x] A schedule fires while the app is open, is visible, and stops on revoke or disable.
+- [x] An action needing elevation follows the elevation rules or its named exception.
+- [x] Every run and failure is in the activity log.
 
 ### Verification
 
@@ -96,7 +96,7 @@ Loopback fixture with a changing action and a schedule; revoke and kill-switch j
 
 ### Evidence and closure
 
-None yet.
+Accepted on `7a2cb98`: [T049 acceptance](../evidence/T049-acceptance.md). Owner decision [D061](../discovery/D061-plugin-actions-schedules-and-sudo.md). All four criteria are met by the new native suite `plugin-jobs`, run against the loopback Linux container with real sudo, and by core tests; all 18 native suites passed in one run. Job cancellation is now limited to the plugin concerned. Not done: jobs while InfraWerf is closed (excluded), schedules for bare pack commands, and a native proof of pausing after failures (core test only). No separate review pass was run.
 
 ### Stop conditions
 
