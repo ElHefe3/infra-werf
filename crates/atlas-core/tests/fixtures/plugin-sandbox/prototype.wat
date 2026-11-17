@@ -1,0 +1,28 @@
+;; The prototype plugin: reads through granted host functions.
+(module
+  (import "infrawerf" "call" (func $call (param i32 i32) (result i64)))
+  (import "infrawerf" "log" (func $log (param i32 i32)))
+  (import "infrawerf" "result" (func $result (param i32 i32)))
+  (memory (export "memory") 2)
+  (global $heap (mut i32) (i32.const 8192))
+  ;; A bump allocator: the host asks for room for each answer.
+  (func (export "alloc") (param $len i32) (result i32)
+    (local $p i32)
+    (local.set $p (global.get $heap))
+    (global.set $heap (i32.add (global.get $heap) (local.get $len)))
+    (local.get $p))
+  (data (i32.const 0) "{\22function\22:\22server\22,\22args\22:{}}")
+  (data (i32.const 256) "{\22function\22:\22inventory\22,\22args\22:{}}")
+  (data (i32.const 512) "prototype: reading the server and its inventory")
+  ;; ptr and len of an answer packed as (ptr << 32) | len
+  (func $ptr (param $a i64) (result i32) (i32.wrap_i64 (i64.shr_u (local.get $a) (i64.const 32))))
+  (func $len (param $a i64) (result i32) (i32.wrap_i64 (local.get $a)))
+  (func (export "run") (result i32)
+    (local $server i64) (local $inventory i64)
+    (call $log (i32.const 512) (i32.const 47))
+    (local.set $server (call $call (i32.const 0) (i32.const 31)))
+    (call $log (call $ptr (local.get $server)) (call $len (local.get $server)))
+    (local.set $inventory (call $call (i32.const 256) (i32.const 34)))
+    (call $log (call $ptr (local.get $inventory)) (call $len (local.get $inventory)))
+    (call $result (call $ptr (local.get $server)) (call $len (local.get $server)))
+    (i32.const 0)))

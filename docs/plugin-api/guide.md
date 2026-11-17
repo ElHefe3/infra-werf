@@ -244,6 +244,10 @@ Write your `name`, `description` and each `title` for the person reading that pa
 
 The full rule is in the [reference](README.md#compatibility-rule).
 
+## Plugin logic
+
+A plugin's own logic, a WebAssembly module run in a sandbox with only the host functions the owner allows, is described in [plugin logic](logic.md). How a plugin declares and starts its module comes in a later version.
+
 ## Sharing a plugin
 
 Share it as a `.zip` or `.tar.gz` archive of its folder, publish the archive's SHA-256, and if you can, sign it with minisign and publish your public key. [Sharing and installing](install.md) says what InfraWerf checks.

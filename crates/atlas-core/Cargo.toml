@@ -21,6 +21,7 @@ tar = { version = "=0.4.46", default-features = false }
 flate2 = "=1.1.11"
 minisign-verify = "=0.3.0"
 ureq = { version = "=3.5.2", default-features = false, features = ["rustls"] }
+wasmi = { version = "=2.0.0", default-features = false, features = ["std", "validate", "auto-dispatch"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "=0.61.2", features = ["Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_Console", "Win32_System_JobObjects", "Win32_System_Pipes", "Win32_System_Threading"] }
@@ -40,3 +41,6 @@ path = "src/bin/infrawerf-plugin.rs"
 [[bin]]
 name = "atlas-ssh"
 path = "src/bin/atlas-ssh.rs"
+
+[dev-dependencies]
+wat = "=1.263.0"

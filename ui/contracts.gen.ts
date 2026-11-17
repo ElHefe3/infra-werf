@@ -428,6 +428,20 @@ argv: Array<string>,
  * Parameter name to the discovered workload's name, as chosen by the view.
  */
 parameters: { [key in string]: string }, };
+export type SandboxStop = "invalid_module" | "forbidden_import" | "out_of_fuel" | "memory_limit" | "stack_limit" | "call_limit" | "contract_violation" | "cancelled" | "trapped";
+export type SandboxOutcome = {
+/**
+ * `run`'s return value, when it completed.
+ */
+exit_code: number | null, stopped: SandboxStop | null,
+/**
+ * A sentence about why it stopped; never module output.
+ */
+reason: string | null, logs: Array<string>, result: unknown, fuel_used: number, host_calls: number,
+/**
+ * Host functions refused because the owner did not allow them.
+ */
+refused: Array<string>, };
 export type TrustLevel = "read_only" | "confirm_changes" | "trusted_automation";
 export type CapabilityKind = "read" | "change" | "elevation";
 export type PluginStatus = "disabled" | "enabled" | "changed_since_review" | "files_changed";

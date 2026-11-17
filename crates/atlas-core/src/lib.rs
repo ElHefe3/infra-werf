@@ -11,6 +11,7 @@ pub mod pack;
 pub mod plugin;
 pub mod plugin_host;
 pub mod plugin_install;
+pub mod plugin_sandbox;
 pub mod plugin_view;
 mod sftp;
 pub mod ssh;

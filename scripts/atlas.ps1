@@ -113,6 +113,10 @@ switch ($Action) {
             Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-native', '--locked')
             Run-AtlasCommand 'cargo' @('run', '-p', 'atlas-core', '--bin', 'export-contracts', '--locked', '--', '--check')
             Run-AtlasCommand 'pnpm' @('check')
+        } elseif ($Feature -in @('F24', 'T048')) {
+            Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-core', '--test', 'plugin_sandbox', '--locked')
+            Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-core', '--release', '--test', 'plugin_sandbox', '--locked')
+            Run-AtlasCommand 'cargo' @('run', '-p', 'atlas-core', '--bin', 'export-contracts', '--locked', '--', '--check')
         } elseif ($Feature -in @('F20', 'T041')) {
             Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-core', '--test', 'plugin_host', '--locked')
             Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-core', '--lib', 'extensions::', '--locked')
