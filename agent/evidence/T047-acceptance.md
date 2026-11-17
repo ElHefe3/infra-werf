@@ -40,7 +40,7 @@ The new suite `plugin-views` (`scripts/verify_native_plugin_views.mjs`) drives t
 
 ## Independent review
 
-A separate session reviewed `d62feac` and tried to break it ([report](../evidence/T047-isolation-review.md) on branch `claude/view-review-02e7db`, commits `3570cca` and `8591c59`; not merged here).
+A separate session reviewed `d62feac` and tried to break it (report `agent/evidence/T047-isolation-review.md` on branch `claude/view-review-02e7db`, commits `3570cca` and `8591c59`; not merged here).
 
 - **The core boundary held.** No IPC, commands, events, main-window DOM or other HTTP origins were reachable.
 - **One high finding.** WebRTC sent page-chosen data over UDP to any address.
