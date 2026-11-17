@@ -62,7 +62,7 @@ Stop if a pack needs protected data kept after the session ends.
 
 ## T044 — Packs for remote applications, map badges and relationship kinds
 
-<!-- atlas-ticket: {"id":"T044","feature":"F21","status":"todo","depends_on":["T043"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T044","feature":"F21","status":"done","depends_on":["T043"],"evidence":"../evidence/T044-acceptance.md"} -->
 
 ### Outcome and included work
 
@@ -84,9 +84,9 @@ Remote-application entries reuse F17's discovery contract. Badges bind to a pack
 
 ### Acceptance criteria
 
-- [ ] A fixture pack adds an application to the Apps list that opens through the existing tunnel rules.
-- [ ] A badge reflects a pack observation, including stale and unknown states.
-- [ ] A pack relationship kind can be chosen when documenting a relationship.
+- [x] A fixture pack adds an application to the Apps list that opens through the existing tunnel rules.
+- [x] A badge reflects a pack observation, including stale and unknown states.
+- [x] A pack relationship kind can be chosen when documenting a relationship.
 
 ### Verification
 
@@ -94,7 +94,7 @@ Remote-applications fixture and map UI tests with a fixture pack.
 
 ### Evidence and closure
 
-None yet.
+Accepted on `368ef5c`: [T044 acceptance](../evidence/T044-acceptance.md). All three criteria are met and proven on a real Linux container by the new `pack-map` native suite; the stale badge state by core and UI tests. Workload kinds from T043 are delivered as a view of a collector's table; inventory, inspection and control of such workloads are not. No separate review pass was run.
 
 ### Stop conditions
 
