@@ -29,7 +29,7 @@ const results = [];
 const errors = [];
 try {
   info = await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`SSH fixture startup failed: ${diagnostic}`)), 30000);
+    const timer = setTimeout(() => reject(new Error(`SSH fixture startup failed: ${diagnostic}`)), 90000);
     lines.once('line', line => { clearTimeout(timer); resolve(JSON.parse(line)); });
     server.once('exit', code => { if (code) { clearTimeout(timer); reject(new Error(`SSH fixture exited: ${diagnostic}`)); } });
   });
@@ -255,7 +255,9 @@ try {
   if (app && app.exitCode === null) { app.kill(); await new Promise(resolve => app.once('exit', resolve)); }
   if (server.exitCode === null) {
     server.stdin.end('\n');
-    await Promise.race([new Promise(resolve => server.once('exit', resolve)), delay(5000)]);
+    // The fixture removes its Podman container (bounded at 30 s) before exiting; killing it
+    // sooner leaves the container running and slows every later fixture start.
+    await Promise.race([new Promise(resolve => server.once('exit', resolve)), delay(60000)]);
     if (server.exitCode === null) server.kill();
   }
   await rm(path.join(fixtureDirectory, 'fixture-only-identity'), { force: true }).catch(() => {});

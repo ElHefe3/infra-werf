@@ -12,6 +12,7 @@ import subprocess
 import sys
 import asyncssh
 from ssh_agent_fixture import start_agent
+from fixture_stats import publish as publish_stats
 
 async def serve(directory):
     directory.mkdir(parents=True, exist_ok=False)
@@ -54,10 +55,7 @@ async def serve(directory):
     virtual = {b'/home/fixture/write-area/odd-\xff-source': asyncssh.SFTPAttrs(permissions=0o100640, size=37, uid=1000, gid=1000), b'/home/fixture/write-area/folder-link': asyncssh.SFTPAttrs(permissions=0o120777, size=6, uid=1000, gid=1000)}
     link_targets = {b'/home/fixture/write-area/folder-link': b'/home/fixture/write-area/target'}
     virtual[b'/home/fixture/write-area/odd-\\xff-source'] = asyncssh.SFTPAttrs(permissions=0o100640, size=51, uid=1000, gid=1000)
-    def save_stats():
-        temporary = directory / 'stats-next.json'
-        temporary.write_text(json.dumps(stats), encoding='utf-8')
-        temporary.replace(directory / 'stats.json')
+    def save_stats(): publish_stats(directory, stats)
     for name in ['trusted', 'unknown', 'changed', 'rejected', 'agent-missing', 'slow', 'overflow', 'no-auth', 'certified', 'fallback', 'explicit-alias'] + (['agent'] if agent else []):
         stats[name] = {'auth_attempts': 0, 'authenticated': 0, 'commands': 0, 'active': 0, 'subsystems': 0, 'listings': 0, 'mutations': 0, 'file_reads': 0, 'file_writes': 0, 'max_chunk': 0}
         class Server(asyncssh.SSHServer):

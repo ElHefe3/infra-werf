@@ -6,6 +6,7 @@ An SSH server that permits direct-tcpip only to localhost, plus a private
 import asyncio, base64, csv, hashlib, json, os, re, subprocess, sys
 from pathlib import Path
 import asyncssh
+from fixture_stats import publish as publish_stats
 
 PAGE = """<!doctype html><html><head><meta charset="utf-8"><title>Fixture Dashboard</title>
 <style>body{font-family:Segoe UI,system-ui,sans-serif;margin:0;background:#0f1a14;color:#e7f0ea}
@@ -62,7 +63,7 @@ async def main(directory):
         key.chmod(0o600)
     stats = {"connections": 0, "active": 0, "forwards": [], "refused_forwards": 0, "http": 0, "websocket": 0, "discoveries": 0}
     def save():
-        temp = directory / "stats-next.json"; temp.write_text(json.dumps(stats)); temp.replace(directory / "stats.json")
+        publish_stats(directory, stats)
     app = await asyncio.start_server(lambda r, w: http(r, w, stats), "127.0.0.1", 0)
     app_port = app.sockets[0].getsockname()[1]
     second_page = "<!doctype html><html><head><title>Second app</title></head><body><h1>Second app on 127.0.0.2</h1></body></html>"

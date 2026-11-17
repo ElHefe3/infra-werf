@@ -3,22 +3,10 @@ import { listen } from "@tauri-apps/api/event";
 import type { FileAction, FileEntry, FilePage, FileSession, FileResource, FileChange, FileMutationPreview, MapServer, LocalSelection, ProtectedPlacementStage, ProtectedPlacementReceipt, ElevationPreview, ProtectedPlacementRequest } from "./contracts.gen";
 import { createWorkspaceClient } from "./workspace-client";
 import { errorMessage } from "./map-model";
+import { fileErrors, lateFailure } from "./file-session-model";
 import { TransferQueue, transferActive, useTransfers } from "./transfer-queue";
 
 const client = createWorkspaceClient();
-const fileErrors: Record<string, string> = {
-  host_trust_failure: "The SSH host identity needs review. Verify it independently through your existing SSH client before retrying.",
-  unauthenticated: "SSH authentication failed. Check your configured identity or unlock your existing SSH agent.",
-  io_failure: "The SSH/SFTP connection failed or disconnected. Check the server and LAN/VPN connection.",
-  denied: "Your SSH account cannot access this target, or its handle is no longer valid.",
-  not_found: "The remote target no longer exists.",
-  expired_session: "The file session has expired. Open a new session to continue.",
-  output_limit: "The server response exceeded the safety limit. The session was closed without keeping partial data.",
-  timed_out: "The file operation timed out. The session was closed.",
-  conflict: "Another file operation is still running. Wait for it to finish.",
-  remote_rejected: "The server rejected the change. Check permissions, collisions or whether the folder is empty, then inspect the refreshed result.",
-  outcome_unknown: "The server may have applied this change. Open a new session and inspect the target before retrying.",
-};
 type ChangeForm = { kind: "mkdir" | "rename" | "move" | "delete"; resourceId: string; name: string; preview: FileMutationPreview | null };
 type PlacementForm = { resource: FileResource; local: LocalSelection | null; stage: ProtectedPlacementStage | null; destination: string; owner: string; group: string; mode: string; preview: ElevationPreview | null; receipt: ProtectedPlacementReceipt | null };
 type PendingPlacementCleanup = { serverId: string; sessionId: string; resourceId: string; location: string };
@@ -66,6 +54,8 @@ export function FileBrowser({ server, onBusy }: { server: MapServer; onBusy: (va
   const active = useRef<FileSession | null>(null);
   const operation = useRef<string | null>(null);
   const generation = useRef(0);
+  /** The generation a closing notice left while a request was in flight; see lateFailure. */
+  const closedAt = useRef<number | null>(null);
   const working = useRef(false);
   const staging = useRef(false);
   const mutating = useRef(false);
@@ -145,7 +135,11 @@ export function FileBrowser({ server, onBusy }: { server: MapServer; onBusy: (va
     let disposed = false; const listeners: (() => void)[] = [];
     const keep = (fn: () => void) => { if (disposed) fn(); else listeners.push(fn); };
     void listen<string | null>("atlas-session-closed", event => {
-      if (active.current && (event.payload === null || event.payload === active.current.session_id)) clear("Session closed or expired. Protected file data has been cleared.", true);
+      if (active.current && (event.payload === null || event.payload === active.current.session_id)) {
+        const inFlight = working.current;
+        clear("Session closed or expired. Protected file data has been cleared.", true);
+        closedAt.current = inFlight ? generation.current : null;
+      }
     }).then(keep).catch(() => {});
     void listen<string>("atlas-close-blocked", event => setFailure(event.payload)).then(keep).catch(() => {});
     const hide = () => { if (document.visibilityState === "hidden") clear("Session locked while InfraWerf was hidden."); };
@@ -266,8 +260,12 @@ export function FileBrowser({ server, onBusy }: { server: MapServer; onBusy: (va
     } finally { setBusy(false); }
   }
   function handleFailure(error: unknown, epoch: number) {
-    if (epoch !== generation.current) return;
     const code = (error as { code?: string })?.code;
+    if (epoch !== generation.current) {
+      const reason = lateFailure(closedAt.current, epoch, generation.current, code);
+      if (reason) { closedAt.current = null; setFailure(reason); }
+      return;
+    }
     if (active.current && !["denied", "not_found", "invalid_input", "conflict", "remote_rejected"].includes(code ?? "")) clear("Session closed. Open a new session to retry.");
     setFailure(fileErrors[code ?? ""] ?? errorMessage(error));
   }
