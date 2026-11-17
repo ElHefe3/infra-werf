@@ -43,6 +43,10 @@ CREATE TABLE IF NOT EXISTS plugin_activity (
   id INTEGER PRIMARY KEY, at TEXT NOT NULL, plugin_id TEXT NOT NULL, plugin_name TEXT NOT NULL,
   server_id TEXT, action TEXT NOT NULL, outcome TEXT NOT NULL, detail TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS plugin_switch (id INTEGER PRIMARY KEY CHECK(id=1), all_off INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS plugin_install (
+ plugin_id TEXT PRIMARY KEY, folder TEXT NOT NULL, source_kind TEXT NOT NULL, source TEXT NOT NULL,
+ content_hash TEXT NOT NULL, archive_hash TEXT, signer_key_id TEXT, installed_at TEXT NOT NULL,
+ integrity TEXT NOT NULL, checked_at TEXT);
 CREATE TABLE IF NOT EXISTS edge_kind (
  edge_id TEXT PRIMARY KEY REFERENCES edges(id) ON DELETE CASCADE,
  plugin_id TEXT NOT NULL, kind_id TEXT NOT NULL, title TEXT NOT NULL);
@@ -58,6 +62,10 @@ pub const ACTION_ALL_OFF: &str = "all_plugins_off";
 pub const ACTION_ALL_ON: &str = "all_plugins_on";
 /// One run of a pack command; the log's detail is the contribution's ID.
 pub const ACTION_RUN_COMMAND: &str = "run_command";
+/// A plugin was installed; the detail is the kind of source.
+pub const ACTION_INSTALL: &str = "install";
+/// A plugin's files, permissions and settings were removed.
+pub const ACTION_REMOVE: &str = "remove";
 /// A pack application was opened through a tunnel; the detail is its ID.
 pub const ACTION_OPEN_APP: &str = "open_app";
 
@@ -129,6 +137,10 @@ pub enum PluginStatus {
     /// Its manifest is not the one the owner reviewed; it is treated as
     /// disabled until it is reviewed and enabled again.
     ChangedSinceReview,
+    /// Its files no longer match the hash recorded when it was installed.
+    /// Nothing it asks for is allowed until it is removed and installed
+    /// again.
+    FilesChanged,
 }
 
 /// Why a plugin call was refused.
@@ -149,6 +161,8 @@ pub enum Refusal {
     NoElevationException,
     /// The owner has turned every plugin off.
     AllPluginsOff,
+    /// The plugin's files changed after it was installed.
+    FilesChanged,
 }
 
 /// How one logged action ended.
@@ -278,6 +292,8 @@ pub struct PluginView {
     pub contributions: Vec<PluginContributionView>,
     /// Servers with at least one granted capability.
     pub grants: Vec<ServerGrant>,
+    /// How it was installed; absent for a folder placed by hand.
+    pub install: Option<crate::plugin_install::InstallRecordView>,
 }
 
 /// A folder in the plugins directory that is not a usable plugin.
@@ -328,6 +344,12 @@ pub fn discover(directory: &Path) -> (Vec<Installed>, Vec<InvalidPlugin>) {
             .filter_map(Result::ok)
             .map(|entry| entry.path())
             .filter(|path| path.is_dir())
+            // InfraWerf's own working folders are not plugins.
+            .filter(|path| {
+                !path
+                    .file_name()
+                    .is_some_and(|name| name.to_string_lossy().starts_with('.'))
+            })
             .collect(),
         Err(_) => return (Vec::new(), Vec::new()),
     };
@@ -436,6 +458,56 @@ fn granted(
     Ok(found)
 }
 
+/// The install record of a plugin, if InfraWerf installed it.
+fn install_record(
+    db: &Connection,
+    plugin: &str,
+) -> Result<Option<crate::plugin_install::InstallRecordView>, AtlasError> {
+    use crate::plugin_install::{InstallRecordView, Integrity, SourceKind};
+    let row = db
+        .query_row(
+            "SELECT source_kind,source,content_hash,archive_hash,signer_key_id,installed_at,integrity,checked_at FROM plugin_install WHERE plugin_id=?",
+            [plugin],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                    row.get::<_, Option<String>>(4)?,
+                    row.get::<_, String>(5)?,
+                    row.get::<_, String>(6)?,
+                    row.get::<_, Option<String>>(7)?,
+                ))
+            },
+        )
+        .map(Some)
+        .or_else(|error| match error {
+            rusqlite::Error::QueryReturnedNoRows => Ok(None),
+            other => Err(sql_error(other)),
+        })?;
+    Ok(row.map(
+        |(kind, source, content, archive, signer, at, integrity, checked)| {
+            InstallRecordView {
+                source_kind: parse::<SourceKind>(&kind).unwrap_or(SourceKind::Folder),
+                source,
+                content_sha256: content,
+                archive_sha256: archive,
+                signer_key_id: signer,
+                installed_at: at,
+                // An unknown value is not proof the files are intact.
+                integrity: parse::<Integrity>(&integrity).unwrap_or(Integrity::Changed),
+                checked_at: checked,
+            }
+        },
+    ))
+}
+
+fn files_changed(db: &Connection, plugin: &str) -> Result<bool, AtlasError> {
+    Ok(install_record(db, plugin)?
+        .is_some_and(|record| record.integrity == crate::plugin_install::Integrity::Changed))
+}
+
 fn status(installed: &Installed, record: Option<&Record>) -> PluginStatus {
     match record {
         None => PluginStatus::Disabled,
@@ -523,6 +595,9 @@ fn decide(
     if all_off(db)? {
         return Ok(Err(Refusal::AllPluginsOff));
     }
+    if files_changed(db, plugin)? {
+        return Ok(Err(Refusal::FilesChanged));
+    }
     let all = records(db)?;
     let trust = match (status(found, all.get(plugin)), all.get(plugin)) {
         (PluginStatus::Enabled, Some(record)) => record.trust,
@@ -584,7 +659,198 @@ fn app_view(
     })
 }
 
+/// A folder name inside the plugins directory: one plain name.
+fn plugin_folder(directory: &Path, folder: &str) -> Result<std::path::PathBuf, AtlasError> {
+    if folder.is_empty()
+        || folder.starts_with('.')
+        || folder.contains(['/', '\\', ':'])
+        || folder.len() > 255
+    {
+        return Err(invalid());
+    }
+    let path = directory.join(folder);
+    let meta =
+        std::fs::symlink_metadata(&path).map_err(|_| AtlasError::new(ErrorCode::NotFound))?;
+    if !meta.is_dir() {
+        return Err(AtlasError::new(ErrorCode::NotFound));
+    }
+    Ok(path)
+}
+
 impl Store {
+    /// Publishes a prepared plugin and records how it was installed. It is
+    /// disabled: installing grants nothing. Refused if a plugin with the
+    /// same ID is already there (updates are T046).
+    pub fn plugin_publish(
+        &mut self,
+        directory: &Path,
+        prepared: &crate::plugin_install::Prepared,
+    ) -> Result<crate::plugin_install::InstallReport, AtlasError> {
+        use crate::plugin_install::{InstallProblem, InstallProblemCode, InstallReport};
+        let id = &prepared.manifest.id;
+        let (installed, _) = discover(directory);
+        let taken = installed.iter().any(|p| &p.manifest.id == id)
+            || directory.join(id).exists()
+            || install_record(&self.db, id)?.is_some();
+        if taken {
+            return Ok(InstallReport::refused(InstallProblem::new(
+                InstallProblemCode::AlreadyInstalled,
+                format!(
+                    "A plugin with the ID {id} is already installed. Remove it first; updating a plugin is not available yet."
+                ),
+            )));
+        }
+        let target = match crate::plugin_install::publish(directory, prepared) {
+            Ok(target) => target,
+            Err(error) if error.code == ErrorCode::Conflict => {
+                return Ok(InstallReport::refused(InstallProblem::new(
+                    InstallProblemCode::AlreadyInstalled,
+                    format!("A folder named {id} is already in the plugins folder."),
+                )));
+            }
+            Err(error) => return Err(error),
+        };
+        let folder = target
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let now = Utc::now().to_rfc3339();
+        let saved = (|| -> Result<(), AtlasError> {
+            let transaction = self.db.transaction().map_err(sql_error)?;
+            transaction
+                .execute(
+                    "INSERT INTO plugin_install VALUES(?,?,?,?,?,?,?,?,?,?)",
+                    params![
+                        id,
+                        folder,
+                        name(prepared.source_kind),
+                        prepared.source,
+                        prepared.content_sha256,
+                        prepared.archive_sha256,
+                        prepared.signer_key_id,
+                        now,
+                        name(crate::plugin_install::Integrity::Verified),
+                        now
+                    ],
+                )
+                .map_err(sql_error)?;
+            // A plugin installed again starts from nothing.
+            transaction
+                .execute("DELETE FROM plugin_state WHERE plugin_id=?", [id])
+                .map_err(sql_error)?;
+            transaction
+                .execute("DELETE FROM plugin_grant WHERE plugin_id=?", [id])
+                .map_err(sql_error)?;
+            record(
+                &transaction,
+                (id, &prepared.manifest.name),
+                None,
+                ACTION_INSTALL,
+                ActivityOutcome::Done,
+                &name(prepared.source_kind),
+            )?;
+            transaction.commit().map_err(sql_error)
+        })();
+        if let Err(error) = saved {
+            // Without its record the plugin is not installed.
+            let _ = std::fs::remove_dir_all(&target);
+            return Err(error);
+        }
+        Ok(InstallReport {
+            contract_version: CONTRACT_VERSION,
+            plugin_id: Some(id.clone()),
+            plugin_name: Some(prepared.manifest.name.clone()),
+            content_sha256: Some(prepared.content_sha256.clone()),
+            problem: None,
+        })
+    }
+
+    /// Removes a plugin folder: its files, its trust, its permissions on
+    /// every server and its install record. The activity log keeps its
+    /// history. The folder is first renamed, so it stops being a plugin at
+    /// once even if deleting its files takes a moment or fails.
+    pub fn plugin_remove(&mut self, directory: &Path, folder: &str) -> Result<(), AtlasError> {
+        let path = plugin_folder(directory, folder)?;
+        let (installed, _) = discover(directory);
+        let found = installed.iter().find(|p| p.folder == folder);
+        let id = found.map(|p| p.manifest.id.clone()).or_else(|| {
+            self.db
+                .query_row(
+                    "SELECT plugin_id FROM plugin_install WHERE folder=?",
+                    [folder],
+                    |row| row.get::<_, String>(0),
+                )
+                .ok()
+        });
+        let label = found.map_or(folder.to_owned(), |p| p.manifest.name.clone());
+        let parked = directory.join(format!(
+            "{}{}",
+            crate::plugin_install::REMOVING_PREFIX,
+            uuid::Uuid::new_v4().simple()
+        ));
+        std::fs::rename(&path, &parked).map_err(|_| AtlasError::new(ErrorCode::IoFailure))?;
+        let transaction = self.db.transaction().map_err(sql_error)?;
+        if let Some(id) = &id {
+            for table in ["plugin_state", "plugin_grant", "plugin_install"] {
+                transaction
+                    .execute(&format!("DELETE FROM {table} WHERE plugin_id=?"), [id])
+                    .map_err(sql_error)?;
+            }
+        }
+        record(
+            &transaction,
+            (id.as_deref().unwrap_or(""), &label),
+            None,
+            ACTION_REMOVE,
+            ActivityOutcome::Done,
+            "",
+        )?;
+        transaction.commit().map_err(sql_error)?;
+        // A folder that could not be deleted now is deleted at the next
+        // start-up; it is no longer a plugin either way.
+        let _ = std::fs::remove_dir_all(&parked);
+        Ok(())
+    }
+
+    /// The start-up check: removes interrupted working folders and compares
+    /// every installed plugin's files with the hash recorded at install.
+    /// Returns the IDs whose files changed or are gone.
+    pub fn plugins_verify(&mut self, directory: &Path) -> Result<Vec<String>, AtlasError> {
+        use crate::plugin_install::{Integrity, clean_working_folders, folder_hash};
+        clean_working_folders(directory);
+        let rows: Vec<(String, String, String)> = {
+            let mut statement = self
+                .db
+                .prepare("SELECT plugin_id,folder,content_hash FROM plugin_install")
+                .map_err(sql_error)?;
+            statement
+                .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+                .map_err(sql_error)?
+                .collect::<Result<_, _>>()
+                .map_err(sql_error)?
+        };
+        let now = Utc::now().to_rfc3339();
+        let mut changed = Vec::new();
+        for (id, folder, hash) in rows {
+            let actual = plugin_folder(directory, &folder)
+                .ok()
+                .and_then(|path| folder_hash(&path));
+            let integrity = if actual.as_deref() == Some(hash.as_str()) {
+                Integrity::Verified
+            } else {
+                changed.push(id.clone());
+                Integrity::Changed
+            };
+            self.db
+                .execute(
+                    "UPDATE plugin_install SET integrity=?,checked_at=? WHERE plugin_id=?",
+                    params![name(integrity), now, id],
+                )
+                .map_err(sql_error)?;
+        }
+        Ok(changed)
+    }
+
     /// Every pack badge to draw: the plugin is enabled and unchanged, and
     /// on that server the owner allowed both the badge and the command
     /// whose observation it shows. Nothing is logged.
@@ -818,7 +1084,15 @@ impl Store {
         for found in &installed {
             let manifest = &found.manifest;
             let record = all.get(&manifest.id);
-            let state = status(found, record);
+            let install = install_record(&self.db, &manifest.id)?;
+            let state = if install
+                .as_ref()
+                .is_some_and(|i| i.integrity == crate::plugin_install::Integrity::Changed)
+            {
+                PluginStatus::FilesChanged
+            } else {
+                status(found, record)
+            };
             plugins.push(PluginView {
                 id: manifest.id.clone(),
                 name: manifest.name.clone(),
@@ -877,6 +1151,7 @@ impl Store {
                     })
                     .filter(|grant| !grant.capabilities.is_empty())
                     .collect(),
+                install,
             });
         }
         Ok(PluginsState {

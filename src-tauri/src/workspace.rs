@@ -134,7 +134,7 @@ impl Workspace {
             ssh.clone(),
             SessionPolicy::default(),
         );
-        Arc::new(Self {
+        let workspace = Arc::new(Self {
             paths,
             store: Mutex::new(store),
             lifecycle: Mutex::new(Lifecycle::default()),
@@ -148,7 +148,12 @@ impl Workspace {
             live_contact: Mutex::new(()),
             tunnels: Mutex::new(tunnels::Tunnels::default()),
             packs: packs::Packs::default(),
-        })
+        });
+        // The start-up check of installed plugins' files (T045). A store
+        // that cannot open is reported where it is used.
+        let directory = workspace.plugins_directory();
+        let _ = workspace.with_store(|store| store.plugins_verify(&directory));
+        workspace
     }
 
     pub fn live_contact_guard(&self) -> Result<std::sync::MutexGuard<'_, ()>, AtlasError> {
@@ -208,6 +213,31 @@ impl Workspace {
         let directory = self.plugins_directory();
         let state = self.with_store(|store| {
             store.plugin_set_grant(&directory, plugin, server, capabilities)?;
+            store.plugins_state(&directory)
+        });
+        self.plugins_changed();
+        state
+    }
+    /// Installs a plugin. Reading, unpacking and checking happen before the
+    /// store is touched; only the final publish holds it.
+    pub fn plugin_install(
+        &self,
+        request: &atlas_core::plugin_install::InstallRequest,
+    ) -> Result<atlas_core::plugin_install::InstallReport, AtlasError> {
+        let directory = self.plugins_directory();
+        match atlas_core::plugin_install::prepare(request) {
+            Ok(prepared) => self.with_store(|store| store.plugin_publish(&directory, &prepared)),
+            Err(problem) => Ok(atlas_core::plugin_install::InstallReport::refused(problem)),
+        }
+    }
+    /// Removes a plugin folder with its permissions and install record.
+    pub fn plugin_remove(
+        &self,
+        folder: &str,
+    ) -> Result<atlas_core::plugin_host::PluginsState, AtlasError> {
+        let directory = self.plugins_directory();
+        let state = self.with_store(|store| {
+            store.plugin_remove(&directory, folder)?;
             store.plugins_state(&directory)
         });
         self.plugins_changed();

@@ -97,6 +97,14 @@ switch ($Action) {
             Run-AtlasCommand 'cargo' @('run', '-p', 'atlas-core', '--bin', 'export-contracts', '--locked', '--', '--check')
             Run-AtlasCommand 'pnpm' @('check')
             Run-AtlasCommand 'node' @('--test', 'ui/pack-map-model.test.ts')
+        } elseif ($Feature -in @('F22', 'T045')) {
+            Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-core', '--lib', 'plugin_install::', '--locked')
+            Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-core', '--test', 'plugin_install', '--locked')
+            Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-core', '--test', 'plugin_host', '--locked')
+            Run-AtlasCommand 'cargo' @('check', '-p', 'atlas-native', '--locked')
+            Run-AtlasCommand 'cargo' @('run', '-p', 'atlas-core', '--bin', 'export-contracts', '--locked', '--', '--check')
+            Run-AtlasCommand 'pnpm' @('check')
+            Run-AtlasCommand 'node' @('--test', 'ui/plugin-install-model.test.ts')
         } elseif ($Feature -in @('F20', 'T041')) {
             Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-core', '--test', 'plugin_host', '--locked')
             Run-AtlasCommand 'cargo' @('test', '-p', 'atlas-core', '--lib', 'extensions::', '--locked')

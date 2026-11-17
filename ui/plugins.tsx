@@ -5,6 +5,7 @@ import { commandLine } from "./plugin-data";
 import type { PackCommand } from "./contracts.gen";
 import { createWorkspaceClient } from "./workspace-client";
 import { errorMessage } from "./map-model";
+import { InstallForm, InstallRecord } from "./plugin-install";
 
 // Plugin permissions (S12/F20/T041). The Rust core finds plugins, stores what
 // the owner allowed and enforces it; these screens only show and edit that.
@@ -29,11 +30,14 @@ const REFUSAL: Record<Refusal, string> = {
   unknown_plugin: "the plugin is not installed", plugin_disabled: "the plugin is not enabled", changed_since_review: "the plugin changed after you reviewed it",
   unknown_server: "the server is not on your map", not_requested: "the plugin never asked for it", not_granted: "it is not allowed on this server",
   trust_too_low: "the plugin is read-only", no_elevation_exception: "sudo cannot be given to a plugin", all_plugins_off: "all plugins are turned off",
+  files_changed: "its files changed after it was installed",
 };
 const OWNER_ACTION: Record<string, string> = {
   enable: "Enabled by you", disable: "Disabled by you", set_permissions: "Permissions set by you", revoke_trusted_automation: "Trusted automation revoked by you",
   all_plugins_off: "All plugins turned off by you", all_plugins_on: "Plugins turned back on by you",
+  install: "Installed by you", remove: "Removed by you, with its permissions",
 };
+const SOURCE: Record<string, string> = { folder: "From a folder", archive: "From an archive file", address: "From an HTTPS address" };
 const RUN_OUTCOME: Record<string, string> = { done: "Finished", cancelled: "Cancelled: its permissions changed while it ran", failed: "Failed: nothing was read", refused: "Refused: the plugin is not installed" };
 /** How a pack command's output is read, in a sentence for the owner. */
 export function describeExtract(command: PackCommand): string {
@@ -48,7 +52,7 @@ export function describeActivity(entry: PluginActivity): { action: string; outco
   if (entry.action === "open_app") return { action: entry.outcome === "refused" ? "Asked to open an application" : `Opened its application "${entry.detail}"`, outcome: ({ done: "Opened through a private tunnel", cancelled: "Closed: its permissions changed while it opened", failed: "Failed: no tunnel was opened" } as Record<string, string>)[entry.outcome] ?? entry.outcome };
   if (entry.action === "run_command") return { action: entry.outcome === "refused" ? "Asked to run a command" : `Ran its command "${entry.detail}"`, outcome: RUN_OUTCOME[entry.outcome] ?? entry.outcome };
   const owner = OWNER_ACTION[entry.action];
-  if (owner) return { action: owner, outcome: entry.action === "enable" ? trustLabel(entry.detail as TrustLevel) : entry.action === "set_permissions" ? (entry.detail || "Everything withdrawn") : entry.action === "revoke_trusted_automation" ? "Now: changes with confirmation" : "" };
+  if (owner) return { action: owner, outcome: entry.action === "enable" ? trustLabel(entry.detail as TrustLevel) : entry.action === "set_permissions" ? (entry.detail || "Everything withdrawn") : entry.action === "revoke_trusted_automation" ? "Now: changes with confirmation" : entry.action === "install" ? `${SOURCE[entry.detail] ?? entry.detail} · disabled until you enable it` : "" };
   const outcome = entry.outcome === "allowed" ? "Allowed" : entry.outcome === "needs_confirmation" ? "Allowed after your confirmation" : `Refused: ${REFUSAL[entry.detail as Refusal] ?? entry.detail}`;
   return { action: `Asked to use ${entry.action}`, outcome };
 }
@@ -62,10 +66,20 @@ export function statusLabel(status: PluginStatus, trust: TrustLevel | null, allO
   if (allOff) return status === "enabled" ? `Off with all plugins · ${trustLabel(trust)} when on` : "Not enabled";
   if (status === "enabled") return `Enabled · ${trustLabel(trust)}`;
   if (status === "changed_since_review") return "Changed since you reviewed it · switched off";
+  if (status === "files_changed") return "Files changed since it was installed · switched off";
   return "Not enabled";
 }
 
-function PluginPage({ plugin, servers, busy, run, back, allOff, activity }: { plugin: PluginView; servers: MapServer[]; busy: boolean; run: (action: () => Promise<PluginsState>, done: string) => Promise<void>; back: () => void; allOff: boolean; activity: PluginActivity[] }) {
+function RemovePlugin({ name, folder, busy, run, done }: { name: string; folder: string; busy: boolean; run: (action: () => Promise<PluginsState>, done: string) => Promise<void>; done?: () => void }) {
+  const [asking, setAsking] = useState(false);
+  if (!asking) return <button className="danger text-button" disabled={busy} onClick={() => setAsking(true)}>Remove {name}</button>;
+  return <div className="plugin-remove" role="group" aria-label={`Remove ${name}?`}>
+    <p>Remove <strong>{name}</strong>? Its folder <code>{folder}</code> is deleted from the plugins folder, and its trust level and permissions on every server are forgotten. Its activity history is kept. This cannot be undone; you can install it again later.</p>
+    <div className="plugin-actions"><button disabled={busy} onClick={() => setAsking(false)}>Keep it</button><button className="danger-button" disabled={busy} onClick={() => void run(() => client.removePlugin(folder), `${name} removed.`).then(() => done?.())}>Remove permanently</button></div>
+  </div>;
+}
+
+function PluginPage({ plugin, servers, busy, run, back, leave, allOff, activity }: { leave: () => void; plugin: PluginView; servers: MapServer[]; busy: boolean; run: (action: () => Promise<PluginsState>, done: string) => Promise<void>; back: () => void; allOff: boolean; activity: PluginActivity[] }) {
   const [choice, setChoice] = useState<TrustLevel | null>(null);
   // A new review starts with nothing chosen.
   useEffect(() => setChoice(null), [plugin.id, plugin.status]);
@@ -79,6 +93,7 @@ function PluginPage({ plugin, servers, busy, run, back, allOff, activity }: { pl
     {plugin.description && <p>{plugin.description}</p>}
     <dl className="plugin-facts"><div><dt>Identifier</dt><dd><code>{plugin.id}</code></dd></div>{plugin.author && <div><dt>Author</dt><dd>{plugin.author}</dd></div>}{plugin.license && <div><dt>Licence</dt><dd>{plugin.license}</dd></div>}{plugin.homepage && <div><dt>Homepage</dt><dd>{plugin.homepage}</dd></div>}<div><dt>Folder</dt><dd>{plugin.folder}</dd></div></dl>
     <p className={`plugin-status ${plugin.status}`}><strong>Status:</strong> {statusLabel(plugin.status, plugin.trust, allOff)}</p>
+    {plugin.install ? <InstallRecord record={plugin.install} /> : <p className="muted">Placed in the plugins folder by hand, so InfraWerf has no recorded hash for it. Install it from a file or address to have its files checked at every start-up.</p>}
 
     <h5>What it adds</h5>
     <ul className="plugin-adds">{plugin.contributions.map(entry => <li key={entry.id}><strong>{entry.title}</strong>: {POINT[entry.point]}{entry.command && <span className="pack-shown">Runs exactly this on a server, only when you press Run: <code aria-label={`${entry.title} command`}>{commandLine(entry.command.argv)}</code>
@@ -93,7 +108,7 @@ function PluginPage({ plugin, servers, busy, run, back, allOff, activity }: { pl
     {asksSudo && <p className="muted">Sudo is never part of a trust level. This plugin asks for it, and it stays refused: InfraWerf cannot yet grant sudo to a plugin.</p>}
 
     <h5>Trust level</h5>
-    {plugin.status === "enabled" ? <>
+    {plugin.status === "files_changed" ? <p className="form-error" role="alert">This plugin’s files no longer match what was installed, so nothing it asks for is allowed. Remove it and install it again from a source you trust.</p> : plugin.status === "enabled" ? <>
       <p><strong>{trustLabel(plugin.trust)}.</strong> {TRUST_LEVELS.find(level => level.value === plugin.trust)?.detail}</p>
       <p className="muted">To give more trust, disable the plugin and enable it again.</p>
       <div className="plugin-actions"><button disabled={busy} onClick={() => void run(() => client.disablePlugin(plugin.id), `${plugin.name} disabled.`)}>Disable plugin</button>
@@ -118,6 +133,8 @@ function PluginPage({ plugin, servers, busy, run, back, allOff, activity }: { pl
 
     <h5>Recent activity</h5>
     <ActivityTable entries={activity} servers={servers} label={`${plugin.name} recent activity`} />
+    <h5>Remove</h5>
+    <RemovePlugin name={plugin.name} folder={plugin.folder} busy={busy} run={run} done={leave} />
   </section>;
 }
 
@@ -139,7 +156,7 @@ export function PluginsSection({ servers, focus, setFocus }: { servers: MapServe
   return <div className="plugins">
     {failure && <p className="form-error" role="alert">{failure}</p>}{message && <p role="status">{message}</p>}
     {state?.all_off && <p className="form-error" role="alert">All plugins are turned off. Nothing any plugin asks for is allowed until you turn them back on.</p>}
-    {!state ? <p className="muted">Looking for plugins…</p> : selected ? <PluginPage plugin={selected} servers={servers} busy={busy} run={run} allOff={state.all_off} activity={activity.filter(entry => entry.plugin_id === selected.id).slice(0, 10)} back={() => { setMessage(""); setFocus(null); }} /> : <>
+    {!state ? <p className="muted">Looking for plugins…</p> : selected ? <PluginPage plugin={selected} servers={servers} busy={busy} run={run} allOff={state.all_off} activity={activity.filter(entry => entry.plugin_id === selected.id).slice(0, 10)} back={() => { setMessage(""); setFocus(null); }} leave={() => setFocus(null)} /> : <>
       <p className="muted">Plugins add to InfraWerf. Finding a plugin allows nothing: you choose what each one may do, on which servers, on its own page.</p>
       <div className="plugin-actions">{state.all_off
         ? <button className="primary" disabled={busy} onClick={() => void run(() => client.setAllPluginsOff(false), "Plugins are back on, with the permissions you had set.")}>Turn plugins back on</button>
@@ -149,7 +166,8 @@ export function PluginsSection({ servers, focus, setFocus }: { servers: MapServe
         : <p className="empty-copy">No plugins found.</p>}
       <p className="muted">A plugin is a folder that contains <code>infrawerf-plugin.json</code>, placed in <code>{state.directory}</code>.</p>
       <button disabled={busy} onClick={() => void run(client.plugins, "Plugin folder read again.")}>Look again</button>
-      {state.invalid.length > 0 && <><h5>Folders that are not usable plugins</h5><ul className="plugin-invalid" aria-label="Unusable plugin folders">{state.invalid.map(entry => <li key={entry.folder}><strong>{entry.folder}</strong>{entry.problems.map((problem, index) => <code key={index}>{problem}</code>)}</li>)}</ul></>}
+      {state.invalid.length > 0 && <><h5>Folders that are not usable plugins</h5><ul className="plugin-invalid" aria-label="Unusable plugin folders">{state.invalid.map(entry => <li key={entry.folder}><strong>{entry.folder}</strong>{entry.problems.map((problem, index) => <code key={index}>{problem}</code>)}<RemovePlugin name={entry.folder} folder={entry.folder} busy={busy} run={run} /></li>)}</ul></>}
+      <InstallForm busy={busy} installed={report => void run(client.plugins, `${report.plugin_name} installed. It is disabled: open its page to review and enable it.`)} />
     </>}
   </div>;
 }

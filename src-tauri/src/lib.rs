@@ -690,6 +690,73 @@ fn plugin_enable(
     let _operation = workspace.inner().begin()?;
     workspace.plugin_enable(&plugin_id, trust)
 }
+/// Installs a plugin from a folder, an archive or an HTTPS address (T045).
+/// It arrives disabled.
+#[tauri::command]
+async fn plugin_install(
+    window: tauri::WebviewWindow,
+    workspace: State<'_, Arc<Workspace>>,
+    request: atlas_core::plugin_install::InstallRequest,
+) -> Result<atlas_core::plugin_install::InstallReport, AtlasError> {
+    local_desktop(&window)?;
+    let workspace = workspace.inner().clone();
+    let admission = workspace.begin()?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let _admission = admission;
+        workspace.plugin_install(&request)
+    })
+    .await
+    .map_err(|_| AtlasError::new(ErrorCode::IoFailure))?
+}
+/// Removes a plugin folder, its permissions and its install record (T045).
+#[tauri::command]
+fn plugin_remove(
+    window: tauri::WebviewWindow,
+    workspace: State<'_, Arc<Workspace>>,
+    folder: String,
+) -> Result<atlas_core::plugin_host::PluginsState, AtlasError> {
+    local_desktop(&window)?;
+    let _operation = workspace.inner().begin()?;
+    workspace.plugin_remove(&folder)
+}
+/// Lets the owner choose a plugin folder or archive on this PC.
+#[tauri::command]
+async fn plugin_pick_source(
+    window: tauri::WebviewWindow,
+    folder: bool,
+) -> Result<Option<String>, AtlasError> {
+    local_desktop(&window)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        #[cfg(desktop)]
+        {
+            let dialog = window.dialog().file().set_parent(&window);
+            let picked = if folder {
+                dialog
+                    .set_title("Choose a plugin folder")
+                    .blocking_pick_folder()
+            } else {
+                dialog
+                    .set_title("Choose a plugin archive")
+                    .add_filter("Plugin archive", &["zip", "gz", "tgz"])
+                    .blocking_pick_file()
+            };
+            picked
+                .map(|path| {
+                    path.into_path()
+                        .map(|path| path.to_string_lossy().into_owned())
+                        .map_err(|_| AtlasError::new(ErrorCode::InvalidInput))
+                })
+                .transpose()
+        }
+        #[cfg(not(desktop))]
+        {
+            let _ = (window, folder);
+            Ok(None)
+        }
+    })
+    .await
+    .map_err(|_| AtlasError::new(ErrorCode::IoFailure))?
+}
 #[tauri::command]
 fn plugin_disable(
     window: tauri::WebviewWindow,
@@ -975,7 +1042,7 @@ pub fn run() {
             }
         }
     })
-    .invoke_handler(tauri::generate_handler![extensions_state, plugins_state, plugin_enable, plugin_disable, plugin_set_grant, plugin_authorize, plugin_activity, plugins_set_all_off, plugin_revoke_trusted, pack_state, pack_run, pack_map, pack_apps, apps::pack_app_open, apps::tunnel_open, apps::tunnel_discover, apps::tunnel_close, apps::tunnel_close_all, apps::tunnel_list, apps::tunnel_focus, monitoring_accept_identity, monitoring_state, monitoring_configure, monitoring_history_limit, monitoring_discover, foundation_status, workspace_status, map_state, retry_workspace, add_server, update_server, remove_server, add_relationship, remove_relationship, import_reports, ssh_prepare, ssh_verify, ssh_cancel, health_configure, health_status, health_cancel, inventory_refresh, files_prepare, files_open, files_read, workload_inspect, workload_control_preview, workload_control_confirm, files_lock, files_terminal_start, files_terminal_poll, files_terminal_write, files_terminal_resize, files_preview, files_commit, files_discard, files_release, files_pick_upload, files_pick_download, files_selection_discard, files_transfer, files_stage_protected, transfer_list, transfer_cancel, elevation_preview, elevation_confirm, elevation_cancel, protected_placement_preview, protected_placement_confirm, protected_placement_cancel])
+    .invoke_handler(tauri::generate_handler![extensions_state, plugins_state, plugin_enable, plugin_disable, plugin_install, plugin_remove, plugin_pick_source, plugin_set_grant, plugin_authorize, plugin_activity, plugins_set_all_off, plugin_revoke_trusted, pack_state, pack_run, pack_map, pack_apps, apps::pack_app_open, apps::tunnel_open, apps::tunnel_discover, apps::tunnel_close, apps::tunnel_close_all, apps::tunnel_list, apps::tunnel_focus, monitoring_accept_identity, monitoring_state, monitoring_configure, monitoring_history_limit, monitoring_discover, foundation_status, workspace_status, map_state, retry_workspace, add_server, update_server, remove_server, add_relationship, remove_relationship, import_reports, ssh_prepare, ssh_verify, ssh_cancel, health_configure, health_status, health_cancel, inventory_refresh, files_prepare, files_open, files_read, workload_inspect, workload_control_preview, workload_control_confirm, files_lock, files_terminal_start, files_terminal_poll, files_terminal_write, files_terminal_resize, files_preview, files_commit, files_discard, files_release, files_pick_upload, files_pick_download, files_selection_discard, files_transfer, files_stage_protected, transfer_list, transfer_cancel, elevation_preview, elevation_confirm, elevation_cancel, protected_placement_preview, protected_placement_confirm, protected_placement_cancel])
     .run(tauri::generate_context!())
     .expect("InfraWerf native runtime failed");
 }

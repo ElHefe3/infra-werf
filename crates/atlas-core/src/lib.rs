@@ -10,6 +10,7 @@ pub mod operations;
 pub mod pack;
 pub mod plugin;
 pub mod plugin_host;
+pub mod plugin_install;
 mod sftp;
 pub mod ssh;
 pub mod store;

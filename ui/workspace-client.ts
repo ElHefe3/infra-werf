@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { MonitoringState, MonitoringPolicy, TunnelInfo, TunnelRequest, AppDiscovery, ExtensionCatalogue, PluginsState, PluginActivityLog, TrustLevel, Capability, PackServerState, PackMapState, PackAppsState } from "./contracts.gen";
+import type { MonitoringState, MonitoringPolicy, TunnelInfo, TunnelRequest, AppDiscovery, ExtensionCatalogue, PluginsState, PluginActivityLog, TrustLevel, Capability, PackServerState, PackMapState, PackAppsState, InstallRequest, InstallReport } from "./contracts.gen";
 import { CONTRACT_VERSION, type AddRelationship, type AddServer, type MapState, type UpdateServer, type WorkspaceStatus, type OperationTicket, type SshVerification, type FileSession, type FileAction, type FileResult, type FileChange, type FileMutationPreview, type FileMutationReceipt, type LocalSelection, type TransferView, type ElevationPreview, type ElevationReceipt, type ProtectedPlacementRequest, type ProtectedPlacementStage, type ProtectedPlacementReceipt, type HealthProbeConfig, type HealthSnapshot, type InventoryRefreshResult, type TerminalPoll, type WorkloadInspection, type WorkloadAction, type WorkloadControlPreview, type WorkloadControlReceipt } from "./contracts.gen.ts";
 
 export type NativeTransport = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
@@ -24,6 +24,9 @@ export function createWorkspaceClient(transport: NativeTransport = invoke) {
     historyLimit: (limit:number) => request<MonitoringState>("monitoring_history_limit",{limit}),
     extensions: () => request<ExtensionCatalogue>("extensions_state"),
     plugins: () => request<PluginsState>("plugins_state"),
+    installPlugin: (installRequest: InstallRequest) => request<InstallReport>("plugin_install", { request: installRequest }),
+    removePlugin: (folder: string) => request<PluginsState>("plugin_remove", { folder }),
+    pickPluginSource: (folder: boolean) => transport<string | null>("plugin_pick_source", { folder }),
     enablePlugin: (pluginId: string, trust: TrustLevel) => request<PluginsState>("plugin_enable", { pluginId, trust }),
     disablePlugin: (pluginId: string) => request<PluginsState>("plugin_disable", { pluginId }),
     pluginActivity: (limit: number) => request<PluginActivityLog>("plugin_activity", { limit }),

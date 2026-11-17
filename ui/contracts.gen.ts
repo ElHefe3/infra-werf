@@ -345,10 +345,48 @@ server_ids: Array<ServerId>, };
 export type PackMapState = { contract_version: number, badges: Array<PackBadgeView>, relationship_kinds: Array<PackRelationshipKindView>, };
 export type PackAppView = { plugin_id: string, plugin_name: string, contribution_id: string, title: string, port: number, path: string, };
 export type PackAppsState = { contract_version: number, server_id: ServerId, apps: Array<PackAppView>, };
+export type InstallSource = { "kind": "folder", path: string, } | { "kind": "archive", path: string, } | { "kind": "address", url: string, };
+export type InstallRequest = { source: InstallSource,
+/**
+ * The SHA-256 the owner expects: of the archive for an archive or an
+ * address, of the plugin's files for a folder. 64 hexadecimal digits.
+ */
+expected_sha256?: string,
+/**
+ * The author's minisign public key. When given, the archive must carry
+ * a valid signature by that key.
+ */
+public_key?: string, };
+export type InstallProblemCode = "unreadable" | "not_https" | "unsupported_archive" | "path_traversal" | "unsafe_entry" | "too_large" | "no_manifest" | "invalid_manifest" | "hash_mismatch" | "signature_missing" | "signature_invalid" | "invalid_public_key" | "signature_not_possible" | "already_installed";
+export type InstallProblem = { code: InstallProblemCode, message: string, };
+export type InstallReport = { contract_version: number,
+/**
+ * Set when the plugin was installed. It is disabled until reviewed.
+ */
+plugin_id: string | null, plugin_name: string | null, content_sha256: string | null, problem: InstallProblem | null, };
+export type Integrity = "verified" | "changed" | "not_checked";
+export type SourceKind = "folder" | "archive" | "address";
+export type InstallRecordView = { source_kind: SourceKind,
+/**
+ * The folder, file or address it came from.
+ */
+source: string,
+/**
+ * SHA-256 of its files, checked at every start-up.
+ */
+content_sha256: string,
+/**
+ * SHA-256 of the archive or download, if it came from one.
+ */
+archive_sha256: string | null,
+/**
+ * The minisign key ID whose signature was verified, if any.
+ */
+signer_key_id: string | null, installed_at: string, integrity: Integrity, checked_at: string | null, };
 export type TrustLevel = "read_only" | "confirm_changes" | "trusted_automation";
 export type CapabilityKind = "read" | "change" | "elevation";
-export type PluginStatus = "disabled" | "enabled" | "changed_since_review";
-export type Refusal = "unknown_plugin" | "plugin_disabled" | "changed_since_review" | "unknown_server" | "not_requested" | "not_granted" | "trust_too_low" | "no_elevation_exception" | "all_plugins_off";
+export type PluginStatus = "disabled" | "enabled" | "changed_since_review" | "files_changed";
+export type Refusal = "unknown_plugin" | "plugin_disabled" | "changed_since_review" | "unknown_server" | "not_requested" | "not_granted" | "trust_too_low" | "no_elevation_exception" | "all_plugins_off" | "files_changed";
 export type PluginDecision = { contract_version: number, allowed: boolean,
 /**
  * Allowed only after the owner confirms this one change.
@@ -377,7 +415,11 @@ trust: TrustLevel | null, capabilities: Array<RequestedCapability>, contribution
 /**
  * Servers with at least one granted capability.
  */
-grants: Array<ServerGrant>, };
+grants: Array<ServerGrant>,
+/**
+ * How it was installed; absent for a folder placed by hand.
+ */
+install: InstallRecordView | null, };
 export type InvalidPlugin = { folder: string, problems: Array<string>, };
 export type PluginsState = { contract_version: number, directory: string,
 /**
