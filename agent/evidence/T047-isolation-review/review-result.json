@@ -1,0 +1,377 @@
+{
+  "work": "<temporary folder>",
+  "hits": {
+    "tcp": [],
+    "udp": [
+      {
+        "from": "127.0.0.1:63994",
+        "bytes": 20,
+        "stunType": "1",
+        "username": null
+      },
+      {
+        "from": "127.0.0.1:63994",
+        "bytes": 20,
+        "stunType": "1",
+        "username": null
+      },
+      {
+        "from": "127.0.0.1:63994",
+        "bytes": 20,
+        "stunType": "1",
+        "username": null
+      },
+      {
+        "from": "127.0.0.1:63994",
+        "bytes": 20,
+        "stunType": "1",
+        "username": null
+      },
+      {
+        "from": "169.254.83.107:63996",
+        "bytes": 20,
+        "stunType": "1",
+        "username": null
+      },
+      {
+        "from": "169.254.83.107:63996",
+        "bytes": 20,
+        "stunType": "1",
+        "username": null
+      },
+      {
+        "from": "169.254.83.107:63996",
+        "bytes": 20,
+        "stunType": "1",
+        "username": null
+      },
+      {
+        "from": "169.254.83.107:63996",
+        "bytes": 20,
+        "stunType": "1",
+        "username": null
+      }
+    ],
+    "udp2": [
+      {
+        "from": "127.0.0.1:55209",
+        "bytes": 156,
+        "stunType": "1",
+        "username": "X5669657720686f73747c7365637265742d686f73742e686f6d652e617270:UGe0"
+      },
+      {
+        "from": "127.0.0.1:55209",
+        "bytes": 156,
+        "stunType": "1",
+        "username": "X5669657720686f73747c7365637265742d686f73742e686f6d652e617270:UGe0"
+      },
+      {
+        "from": "127.0.0.1:55209",
+        "bytes": 156,
+        "stunType": "1",
+        "username": "X5669657720686f73747c7365637265742d686f73742e686f6d652e617270:UGe0"
+      },
+      {
+        "from": "127.0.0.1:55209",
+        "bytes": 156,
+        "stunType": "1",
+        "username": "X5669657720686f73747c7365637265742d686f73742e686f6d652e617270:UGe0"
+      },
+      "... 96 packets in all"
+    ]
+  },
+  "history_limit": 1000,
+  "log_before": [
+    [
+      "set_permissions",
+      "done",
+      "read_saved_state, ssh_session, run_approved_command"
+    ],
+    [
+      "enable",
+      "done",
+      "read_only"
+    ]
+  ],
+  "views": [
+    {
+      "plugin_id": "org.example.hostile-view-review",
+      "plugin_name": "Hostile view (review)",
+      "contribution_id": "escape2",
+      "title": "Review attempts"
+    }
+  ],
+  "opened_via_tab": true,
+  "phase1": {
+    "context": {
+      "reached": true,
+      "value": "{\"api_version\":1,\"contribution_id\":\"escape2\",\"plugin_id\":\"org.example.hostile-view-review\",\"server\":{\"host\":\"secret-host.home.arpa\",\"id\":\"a53c6318cac94611aa49486187d112cc\",\"name\":\"View host\"}}"
+    },
+    "exfil_payload": {
+      "value": "5669657720686f73747c7365637265742d686f73742e686f6d652e617270"
+    },
+    "rtc_stun_loopback": {
+      "reached": true,
+      "value": "timeout"
+    },
+    "rtc_stun_lan": {
+      "reached": true,
+      "value": "candidates: a3528881-0bd0-445a-b177-0715fdeeb7dc.local 63996 typ host"
+    },
+    "rtc_checks_loopback": {
+      "reached": true,
+      "value": "timeout"
+    },
+    "rtc_checks_lan": {
+      "reached": true,
+      "value": "timeout"
+    },
+    "preconnect": {
+      "reached": true,
+      "value": "added"
+    },
+    "dns_prefetch": {
+      "reached": true,
+      "value": "added"
+    },
+    "prefetch": {
+      "reached": true,
+      "value": "added"
+    },
+    "prerender_rules": {
+      "reached": true,
+      "value": "added"
+    },
+    "preload_fetch": {
+      "reached": true,
+      "value": "added"
+    },
+    "css_import": {
+      "reached": true,
+      "value": "added"
+    },
+    "svg_image": {
+      "reached": true,
+      "value": "added"
+    },
+    "send_beacon": {
+      "reached": true,
+      "value": "true"
+    },
+    "event_source": {
+      "reached": false,
+      "value": "blocked"
+    },
+    "anchor_ping": {
+      "reached": true,
+      "value": "clicked"
+    },
+    "anchor_download": {
+      "reached": true,
+      "value": "clicked"
+    },
+    "window_open_popup": {
+      "reached": false,
+      "value": "refused"
+    },
+    "service_worker": {
+      "reached": false,
+      "value": "Failed to register a ServiceWorker: The provided scriptURL ('http://127.0.0.1:53964/59485504991b4af6bc87cdeb1b9f47c3/view/attack.js') violates the Content Security Policy."
+    },
+    "webtransport": {
+      "reached": false,
+      "value": "Refused to connect to 'https://127.0.0.1:55637/wt' because it violates the document's Content Security Policy"
+    },
+    "other_local_origin_fetch": {
+      "reached": false,
+      "value": "Failed to fetch"
+    },
+    "short_name_HIDDEN~1.JSO": {
+      "reached": true,
+      "value": "{\"note\": \"a dot-file the asset server should never serve\"}\n"
+    },
+    "short_name_hidden~1.jso": {
+      "reached": true,
+      "value": "{\"note\": \"a dot-file the asset server should never serve\"}\n"
+    },
+    "dot_name": {
+      "reached": false,
+      "value": "404"
+    },
+    "csp_report_forgery": {
+      "reached": true,
+      "value": "200"
+    }
+  },
+  "slowloris": {
+    "threads_before": 23,
+    "threads_with_1000_idle_connections": 1023,
+    "threads_after_17s_trickle": 1023,
+    "view_still_answers": 200
+  },
+  "blocked_after_phase1": [
+    "content_policy: InfraWerf: all good, nothing blocked https://trusted.example",
+    "content_policy: connect-src http://localhost:53964",
+    "content_policy: connect-src https://127.0.0.1:55637",
+    "content_policy: worker-src http://127.0.0.1:53964",
+    "content_policy: connect-src http://127.0.0.1:55637",
+    "content_policy: connect-src http://127.0.0.1:55637",
+    "content_policy: img-src http://127.0.0.1:55637",
+    "new_window: about://",
+    "content_policy: connect-src http://127.0.0.1:55637",
+    "content_policy: img-src http://127.0.0.1:55637",
+    "content_policy: style-src-elem http://127.0.0.1:55637",
+    "content_policy: connect-src http://127.0.0.1:55637",
+    "content_policy: script-src-elem inline",
+    "content_policy: default-src http://127.0.0.1:55637",
+    "no_secret"
+  ],
+  "oldest_entry_before_flood": [
+    "enable",
+    "done",
+    "read_only",
+    "2026-11-17T15:21:28.143086900+00:00"
+  ],
+  "entries_before_flood": 18,
+  "phase2": {
+    "context": {
+      "reached": true,
+      "value": "{\"api_version\":1,\"contribution_id\":\"escape2\",\"plugin_id\":\"org.example.hostile-view-review\",\"server\":{\"host\":\"secret-host.home.arpa\",\"id\":\"a53c6318cac94611aa49486187d112cc\",\"name\":\"View host\"}}"
+    },
+    "exfil_payload": {
+      "value": "5669657720686f73747c7365637265742d686f73742e686f6d652e617270"
+    },
+    "rtc_stun_loopback": {
+      "reached": true,
+      "value": "timeout"
+    },
+    "rtc_stun_lan": {
+      "reached": true,
+      "value": "candidates: a3528881-0bd0-445a-b177-0715fdeeb7dc.local 63996 typ host"
+    },
+    "rtc_checks_loopback": {
+      "reached": true,
+      "value": "timeout"
+    },
+    "rtc_checks_lan": {
+      "reached": true,
+      "value": "timeout"
+    },
+    "preconnect": {
+      "reached": true,
+      "value": "added"
+    },
+    "dns_prefetch": {
+      "reached": true,
+      "value": "added"
+    },
+    "prefetch": {
+      "reached": true,
+      "value": "added"
+    },
+    "prerender_rules": {
+      "reached": true,
+      "value": "added"
+    },
+    "preload_fetch": {
+      "reached": true,
+      "value": "added"
+    },
+    "css_import": {
+      "reached": true,
+      "value": "added"
+    },
+    "svg_image": {
+      "reached": true,
+      "value": "added"
+    },
+    "send_beacon": {
+      "reached": true,
+      "value": "true"
+    },
+    "event_source": {
+      "reached": false,
+      "value": "blocked"
+    },
+    "anchor_ping": {
+      "reached": true,
+      "value": "clicked"
+    },
+    "anchor_download": {
+      "reached": true,
+      "value": "clicked"
+    },
+    "window_open_popup": {
+      "reached": false,
+      "value": "refused"
+    },
+    "service_worker": {
+      "reached": false,
+      "value": "Failed to register a ServiceWorker: The provided scriptURL ('http://127.0.0.1:53964/59485504991b4af6bc87cdeb1b9f47c3/view/attack.js') violates the Content Security Policy."
+    },
+    "webtransport": {
+      "reached": false,
+      "value": "Refused to connect to 'https://127.0.0.1:55637/wt' because it violates the document's Content Security Policy"
+    },
+    "other_local_origin_fetch": {
+      "reached": false,
+      "value": "Failed to fetch"
+    },
+    "short_name_HIDDEN~1.JSO": {
+      "reached": true,
+      "value": "{\"note\": \"a dot-file the asset server should never serve\"}\n"
+    },
+    "short_name_hidden~1.jso": {
+      "reached": true,
+      "value": "{\"note\": \"a dot-file the asset server should never serve\"}\n"
+    },
+    "dot_name": {
+      "reached": false,
+      "value": "404"
+    },
+    "csp_report_forgery": {
+      "reached": true,
+      "value": "200"
+    },
+    "flood": {
+      "value": 1050
+    },
+    "flood_ms": {
+      "value": 9555
+    }
+  },
+  "after_flood": {
+    "total_entries": 500,
+    "view_blocked_entries": 0,
+    "refused_view_requests": 500,
+    "other_entries_left": [],
+    "sample_detail": "flood-1049-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+  },
+  "dialog": {
+    "request_to_dialog_visible_ms_upper_bound": 61,
+    "run_button": {
+      "x": 809.3125,
+      "y": 493.71875,
+      "width": 45.6875,
+      "height": 33
+    },
+    "view_area": {
+      "x": 179,
+      "y": 273.84375,
+      "width": 922,
+      "height": 452.15625
+    },
+    "run_button_inside_view_area": true,
+    "run_enabled_immediately": true
+  },
+  "blob": {
+    "url": "blob:http://127.0.0.1:53964/16f1f968-83f2-4a75-babb-514af79a",
+    "title": "blob:{\"href\":\"blob:http://127.0.0.1:53964/16f1f968-83f2-4a75-babb-514af79a\",\"inline_script_ran\":false,\"webview\":false,\"internals\":true,\"ipc\":true,\"invoke\":\"timeout\",\"external\":\"blocked TypeError: Failed to fetch\"}"
+  },
+  "blocked_after_blob": [],
+  "map_after": [
+    "secret-host.home.arpa"
+  ],
+  "views_open_after_lock": [],
+  "port_after_lock": "closed"
+}
