@@ -12,12 +12,15 @@ const outcome = async (name, attempt) => {
 };
 const api = path => new URL(`../infrawerf/v1/${path}`, location.href);
 const show = () => { document.getElementById("results").textContent = JSON.stringify(results); };
-const waitFor = async file => { for (;;) { try { if ((await fetch(file, { cache: "no-store" })).ok) return; } catch {} await new Promise(r => setTimeout(r, 300)); } };
+// The runner sets window.GO[n] over the debugging connection: since 943d915
+// the view serves only the files read when it opened, so a file written
+// later cannot be the signal.
+const waitFor = async name => { const n = name.match(/\d+/)[0]; for (;;) { if (window.GO && window.GO[n]) return; await new Promise(r => setTimeout(r, 300)); } };
 const hex = text => Array.from(new TextEncoder().encode(text)).map(b => b.toString(16).padStart(2, "0")).join("");
 const link = (rel, href, extra = {}) => { const l = document.createElement("link"); l.rel = rel; l.href = href; Object.assign(l, extra); document.head.append(l); return "added"; };
 
-async function gather(iceServers) {
-  const pc = new RTCPeerConnection({ iceServers });
+async function gather(iceServers, PC = window.RTCPeerConnection) {
+  const pc = new PC({ iceServers });
   pc.createDataChannel("x");
   const candidates = [];
   pc.onicecandidate = e => { if (e.candidate) candidates.push(e.candidate.candidate.split(" ").slice(4, 8).join(" ")); };
@@ -29,8 +32,9 @@ async function gather(iceServers) {
 
 // Connectivity checks to a candidate the page chooses, with a username the
 // page chooses: the STUN USERNAME carries "<remote ufrag>:<local ufrag>".
-async function checks(address, port, secret) {
-  const pc = new RTCPeerConnection({ iceServers: [] });
+async function checks(address, port, secret, PC = window.RTCPeerConnection) {
+  if (typeof PC !== "function") throw new Error(`no constructor (${typeof PC})`);
+  const pc = new PC({ iceServers: [] });
   pc.createDataChannel("x");
   await pc.setLocalDescription(await pc.createOffer());
   const fp = Array.from({ length: 32 }, (_, i) => (i * 7 % 256).toString(16).padStart(2, "0").toUpperCase()).join(":");
@@ -57,6 +61,32 @@ async function checks(address, port, secret) {
   await outcome("rtc_stun_lan", () => gather([{ urls: `stun:${R.lan}:${R.udp}` }]));
   await outcome("rtc_checks_loopback", () => checks("127.0.0.1", R.udp2, `X${data}`.slice(0, 250)));
   await outcome("rtc_checks_lan", () => checks(R.lan, R.udp2, `Y${data}`.slice(0, 250)));
+
+  // Re-test of 943d915: the guard removes RTCPeerConnection from each
+  // realm. Try every other realm the page can reach. Each attempt tags its
+  // STUN username with its own name, so the UDP listener says which worked.
+  results.rtc_globals_left = { value: Object.getOwnPropertyNames(window).filter(n => /RTC/.test(n)).join(",") };
+  const frame = (setup = () => {}) => { const f = document.createElement("iframe"); setup(f); document.body.append(f); return f; };
+  const loaded = f => new Promise(r => { f.addEventListener("load", r, { once: true }); setTimeout(r, 1500); });
+  const realm = async (name, getPC) => outcome(`realm_${name}`, async () => checks(R.lan, R.udp2, `R${name.replace(/[^a-z0-9]/gi, "")}x${data.slice(0, 20)}`, await getPC()));
+  await realm("sync_blank", () => frame().contentWindow.RTCPeerConnection);
+  await realm("frames_index", () => { frame(); return window[window.length - 1].RTCPeerConnection; });
+  await realm("explicit_about_blank", async () => { const f = frame(f => { f.src = "about:blank"; }); await loaded(f); return f.contentWindow.RTCPeerConnection; });
+  await realm("srcdoc", async () => { const f = frame(f => { f.srcdoc = "<p>x</p>"; }); await loaded(f); return f.contentWindow.RTCPeerConnection; });
+  await realm("srcdoc_sync", () => frame(f => { f.srcdoc = "<p>x</p>"; }).contentWindow.RTCPeerConnection);
+  await realm("sandbox_srcdoc", async () => { const f = frame(f => { f.setAttribute("sandbox", "allow-scripts allow-same-origin"); f.srcdoc = "<p>x</p>"; }); await loaded(f); return f.contentWindow.RTCPeerConnection; });
+  await realm("nested_blank", () => { const outer = frame(); const d = outer.contentDocument; const inner = d.createElement("iframe"); d.body.append(inner); return inner.contentWindow.RTCPeerConnection; });
+  await realm("document_open_write", () => { const f = frame(); const d = f.contentDocument; d.open(); d.write("<!doctype html><p>replaced</p>"); d.close(); return f.contentWindow.RTCPeerConnection; });
+  await realm("document_open_then_read", async () => { const f = frame(); const w = f.contentWindow; const d = f.contentDocument; d.open(); d.write("<p>x</p>"); d.close(); await new Promise(r => setTimeout(r, 200)); return w.RTCPeerConnection; });
+  await realm("detached", () => { const f = frame(); const w = f.contentWindow; f.remove(); return w.RTCPeerConnection; });
+  await realm("moved_frame", async () => { const f = frame(); const w = f.contentWindow; document.head.append(f); await new Promise(r => setTimeout(r, 100)); return f.contentWindow?.RTCPeerConnection ?? w.RTCPeerConnection; });
+  await realm("frame_reload", async () => { const f = frame(); f.contentWindow.location.reload(); await loaded(f); return f.contentWindow.RTCPeerConnection; });
+  await realm("frame_srcdoc_change", async () => { const f = frame(f => { f.srcdoc = "<p>a</p>"; }); await loaded(f); f.srcdoc = "<p>b</p>"; await loaded(f); return f.contentWindow.RTCPeerConnection; });
+  await realm("object_blank", async () => { const o = document.createElement("object"); o.data = "about:blank"; o.type = "text/html"; document.body.append(o); await new Promise(r => setTimeout(r, 500)); return o.contentWindow && o.contentWindow.RTCPeerConnection; });
+  await realm("descriptor", () => { const d = Object.getOwnPropertyDescriptor(window, "RTCPeerConnection"); return d && (d.value || (d.get && d.get())); });
+  await realm("transceiver_proto", () => { const T = window.RTCRtpTransceiver; return T && Object.getOwnPropertyDescriptor(T.prototype, "sender")?.get?.constructor; });
+  await realm("session_description_route", () => { const S = window.RTCSessionDescription; return S && Object.getPrototypeOf(S.prototype)?.constructor?.RTCPeerConnection; });
+  await outcome("worklet_realm", async () => { await new AudioContext().audioWorklet.addModule("config.js"); return "loaded (no RTC in worklets)"; });
 
   // Resource hints and other loads to another local origin.
   await outcome("preconnect", () => link("preconnect", `http://127.0.0.1:${R.tcp}`));

@@ -254,3 +254,107 @@ So the guard script's absence would not matter for commands. The one exception i
 | Torn down on Lock, close and kill switch | Confirmed | After Lock, `plugin_views_open` was `[]` and the port was **closed** (run 7). The author's suite covers close and the kill switch, and `close_plugin_view` cancels waiting requests. `ViewLink::call` returns `closed` once the view is gone. |
 | Secret path | Confirmed | A 122-bit random UUIDv4, new on every opening. `Referrer-Policy: no-referrer`. It is not logged (the log keeps scheme and host only). The incognito profile keeps no history. |
 | Host check against DNS rebinding | Confirmed | The `Host` header must equal `127.0.0.1:<port>` exactly (unit test, and `localhost:<port>` was refused). |
+
+## Re-test of 943d915
+
+Date: 2026-11-17. I merged `943d915` (Fix the plugin view isolation review findings) into this branch (`c1c8ae6`), and rebuilt with `pnpm tauri build --no-bundle -- --locked` (release, 17:57). The re-test used the same runner, with these changes:
+
+- The phases are now signalled over the debugging connection (`window.GO`), because the view no longer serves files added after it opens.
+- The activity database is read after InfraWerf quits.
+- New phase-1 attempts try WebRTC from every other realm I could reach.
+
+Runs 8 and 9 gave the same results. Run 9 is the evidence: [`retest-943d915-result.json`](T047-isolation-review/retest-943d915-result.json) and [`retest-943d915-dialog.png`](T047-isolation-review/retest-943d915-dialog.png). No `atlas-native.exe` was running before each run.
+
+### Verdict
+
+Findings 1–10 and 12 are **fixed** as far as I could test. One new low finding (14) and two observations (15, 16) remain. Nothing new is high or medium. Finding 11 (`__TAURI_CHANNEL__|fetch`) and 13 (untested items) were not addressed, as stated.
+
+| # | Was | Now | Evidence |
+| --- | --- | --- | --- |
+| 1 | High | **Fixed** | 0 UDP and 0 TCP packets reached the listeners. 21 WebRTC attempts failed: 4 direct and 17 from other realms. |
+| 2 | Medium | **Fixed** | After 1050 refused requests the log held 45 rows, and nothing was pruned. |
+| 3 | Medium | **Fixed** | Run stayed disabled for about 1.36 s after the dialog appeared, and Decline had focus. |
+| 4 | Medium | **Fixed**, with new low 14 | 1000 idle connections: 22 → 38 → 22 threads. |
+| 5 | Low | **Fixed** | One budget, a summary row on close, and outside requests are not charged. |
+| 6 | Low | **Fixed** | A forged directive is logged as `other`. |
+| 7 | Low | **Fixed** | `HIDDEN~1.JSO` and `hidden~1.jso` returned 404. |
+| 8 | Low | **Fixed** (by design: in-memory set at open) | Files are not re-read; the runner's signal had to move off files. |
+| 9 | Low | **Fixed in code** (not reachable from a view, not tested live) | `Running` is set under the lock; requests queue in the dialog. |
+| 10 | Info | **Fixed** | Navigation to a `blob:` document was refused, and no blob page appeared. |
+| 11 | Info | Unchanged, as stated | — |
+| 12 | Info | **Fixed in code** | `apps.rs` emits to the main webview. |
+| 13 | Info | Unchanged, as stated | — |
+| 14 | — | **New, low** | A local process holding the 16 slots makes all of the page's own requests fail. |
+| 15 | — | **New, info** | Once the budget is spent, the view's real action request is not logged on its own. |
+| 16 | — | **New, info** | Connections closed at the cap are not counted as outside requests. |
+
+### Per finding
+
+**1 — WebRTC: fixed.** With the guard in place, every route I tried failed and the UDP listeners received nothing (`hits: {tcp: 0, udp: 0, udp2: 0}`).
+
+- **Direct STUN and ICE checks.** All four attempts (loopback and LAN, `iceServers` and a hand-made remote candidate) failed with "PC is not a constructor" or "no constructor".
+- **Other realms**, each tried from the top page with `checks()` and a username tagged with the realm's name. In all 17, `RTCPeerConnection` was `undefined`:
+  - a synchronously created blank frame;
+  - `window[window.length-1]`;
+  - an explicit `about:blank` frame;
+  - an `srcdoc` frame, both after load and read synchronously;
+  - an `srcdoc` frame sandboxed with `allow-scripts allow-same-origin`;
+  - a blank frame nested in a blank frame;
+  - a blank frame after `document.open()`/`write()`/`close()`, read at once and again 200 ms later through a window reference taken before;
+  - a detached frame's window;
+  - a frame moved to `<head>`;
+  - a frame after `location.reload()`;
+  - a frame whose `srcdoc` was changed after load;
+  - an `<object data="about:blank">`;
+  - the property descriptor on `window`;
+  - routes through the prototypes of `RTCRtpTransceiver` and `RTCSessionDescription`, which remain as globals.
+- **Function constructors.** Reaching one through a getter's `.constructor` was refused by the CSP (no `unsafe-eval`). So were `eval` and `Function` from frames, since about:blank and srcdoc frames inherit the policy.
+- **Other contexts.** Workers and service workers are refused by `worker-src 'none'`. An AudioWorklet loads from `'self'` but has no WebRTC. Popups are refused, and a `blob:` document can no longer be reached.
+- **The browser flags.** The author found that `--force-webrtc-ip-handling-policy` still let STUN out, so WebRTC is now held only by the guard script, which must run in every realm. It did in every realm I could create. That rests on WebView2 running `initialization_script_for_all_frames` before any page script in every new document. Keep the frame-realm attempts in the native suite so a WebView2 update that changes this is caught.
+- **Not re-tested live.** `context` now returns `server: null` without `read_saved_state`. This fixture holds the grant, so it still received the server; the author's suite covers the refusal.
+
+**2, 5, 6 — log flooding, cap and page text: fixed.**
+
+- 1050 refused `actions` requests took 4.6 s. Afterwards the database held **45 rows**: `enable`, `set_permissions`, `open_view`, and 42 `view_blocked` rows. That is 40 within the budget plus 2 summary rows written on Lock:
+  - "1096 more refused or blocked attempts were not logged one by one"
+  - "1 requests from outside the view were refused (not counted as the plugin's)"
+- Nothing older was pruned.
+- The forged CSP report was logged as `content_policy: other https://trusted.example`.
+- A flood row now carries `unknown_contribution`, not the page's text. The flood rows were not logged one by one in this run, but this was confirmed in the code.
+
+**3 — Run timing: fixed.**
+
+- The dialog was visible ≤88 ms after the request, and Run is still placed inside the view's former area.
+- The button reads "Run (wait…)" and is disabled. It first became the enabled "Run" button **about 1.36 s** after the dialog was seen.
+- Decline had focus.
+- A click counts only when its pointer press started on the button, and window focus restarts the wait.
+
+A click aimed at the page within the first second can no longer land on Run.
+
+**4 — threads: fixed; see new finding 14.** With 1000 idle connections the thread count went from 22 to 38 (16 handlers plus the listener). It returned to 22 after the 5 s header deadline, even while a header line was trickled every 7 s. The page's own request still answered 200 once the idle connections were gone.
+
+**7, 8 — short names and live files: fixed.**
+
+- `HIDDEN~1.JSO`, `hidden~1.jso` and `.hidden-config.json` all returned 404.
+- The view serves the set `read_folder` read when it opened, links refused, and checked against the install hash. My runner's old signal, files written into the folder after the view opened, stopped working, which confirms that nothing is re-read from disk.
+
+**9, 12: fixed in code** (read in the diff; neither is reachable from a view):
+
+- `answer_view_action` sets `Running` under the lock.
+- The dialog queues requests and says how many are waiting.
+- `apps.rs` now emits to `main_webview()`.
+
+**10 — `blob:`: fixed.** Navigating to `blob:http://127.0.0.1:<port>/…` was refused. No blob page appeared within 20 s, and the view stayed on its page.
+
+### New findings
+
+**14. Low — A local process can deny a view its own server.** Since 943d915 the server refuses connections beyond 16 at once.
+
+- **What happens.** Another program on the PC needs no secret: it can keep 16 connections open, each sending a partial request line and reopened as soon as the 5 s deadline drops it. Then the page's own requests fail.
+- **Evidence.** Holding the slots this way, all 8 of the page's `context` requests, one a second, failed with "Failed to fetch". It answered 200 again once the program stopped.
+- **Impact.** Only the view's availability, not its isolation. A program that can do this can already disrupt the owner in many other ways, so this is low.
+- **Suggested fix.** Reserve a few slots for connections whose request carries the secret path, by reading the request line before counting the connection against the shared limit. Or give a shorter deadline (about 1 s) to connections that have not sent a complete request line.
+
+**15. Info — Once the budget is spent, the view's real request is not logged by itself.** After the flood, the page's legitimate `POST actions` for `kernel` opened InfraWerf's dialog, but no `view_request` / `needs_confirmation` row was written, because `ask` logs it through the shared budget. The only trace is the summary count at close, and the owner's Decline left no row either. Requests that reach the owner's dialog are already limited to one waiting per view by the owner's own answers. Suggest logging them, and the owner's answer, outside the budget.
+
+**16. Info — Connections closed at the cap are not counted.** The "requests from outside the view" row counted 1, although 1000 connections were made. Those closed at the cap, or dropped at the header deadline before sending a request, are not counted anywhere. It is fine not to charge them to the plugin, but the summary row understates the attempts. Suggest counting connections refused at the cap and those timed out at the deadline in the same row.

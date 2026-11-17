@@ -114,8 +114,23 @@ try {
   // Keep them alive past the 10 s read timeout by trickling a header line.
   for (let round = 0; round < 2; round++) { await delay(7000); for (const s of sockets) s.write('X-a: b\r\n'); }
   report.slowloris.threads_after_17s_trickle = threads(app.pid);
-  report.slowloris.view_still_answers = await view.evaluate(() => fetch(new URL('../infrawerf/v1/context', location.href)).then(r => r.status).catch(e => String(e)));
+  const probe = () => view.evaluate(() => fetch(new URL('../infrawerf/v1/context', location.href)).then(r => r.status).catch(e => String(e)));
+  report.slowloris.view_still_answers = await probe();
   for (const s of sockets) s.destroy();
+  await delay(1000);
+  report.slowloris.view_answers_after_release = await probe();
+  // A local process that keeps 16 connections open, reopening each as it
+  // is dropped, so the page's own requests find no free slot.
+  let holding = true; const held = [];
+  const hold = () => { if (!holding) return; const s = net.connect(Number(viewUrl.port), '127.0.0.1'); s.on('error', () => {}); s.on('close', () => setTimeout(hold, 10)); s.write('GET / HTTP/1.1\r\n'); held.push(s); };
+  for (let i = 0; i < 40; i++) hold();
+  await delay(1500);
+  const samples = [];
+  for (let i = 0; i < 8; i++) { samples.push(await probe()); await delay(1000); }
+  report.slowloris.page_requests_while_16_slots_held = samples;
+  holding = false; for (const s of held) s.destroy();
+  await delay(1000);
+  report.slowloris.view_answers_after_hold = await probe();
 
   let entries = await log();
   report.blocked_after_phase1 = entries.filter(e => e.plugin_id === ID && e.action === 'view_blocked').map(e => e.detail);
@@ -123,7 +138,7 @@ try {
   report.oldest_entry_before_flood = marker && [marker.action, marker.outcome, marker.detail, marker.at ?? marker.time];
   report.entries_before_flood = entries.length;
 
-  await writeFile(path.join(pluginDir, 'view/go-2.txt'), 'go');
+  await view.evaluate(n => { (window.GO ||= {})[n] = true; }, '2').catch(() => {});
   await expect.poll(() => view.title(), { timeout: 600000, intervals: [1000] }).toBe('phase2');
   report.phase2 = JSON.parse(await view.locator('#results').innerText());
   entries = await log();
@@ -135,7 +150,7 @@ try {
     sample_detail: entries.find(e => e.action === 'view_request')?.detail,
   };
 
-  await writeFile(path.join(pluginDir, 'view/go-3.txt'), 'go');
+  await view.evaluate(n => { (window.GO ||= {})[n] = true; }, '3').catch(() => {});
   const ask = page.getByRole('dialog', { name: 'A plugin asks to run a command', exact: true });
   await expect(ask).toBeVisible({ timeout: 20000 });
   const shownAt = Date.now();
@@ -148,11 +163,14 @@ try {
     run_button: run, view_area: area,
     run_button_inside_view_area: run.x >= area.x && run.y >= area.y && run.x + run.width <= area.x + area.width && run.y + run.height <= area.y + area.height,
     run_enabled_immediately: await ask.getByRole('button', { name: 'Run', exact: true }).isEnabled(),
+    focused: await page.evaluate(() => document.activeElement?.textContent),
   };
+  await expect(ask.getByRole('button', { name: 'Run', exact: true })).toBeEnabled({ timeout: 5000 });
+  report.dialog.run_enabled_after_ms = Date.now() - shownAt;
   await page.screenshot({ path: path.join(work, 'dialog.png') });
   await ask.getByRole('button', { name: 'Decline', exact: true }).click();
 
-  await writeFile(path.join(pluginDir, 'view/go-4.txt'), 'go');
+  await view.evaluate(n => { (window.GO ||= {})[n] = true; }, '4').catch(() => {});
   let blob;
   for (let i = 0; i < 100 && !blob; i++) { for (const c of browser.contexts()) for (const p of c.pages()) { const t = await p.title().catch(() => ''); if (t.startsWith('blob:')) blob = { url: p.url().slice(0, 60), title: t }; } if (!blob) await delay(200); }
   report.blob = blob ?? 'no blob page seen';
@@ -167,6 +185,13 @@ try {
   await workspace.getByRole('button', { name: 'Close dialog', exact: true }).click();
   await page.getByRole('button', { name: 'Quit InfraWerf' }).click();
   await expect.poll(() => app.exitCode, { timeout: 20000 }).not.toBe(null);
+  // Read the log once InfraWerf has closed the database.
+  const { DatabaseSync } = await import('node:sqlite').catch(() => ({}));
+  if (DatabaseSync) {
+    const db = new DatabaseSync(path.join(work, 'native.sqlite3'), { readOnly: true });
+    report.db_after_close = { rows: db.prepare('select count(*) n from plugin_activity').get().n, by_kind: db.prepare('select action, outcome, count(*) n from plugin_activity group by 1,2').all(), view_blocked_tail: db.prepare("select detail from plugin_activity where action='view_blocked' order by id desc limit 4").all().map(r => r.detail) };
+    db.close();
+  }
 } finally {
   await writeFile(path.join(work, 'review-result.json'), JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));
