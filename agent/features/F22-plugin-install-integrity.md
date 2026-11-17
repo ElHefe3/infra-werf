@@ -16,7 +16,7 @@ Context: There is no central store in the first release. Plugins come from files
 
 ## T045 — Install, remove and verify plugins
 
-<!-- atlas-ticket: {"id":"T045","feature":"F22","status":"todo","depends_on":["T042"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T045","feature":"F22","status":"done","depends_on":["T042"],"evidence":"../evidence/T045-acceptance.md"} -->
 
 ### Outcome and included work
 
@@ -34,10 +34,10 @@ Unpack with path and size limits into a staging directory, validate the manifest
 
 ### Acceptance criteria
 
-- [ ] A plugin installs from each of the three sources and appears disabled until reviewed.
-- [ ] An archive with path traversal, oversize content or a hash mismatch is refused with nothing left behind.
-- [ ] Removal clears files, grants and schedules.
-- [ ] The installed hash is shown and re-checked at start-up.
+- [x] A plugin installs from each of the three sources and appears disabled until reviewed.
+- [x] An archive with path traversal, oversize content or a hash mismatch is refused with nothing left behind.
+- [x] Removal clears files, grants and schedules.
+- [x] The installed hash is shown and re-checked at start-up.
 
 ### Verification
 
@@ -45,7 +45,7 @@ Malicious-archive fixtures; native install, restart and remove journey.
 
 ### Evidence and closure
 
-None yet.
+Accepted on `6777941`: [T045 acceptance](../evidence/T045-acceptance.md). Owner decision [D058](../discovery/D058-plugin-install-sources-and-signatures.md) first. All four criteria are met and proven by the new `plugin-install` native suite with a loopback HTTPS server; schedules do not exist yet, so their removal moves to T049. No separate review pass was run.
 
 ### Stop conditions
 
@@ -58,6 +58,11 @@ Stop if installation would need to run plugin-supplied code.
 ### Outcome and included work
 
 Updating a plugin compares its requested capabilities with the granted ones; additions require a new review and are never granted silently.
+
+### Carried in from T045
+
+- An update arrives through the same checks as an install (`plugin_install::prepare`) and must keep the previous folder until the new one validates; today installing an existing ID is refused with `already_installed`.
+- When the previous install recorded a verified signer key ID, an update signed by another key, or unsigned, should at least be shown as such before it applies.
 
 ### Exclusions
 

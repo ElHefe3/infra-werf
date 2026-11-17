@@ -64,6 +64,7 @@ Owner decision D057 allows only read-only pack commands that the owner starts. T
 
 - Scheduled pack runs: each run asks `plugin_begin_run` first and is cancelled, and killed on the server, when refused. The cancel path exists (T043); the schedule does not.
 - Elevation exceptions: one plugin, one server, one named action, granted on the plugin's page, off by default (D055). Sudo is refused for every plugin today.
+- Removing a plugin (T045) must also remove its schedules. Removal today deletes its files, trust, permissions and install record, cancels pack commands in flight and closes pack tunnels.
 - Cancelling is coarse today: any plugin permission change cancels every pack command in flight. Narrow it to the plugin and server concerned once runs can be unattended.
 
 ### Exclusions
