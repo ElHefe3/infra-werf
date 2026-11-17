@@ -3,6 +3,7 @@ import asyncio, csv, json, os, re, subprocess, sys
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 import asyncssh
+from fixture_stats import publish as publish_stats
 
 async def main(directory):
     directory.mkdir(parents=True)
@@ -19,7 +20,7 @@ async def main(directory):
     home=directory/'home';home.mkdir()
     stats={'connections':0,'offline_auth':0,'collections':0};connections=set();state='active';port=0
     def save():
-        temp=directory/'stats-next.json';temp.write_text(json.dumps(stats));temp.replace(directory/'stats.json')
+        publish_stats(directory,stats)
     class Server(asyncssh.SSHServer):
         def connection_made(self,conn):self.conn=conn;connections.add(conn);stats['connections']+=1;save()
         def connection_lost(self,exc):connections.discard(self.conn)

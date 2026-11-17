@@ -3,6 +3,7 @@ import { chromium, expect } from '@playwright/test';
 import { spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { createWriteStream } from 'node:fs';
 import { createInterface } from 'node:readline';
 import path from 'node:path';
 import { runMutationJourney } from './proof-native-mutations.mjs';
@@ -13,7 +14,8 @@ const digest = async file => createHash('sha256').update(await readFile(file)).d
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const server = spawn(path.join(root, '.tools/ssh-fixture-venv/Scripts/python.exe'), ['scripts/ssh_fixture.py', path.join(directory, 'fixture')], { cwd: root, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
 const lines = createInterface({ input: server.stdout });
-let diagnostic = ''; server.stderr.on('data', data => { diagnostic += data.toString().slice(0, 1000); });
+// The fixture's full stderr is kept with the proof, so a failure can be traced to its side.
+let diagnostic = ''; server.stderr.on('data', data => { diagnostic += data.toString().slice(0, 1000); }); server.stderr.pipe(createWriteStream(path.join(directory, 'fixture-stderr.log')));
 let app, browser, page; const results = [], errors = [];
 try {
   const info = await new Promise((resolve, reject) => { const timer = setTimeout(() => reject(new Error(`Fixture startup failed: ${diagnostic}`)), 30000); lines.once('line', line => { clearTimeout(timer); resolve(JSON.parse(line)); }); server.once('exit', code => { if (code) reject(new Error(`Fixture exited: ${diagnostic}`)); }); });
