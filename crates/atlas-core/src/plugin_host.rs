@@ -279,6 +279,8 @@ pub struct PluginViewSource {
     pub tab: PluginViewTab,
     pub folder: std::path::PathBuf,
     pub entry: String,
+    /// The files hash recorded at install, if InfraWerf installed it.
+    pub content_sha256: Option<String>,
 }
 
 /// A pack badge the owner's settings admit on one server right now, and
@@ -745,11 +747,33 @@ impl Store {
                         },
                         folder: directory.join(&plugin.folder),
                         entry: view.entry.clone(),
+                        content_sha256: install_record(&self.db, &plugin.manifest.id)?
+                            .map(|record| record.content_sha256),
                     });
                 }
             }
         }
         Ok(found)
+    }
+
+    /// Decides one capability like `plugin_authorize`, without logging: a
+    /// plugin view's checks are logged within its own budget (T047 review,
+    /// finding 2). `Ok(Ok(()))` means allowed without asking.
+    pub fn plugin_check(
+        &self,
+        directory: &Path,
+        plugin: &str,
+        server: &ServerId,
+        capability: Capability,
+    ) -> Result<Result<(), Refusal>, AtlasError> {
+        let (installed, _) = discover(directory);
+        Ok(
+            match decide(&self.db, &installed, plugin, server, capability)? {
+                Ok(false) => Ok(()),
+                Ok(true) => Err(Refusal::TrustTooLow),
+                Err(refusal) => Err(refusal),
+            },
+        )
     }
 
     /// Logs something a plugin view did: it opened, asked to run a command,

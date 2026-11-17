@@ -67,7 +67,7 @@ pub async fn tunnel_open(
         let _ = workspace.close_tunnel(&info.tunnel_id);
         return Err(error);
     }
-    let _ = app.emit_to("main", CHANGED, ());
+    let _ = app.emit_to(crate::main_webview(), CHANGED, ());
     Ok(info)
 }
 
@@ -96,7 +96,7 @@ pub async fn pack_app_open(
         let _ = workspace.close_tunnel(&info.tunnel_id);
         return Err(error);
     }
-    let _ = app.emit_to("main", CHANGED, ());
+    let _ = app.emit_to(crate::main_webview(), CHANGED, ());
     Ok(info)
 }
 
@@ -125,7 +125,7 @@ pub fn tunnel_close(
     workspace.require_extension(atlas_core::extensions::REMOTE_APPS_OWNER)?;
     workspace.close_tunnel(&tunnel_id)?;
     close_window(&app, &tunnel_id);
-    let _ = app.emit_to("main", CHANGED, ());
+    let _ = app.emit_to(crate::main_webview(), CHANGED, ());
     Ok(())
 }
 
@@ -140,7 +140,7 @@ pub fn tunnel_close_all(
     for id in workspace.close_all_tunnels() {
         close_window(&app, &id);
     }
-    let _ = app.emit_to("main", CHANGED, ());
+    let _ = app.emit_to(crate::main_webview(), CHANGED, ());
     Ok(())
 }
 
@@ -184,7 +184,7 @@ pub fn window_destroyed(window: &tauri::Window) {
     };
     if let Some(id) = window.label().strip_prefix(PREFIX) {
         let _ = workspace.close_tunnel(id);
-        let _ = app.emit_to("main", CHANGED, ());
+        let _ = app.emit_to(crate::main_webview(), CHANGED, ());
     } else if window.label() == "main" {
         // Dropping the entries kills and reaps each OpenSSH child.
         let _ = workspace.close_all_tunnels();
@@ -199,6 +199,6 @@ pub fn reap(app: &AppHandle, workspace: &Workspace) {
         close_window(app, id);
     }
     if !ended.is_empty() {
-        let _ = app.emit_to("main", CHANGED, ());
+        let _ = app.emit_to(crate::main_webview(), CHANGED, ());
     }
 }

@@ -418,7 +418,7 @@ export type UpdatePreview = { contract_version: number,
  * Pass this to apply exactly what was checked and shown.
  */
 token: string | null, plugin_id: string, plugin_name: string, diff: UpdateDiff | null, problem: InstallProblem | null, };
-export type ViewActionState = "waiting" | "declined" | "done" | "failed" | "cancelled";
+export type ViewActionState = "waiting" | "running" | "declined" | "done" | "failed" | "cancelled";
 export type ViewActionRequest = { id: string, view: string, plugin_id: string, plugin_name: string, server_id: ServerId, server_name: string, contribution_id: string, title: string,
 /**
  * The exact command, with `{name}` where a parameter goes.

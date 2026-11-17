@@ -30,6 +30,31 @@ const status = async response => { const body = await response.text(); if (!resp
   await outcome("iframe_main", () => new Promise((resolve, reject) => { const frame = document.createElement("iframe"); frame.src = "http://tauri.localhost/"; frame.onload = () => { try { resolve(frame.contentDocument ? "readable" : "loaded-opaque"); } catch (e) { reject(e); } }; document.body.append(frame); setTimeout(() => reject(new Error("no load")), 2000); }));
   await outcome("blank_frame_ipc", () => { const frame = document.createElement("iframe"); document.body.append(frame); const w = frame.contentWindow; if (w.__TAURI_INTERNALS__) return w.__TAURI_INTERNALS__.invoke("map_state"); if (w.chrome && w.chrome.webview) { w.chrome.webview.postMessage("map_state"); return "sent"; } throw new Error("absent"); });
   await outcome("worker", () => new Promise((resolve, reject) => { try { const worker = new Worker(URL.createObjectURL(new Blob(["postMessage(1)"]))); worker.onmessage = () => resolve("ran"); worker.onerror = () => reject(new Error("blocked")); } catch (error) { reject(error); } }));
+  // WebRTC ignores the content security policy: it must be gone.
+  await outcome("webrtc_stun", async () => {
+    const { port } = await fetch("rtc.json").then(r => r.json());
+    const Peer = window.RTCPeerConnection || window.webkitRTCPeerConnection;
+    if (!Peer) throw new Error("absent");
+    const peer = new Peer({ iceServers: [{ urls: `stun:127.0.0.1:${port}` }] });
+    peer.createDataChannel("x");
+    await peer.setLocalDescription(await peer.createOffer());
+    await new Promise(resolve => setTimeout(resolve, 2500));
+    return "gathered";
+  });
+  // WebRTC from frames the page makes itself, reached three ways.
+  const stun = async (Peer, label) => {
+    if (!Peer) throw new Error("absent");
+    const { port } = await fetch("rtc.json").then(r => r.json());
+    const peer = new Peer({ iceServers: [{ urls: `stun:127.0.0.1:${port}` }] });
+    peer.createDataChannel(label);
+    await peer.setLocalDescription(await peer.createOffer());
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    return "gathered";
+  };
+  await outcome("rtc_blank_frame", () => { const f = document.createElement("iframe"); document.body.append(f); return stun(f.contentWindow.RTCPeerConnection, "a"); });
+  await outcome("rtc_frames_index", () => { document.body.insertAdjacentHTML("beforeend", "<iframe></iframe>"); return stun(window[window.length - 1].RTCPeerConnection, "b"); });
+  await outcome("rtc_srcdoc_frame", () => new Promise((resolve, reject) => { const f = document.createElement("iframe"); f.srcdoc = "<p>x</p>"; f.onload = () => stun(f.contentWindow.RTCPeerConnection, "c").then(resolve, reject); document.body.append(f); setTimeout(() => reject(new Error("no load")), 3000); }));
+  await outcome("rtc_nested_frame", () => { const f = document.createElement("iframe"); document.body.append(f); const g = f.contentDocument.createElement("iframe"); f.contentDocument.body.append(g); return stun(g.contentWindow.RTCPeerConnection, "d"); });
   // Leaving the view.
   await outcome("window_open", () => { const w = window.open("http://tauri.localhost/"); if (!w) throw new Error("refused"); return "opened"; });
   await outcome("form_post", () => { const form = document.createElement("form"); form.method = "POST"; form.action = "http://ipc.localhost/remove_server"; document.body.append(form); form.submit(); return "submitted"; });
@@ -40,6 +65,10 @@ const status = async response => { const body = await response.text(); if (!resp
   await outcome("api_inventory", () => fetch(api("inventory")).then(status));
   await outcome("api_action", () => fetch(api("actions"), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ contribution_id: "kernel" }) }).then(status));
   await outcome("api_unknown", () => fetch(api("servers/remove")).then(status));
+  // Try to flood the activity log and push other entries out.
+  let flood = 0;
+  for (let i = 0; i < 200; i++) { const r = await fetch(api("actions"), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ contribution_id: `flood-${i}-` + "A".repeat(100) }) }); if (r.status === 403) flood += 1; }
+  results.flood = { reached: flood === 200, value: String(flood) };
   document.getElementById("results").textContent = JSON.stringify(results);
   document.title = "done";
   // Last: try to navigate the whole view away to InfraWerf's own page.

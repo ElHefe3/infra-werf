@@ -19,10 +19,11 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
-use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
+use std::time::Instant;
 use ts_rs::{Config, TS};
 
 /// The version of the view message API, part of its paths.
@@ -32,6 +33,57 @@ const MAX_HEADER_BYTES: usize = 16 * 1024;
 const MAX_BODY_BYTES: usize = 64 * 1024;
 const MAX_ASSET_BYTES: u64 = 5 * 1024 * 1024;
 const IO_TIMEOUT: Duration = Duration::from_secs(10);
+/// Connections served at once; one page needs few. Further ones are closed
+/// at once (T047 review, finding 4).
+pub const MAX_CONNECTIONS: usize = 16;
+/// Time from accepting a connection to the end of its request headers.
+const HEADER_DEADLINE: Duration = Duration::from_secs(5);
+
+/// The content security policy directives a report may name; anything else
+/// is logged as `other`, so a page cannot put its own words in the log.
+const DIRECTIVES: &[&str] = &[
+    "default-src",
+    "script-src",
+    "script-src-elem",
+    "script-src-attr",
+    "style-src",
+    "style-src-elem",
+    "style-src-attr",
+    "img-src",
+    "font-src",
+    "connect-src",
+    "media-src",
+    "frame-src",
+    "child-src",
+    "worker-src",
+    "manifest-src",
+    "object-src",
+    "base-uri",
+    "form-action",
+    "frame-ancestors",
+];
+
+/// The scheme and host of a blocked address, made of safe characters only.
+fn blocked_target(uri: &str) -> String {
+    let mut parts = uri.splitn(2, "://");
+    let scheme = parts.next().unwrap_or_default();
+    let rest = parts.next();
+    let clean = |s: &str| {
+        s.chars()
+            .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | ':' | '[' | ']'))
+            .take(80)
+            .collect::<String>()
+            .to_ascii_lowercase()
+    };
+    match rest {
+        Some(rest) => format!(
+            "{}://{}",
+            clean(scheme),
+            clean(rest.split(['/', '?', '#']).next().unwrap_or_default())
+        ),
+        None => clean(scheme.split(':').next().unwrap_or_default()),
+    }
+}
 
 /// What the page receives from an API call.
 #[derive(Debug, Clone, PartialEq)]
@@ -75,6 +127,11 @@ pub struct ViewServer {
     stop: Arc<AtomicBool>,
 }
 
+/// The files a view serves: read once, when it opens, by the same reader
+/// and limits as an install (links refused), keyed by their exact path.
+/// Nothing on disk is read while the view is open (T047 review, 7 and 8).
+pub type ViewFiles = std::collections::BTreeMap<String, Vec<u8>>;
+
 fn csp(token: &str) -> String {
     format!(
         "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; \
@@ -116,11 +173,17 @@ struct Request {
     body: Vec<u8>,
 }
 
-/// Reads one request within the limits; `None` for anything malformed.
+/// Reads one request within the limits; `None` for anything malformed or
+/// too slow. The headers must arrive within `HEADER_DEADLINE` in all.
 fn read_request(stream: &TcpStream) -> Option<Request> {
+    let started = Instant::now();
     let mut reader = BufReader::new(stream.take((MAX_HEADER_BYTES + MAX_BODY_BYTES) as u64));
     let mut head = Vec::new();
     loop {
+        let left = HEADER_DEADLINE.checked_sub(started.elapsed())?;
+        stream
+            .set_read_timeout(Some(left.max(Duration::from_millis(1))))
+            .ok()?;
         let mut line = Vec::new();
         let read = reader.read_until(b'\n', &mut line).ok()?;
         if read == 0 {
@@ -165,6 +228,7 @@ fn read_request(stream: &TcpStream) -> Option<Request> {
     if length > MAX_BODY_BYTES {
         return None;
     }
+    stream.set_read_timeout(Some(IO_TIMEOUT)).ok()?;
     request.body = vec![0; length];
     reader.read_exact(&mut request.body).ok()?;
     Some(request)
@@ -201,7 +265,7 @@ fn json(stream: &mut TcpStream, reply: &ApiReply, token: &str) {
     respond(stream, reply.status, "application/json", &body, token);
 }
 
-fn handle(mut stream: TcpStream, port: u16, token: &str, folder: &Path, api: &dyn ViewApi) {
+fn handle(mut stream: TcpStream, port: u16, token: &str, files: &ViewFiles, api: &dyn ViewApi) {
     let _ = stream.set_read_timeout(Some(IO_TIMEOUT));
     let _ = stream.set_write_timeout(Some(IO_TIMEOUT));
     let Some(request) = read_request(&stream) else {
@@ -251,13 +315,14 @@ fn handle(mut stream: TcpStream, port: u16, token: &str, folder: &Path, api: &dy
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
             // Only the scheme and host of what was blocked; never a path.
-            let target = blocked.split('/').take(3).collect::<Vec<_>>().join("/");
+            let directive = DIRECTIVES
+                .iter()
+                .find(|d| **d == directive)
+                .copied()
+                .unwrap_or("other");
             api.blocked(
                 "content_policy",
-                &format!("{directive} {target}")
-                    .chars()
-                    .take(160)
-                    .collect::<String>(),
+                &format!("{directive} {}", blocked_target(blocked)),
             );
             json(&mut stream, &ApiReply::ok(serde_json::json!({})), token);
             return;
@@ -286,23 +351,24 @@ fn handle(mut stream: TcpStream, port: u16, token: &str, folder: &Path, api: &dy
         respond(&mut stream, 404, "text/plain", b"Not found", token);
         return;
     }
-    let file = parts
-        .iter()
-        .fold(folder.to_path_buf(), |path, part| path.join(part));
-    let readable = std::fs::symlink_metadata(&file)
-        .ok()
-        .filter(|meta| meta.is_file() && meta.len() <= MAX_ASSET_BYTES);
-    match readable.and_then(|_| std::fs::read(&file).ok()) {
-        Some(bytes) => respond(&mut stream, 200, content_type(rest), &bytes, token),
+    // Exactly a file the view read when it opened: no short names, no
+    // files added or changed since.
+    match files
+        .get(&parts.join("/"))
+        .filter(|bytes| bytes.len() as u64 <= MAX_ASSET_BYTES)
+    {
+        Some(bytes) => respond(&mut stream, 200, content_type(rest), bytes, token),
         None => respond(&mut stream, 404, "text/plain", b"Not found", token),
     }
     let _ = stream.shutdown(Shutdown::Both);
 }
 
 impl ViewServer {
-    /// Starts serving `folder` on a random loopback port. `entry` is the
+    /// Starts serving `files` on a random loopback port. `entry` is the
     /// page the view opens.
-    pub fn start(folder: PathBuf, entry: &str, api: Arc<dyn ViewApi>) -> std::io::Result<Self> {
+    pub fn start(files: ViewFiles, entry: &str, api: Arc<dyn ViewApi>) -> std::io::Result<Self> {
+        let files = Arc::new(files);
+        let active = Arc::new(AtomicUsize::new(0));
         let listener = TcpListener::bind(("127.0.0.1", 0))?;
         let port = listener.local_addr()?.port();
         let token = uuid::Uuid::new_v4().simple().to_string();
@@ -316,10 +382,22 @@ impl ViewServer {
                         break;
                     }
                     let Ok(stream) = stream else { continue };
-                    let (secret, folder, api) = (secret.clone(), folder.clone(), api.clone());
-                    let _ = std::thread::Builder::new()
+                    if active.fetch_add(1, Ordering::SeqCst) >= MAX_CONNECTIONS {
+                        active.fetch_sub(1, Ordering::SeqCst);
+                        let _ = stream.shutdown(Shutdown::Both);
+                        continue;
+                    }
+                    let (secret, files, api, done) =
+                        (secret.clone(), files.clone(), api.clone(), active.clone());
+                    let spawned = std::thread::Builder::new()
                         .name("plugin-view-request".into())
-                        .spawn(move || handle(stream, port, &secret, &folder, api.as_ref()));
+                        .spawn(move || {
+                            handle(stream, port, &secret, &files, api.as_ref());
+                            done.fetch_sub(1, Ordering::SeqCst);
+                        });
+                    if spawned.is_err() {
+                        active.fetch_sub(1, Ordering::SeqCst);
+                    }
                 }
             })?;
         Ok(Self {
@@ -357,6 +435,8 @@ impl Drop for ViewServer {
 #[serde(rename_all = "snake_case")]
 pub enum ViewActionState {
     Waiting,
+    /// The owner pressed Run and it is running now.
+    Running,
     Declined,
     Done,
     Failed,
@@ -437,13 +517,11 @@ mod tests {
 
     #[test]
     fn only_the_secret_path_on_the_right_host_serves_files_and_the_api() {
-        let folder = tempfile::tempdir().unwrap();
-        std::fs::create_dir(folder.path().join("view")).unwrap();
-        std::fs::write(folder.path().join("view/index.html"), "<p>hello</p>").unwrap();
-        std::fs::write(folder.path().join(".secret"), "no").unwrap();
+        let mut files = ViewFiles::new();
+        files.insert("view/index.html".into(), b"<p>hello</p>".to_vec());
+        files.insert(".secret".into(), b"no".to_vec());
         let recorder = Arc::new(Recorder::default());
-        let server =
-            ViewServer::start(folder.path().into(), "view/index.html", recorder.clone()).unwrap();
+        let server = ViewServer::start(files, "view/index.html", recorder.clone()).unwrap();
         let port = server.port();
         let host = format!("127.0.0.1:{port}");
         let secret = server.url().split('/').nth(3).unwrap().to_owned();
@@ -466,6 +544,10 @@ mod tests {
             (format!("/{secret}/../Cargo.toml"), host.clone()),
             (format!("/{secret}/.secret"), host.clone()),
             (format!("/{secret}/view/%2e%2e/.secret"), host.clone()),
+            // Only exact names: no case folding, no 8.3 short names.
+            (format!("/{secret}/VIEW/INDEX.HTML"), host.clone()),
+            (format!("/{secret}/view/INDEX~1.HTM"), host.clone()),
+            (format!("/{secret}/SECRET~1"), host.clone()),
         ] {
             let answer = get(port, &target, &host, "");
             assert!(
@@ -498,6 +580,52 @@ mod tests {
         assert!(blocked.contains(&"no_secret".to_owned()));
         assert!(blocked.contains(&"wrong_host".to_owned()));
         assert!(blocked.contains(&"cross_origin".to_owned()));
+        // A page cannot write its own words into the log.
+        let report = format!(
+            "POST /{secret}/infrawerf/v1/csp-report HTTP/1.1\r\nHost: {host}\r\nContent-Length: {{}}\r\n\r\n{{}}"
+        );
+        let body = r#"{"csp-report":{"effective-directive":"InfraWerf: all good","blocked-uri":"https://trusted.example/a b?c"}}"#;
+        let mut stream = TcpStream::connect(("127.0.0.1", port)).unwrap();
+        write!(
+            stream,
+            "{}",
+            report
+                .replacen("{}", &body.len().to_string(), 1)
+                .replacen("{}", body, 1)
+        )
+        .unwrap();
+        let mut answer = String::new();
+        stream.read_to_string(&mut answer).unwrap();
+        let logged = recorder.blocked.lock().unwrap().last().unwrap().clone();
+        assert_eq!(
+            logged,
+            (
+                "content_policy".to_owned(),
+                "other https://trusted.example".to_owned()
+            )
+        );
+        // Slow or idle connections cannot pile up: the 17th is closed at
+        // once, and an idle one is dropped after the header deadline.
+        let idle: Vec<TcpStream> = (0..MAX_CONNECTIONS)
+            .map(|_| TcpStream::connect(("127.0.0.1", port)).unwrap())
+            .collect();
+        std::thread::sleep(Duration::from_millis(300));
+        let mut extra = TcpStream::connect(("127.0.0.1", port)).unwrap();
+        extra
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        let mut nothing = Vec::new();
+        assert_eq!(
+            extra
+                .read_to_end(&mut nothing)
+                .map(|n| n == 0)
+                .unwrap_or(true),
+            true
+        );
+        std::thread::sleep(HEADER_DEADLINE + Duration::from_millis(500));
+        let page = get(port, &format!("/{secret}/view/index.html"), &host, "");
+        assert!(page.starts_with("HTTP/1.1 200"), "{page}");
+        drop(idle);
         drop(server);
         std::thread::sleep(Duration::from_millis(300));
         assert!(TcpStream::connect(("127.0.0.1", port)).is_err());

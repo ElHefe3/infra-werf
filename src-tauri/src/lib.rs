@@ -90,7 +90,7 @@ async fn monitoring_discover(
 
 /// Events go to InfraWerf's own interface only, never to a plugin view in
 /// the same window.
-fn main_webview() -> tauri::EventTarget {
+pub(crate) fn main_webview() -> tauri::EventTarget {
     tauri::EventTarget::Webview {
         label: "main".into(),
     }
