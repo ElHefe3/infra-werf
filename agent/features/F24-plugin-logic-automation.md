@@ -16,7 +16,7 @@ Context: This is the highest-risk tier and the one that delivers actions and aut
 
 ## T048 — Choose the sandbox runtime and host functions
 
-<!-- atlas-ticket: {"id":"T048","feature":"F24","status":"todo","depends_on":["T046","T044"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T048","feature":"F24","status":"done","depends_on":["T046","T044"],"evidence":"../evidence/T048-acceptance.md"} -->
 
 ### Outcome and included work
 
@@ -34,9 +34,9 @@ Compare runtimes for Windows and future Android support, resource limits, author
 
 ### Acceptance criteria
 
-- [ ] The runtime choice and its trade-offs are recorded as a discovery note.
-- [ ] A prototype plugin calls a granted host function and is refused an ungranted one.
-- [ ] Memory, time and call limits stop a runaway plugin without affecting the app.
+- [x] The runtime choice and its trade-offs are recorded as a discovery note.
+- [x] A prototype plugin calls a granted host function and is refused an ungranted one.
+- [x] Memory, time and call limits stop a runaway plugin without affecting the app.
 
 ### Verification
 
@@ -44,7 +44,7 @@ Prototype plus runaway and escape fixtures.
 
 ### Evidence and closure
 
-None yet.
+Accepted on `7c49d10`: [T048 acceptance](../evidence/T048-acceptance.md). Owner decision [D060](../discovery/D060-plugin-sandbox-wasmi.md): wasmi. All three criteria are met by core tests with a prototype and 16 runaway and escape fixtures. Starting a module from the app, and host functions that act, move to T049. No separate review pass was run.
 
 ### Stop conditions
 
@@ -66,6 +66,12 @@ Owner decision D057 allows only read-only pack commands that the owner starts. T
 - Elevation exceptions: one plugin, one server, one named action, granted on the plugin's page, off by default (D055). Sudo is refused for every plugin today.
 - Removing a plugin (T045) must also remove its schedules. Removal today deletes its files, trust, permissions and install record, cancels pack commands in flight and closes pack tunnels.
 - Cancelling is coarse today: any plugin permission change cancels every pack command in flight. Narrow it to the plugin and server concerned once runs can be unattended.
+
+### Carried in from T048
+
+- Declare a plugin's module in the manifest and start runs from the app, through `plugin_sandbox::run` with a `StoreHost`, on the run's own thread.
+- Host functions that act (run a pack command, and later files or workloads) each map to one capability, and those that reach a server bring their own time limit: fuel does not bound a host call.
+- Measure the size wasmi adds once the app references it.
 
 ### Exclusions
 
