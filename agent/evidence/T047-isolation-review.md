@@ -1,6 +1,6 @@
 # T047 — Independent review of plugin view isolation
 
-Date: 2026-11-17. Reviewer: a separate session, as decided in [D059](../discovery/D059-plugin-views-tab-confirm-and-review.md). Reviewed commit `d62feac` (Isolated plugin views with a message API) on a branch cut from `feature/s12-extensibility`. No product code was changed. Proofs of concept are in [`scripts/fixtures/hostile-view-review/`](../../scripts/fixtures/hostile-view-review/), and the evidence from the last live run is in [`T047-isolation-review/`](T047-isolation-review/).
+Date: 2026-11-17. Reviewer: a separate session, as decided in [D059](../discovery/D059-plugin-views-tab-confirm-and-review.md). Reviewed commit `d62feac` (Isolated plugin views with a message API) on a branch cut from `feature/s12-extensibility`. No product code was changed. Proofs of concept are in [`scripts/fixtures/hostile-view-review/`](../../scripts/fixtures/hostile-view-review/run-review.mjs), and the evidence from the last live run is in [`T047-isolation-review/`](T047-isolation-review/review-result.json).
 
 ## Verdict
 
