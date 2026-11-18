@@ -28,7 +28,7 @@ The NSIS script uses `currentUser` mode and `RequestExecutionLevel user`, instal
 
 ## Controlled installed-app proof
 
-The generated setup was installed and the installed executable was used for `mise run test:desktop` with `ATLAS_DESKTOP_BINARY=C:\Users\owner\AppData\Local\Atlas\atlas-native.exe`. All nine result groups passed against a generated synthetic database; the original reference database was unchanged. Evidence: [native journey result](../../.tools/desktop-proof-a94b7a13-8588-473d-814f-e3416d9d9d72/result.json).
+The generated setup was installed and the installed executable was used for `mise run test:desktop` with `ATLAS_DESKTOP_BINARY=C:\Users\owner\AppData\Local\Atlas\atlas-native.exe`. All nine result groups passed against a generated synthetic database; the original reference database was unchanged. Evidence: native journey result `.tools/desktop-proof-a94b7a13-8588-473d-814f-e3416d9d9d72/result.json` (local artifact, removed 2026-11-18; this paragraph is the retained record).
 
 The installed-app journey covered:
 

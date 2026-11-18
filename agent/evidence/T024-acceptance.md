@@ -21,7 +21,7 @@ Feature/ticket: F12 / T024
 
 ## Verification
 
-- Native Windows journey: [sanitized result](../../.tools/desktop-proof-9d68a37a-02a2-4bcb-b081-c7f12de5bd03/result.json). All nine result groups passed, including 1280×720 and 1440×900 desktop layouts, 540-service search, keyboard map interaction, server/edge edits, second-instance handling, native close/relaunch, workspace tabs and startup error recovery. It reports zero page errors and `legacyUnchanged: true`.
+- Native Windows journey: sanitized result `.tools/desktop-proof-9d68a37a-02a2-4bcb-b081-c7f12de5bd03/result.json` (local artifact, removed 2026-11-18; the summary below is the retained record). All nine result groups passed, including 1280×720 and 1440×900 desktop layouts, 540-service search, keyboard map interaction, server/edge edits, second-instance handling, native close/relaunch, workspace tabs and startup error recovery. It reports zero page errors and `legacyUnchanged: true`.
 - Migration proof files are retained under `.tools/data-proof-6b2520955bab44af944bf5e0d85982db/`; generated fixture only.
 - `cargo test -p atlas-core --test operations --test contracts --test store --locked --offline -- --test-threads=1`: **24 passed, 0 failed**.
 - T023 evidence documents the broader Rust full-suite limitation: the unfiltered suite encountered an output-file linker lock, then an unrelated health cancellation failure and two local health tests exceeding 60 seconds. No full-suite pass is claimed here.
