@@ -84,7 +84,7 @@ Each host function needs exactly one capability on the server the run is for.
 | `server` | `read_saved_state` | The server's `id`, `name` and `host`, as saved on this PC. |
 | `inventory` | `read_saved_state` | The server's saved inventory, or `null`. |
 | `workloads` | `read_saved_state` | The server's workloads from its saved inventory: each one's `id`, `name`, `kind`, `scope`, `runtime` and `state`. |
-| `run_command` | `run_approved_command` | Runs one of the plugin's own `collector` commands on the server: `{"contribution_id": "<id>", "parameters": {...}}`. The answer is its extracted value. |
+| `run_command` | `run_approved_command` | Runs one of the plugin's own pack commands on the server: `{"contribution_id": "<id>", "parameters": {"<name>": "<workload id>"}}`. A parameter's value is the `id` of a workload from `workloads`, never its name, and must be one the server's authenticated discovery found. The answer is the command's observation: its `result` holds the `outcome` and the `value`, or the `rows` of a table. |
 | `control` | `control_workloads` | Asks for one declared action: `{"action": "<id>", "workload": "<name>"}` or `"workload_id"` instead of a name. See [actions](#actions). The answer is the observed outcome. |
 
 Each call is decided against the owner's permissions at that moment and is in the plugin activity log, allowed or refused.

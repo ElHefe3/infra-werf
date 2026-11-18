@@ -83,11 +83,17 @@ def scrub_bytes(data: bytes, replace) -> bytes:
     return data
 
 
+# Binary files (images, WebAssembly modules) are scanned for these only:
+# compilers embed build paths, and nothing else here reads well in binary.
+BINARY_RULES = ("private key", "personal Windows path")
+
+
 def problems(data: bytes, forbid) -> list[str]:
-    if is_binary(data):
-        return []
+    binary = is_binary(data)
     found = []
     for name, pattern in GENERIC.items():
+        if binary and name not in BINARY_RULES:
+            continue
         for match in pattern.finditer(data):
             value = match.group(0)
             if name == "private address":

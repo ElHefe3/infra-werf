@@ -545,3 +545,102 @@ fn a_sudo_exception_is_per_declared_action_and_server_and_logged() {
             .is_err()
     );
 }
+
+/// A server with three backups: one fine, one failed, one restarting.
+struct BackupHost {
+    asked: Vec<(String, Value)>,
+}
+
+impl SandboxHost for BackupHost {
+    fn call(&mut self, function: &str, _: Capability, args: &Value) -> Result<Value, HostError> {
+        self.asked.push((function.to_owned(), args.clone()));
+        let service = |name: &str, scope: &str| serde_json::json!({ "id": format!("s:{name}"), "name": name, "kind": "service", "scope": scope, "runtime": "systemd", "state": "inactive" });
+        match function {
+            "workloads" => Ok(serde_json::json!([
+                service("lab-a-backup.service", "system"),
+                service("lab-b-backup.service", "system"),
+                service("lab-c-backup.service", "system"),
+                service("nginx.service", "system"),
+                service("photos-backup-worker.service", "user"),
+                { "id": "c:backup", "name": "backup", "kind": "container", "scope": "system", "runtime": "docker", "state": "running" },
+            ])),
+            "run_command" => {
+                // As InfraWerf does: a parameter is a workload's id, never a name.
+                let Some(unit) = args["parameters"]["unit"]
+                    .as_str()
+                    .and_then(|id| id.strip_prefix("s:"))
+                else {
+                    return Err(HostError::new("not_granted", "not a discovered workload"));
+                };
+                let value = match (args["contribution_id"].as_str().unwrap(), unit) {
+                    ("last-result", "lab-b-backup.service") => "exit-code",
+                    ("last-result", _) => "success",
+                    ("last-finished", _) => "Wed 2026-11-18 03:00:12 SAST",
+                    ("restarts", "lab-c-backup.service") => "41",
+                    ("restarts", _) => "0",
+                    _ => return Err(HostError::new("not_granted", "no such command")),
+                };
+                Ok(
+                    serde_json::json!({ "result": { "outcome": "ok", "value": value, "columns": [], "rows": [], "truncated": false, "health": null } }),
+                )
+            }
+            _ => Err(HostError::new("not_granted", "not allowed")),
+        }
+    }
+    fn cancelled(&self) -> bool {
+        false
+    }
+}
+
+#[test]
+fn the_systemd_backups_job_checks_each_backup_service_and_reports_the_failing_ones() {
+    let manifest = validate_manifest(
+        &std::fs::read(repository("examples/systemd-backups/infrawerf-plugin.json")).unwrap(),
+    )
+    .unwrap();
+    let job = manifest
+        .contributions
+        .iter()
+        .find_map(|c| c.job.as_ref())
+        .unwrap();
+    assert!(job.actions.is_empty(), "the reference plugin only reads");
+    let module = std::fs::read(repository("examples/systemd-backups").join(&job.module)).unwrap();
+    let mut host = BackupHost { asked: Vec::new() };
+    let outcome = run(
+        &module,
+        &mut host,
+        SandboxLimits {
+            fuel: 20_000_000,
+            ..SandboxLimits::default()
+        },
+    );
+    assert_eq!(outcome.exit_code, Some(0), "{outcome:?}");
+    // Only system services with "backup" in their name, each read three ways.
+    let units: Vec<&str> = host
+        .asked
+        .iter()
+        .filter(|(f, a)| f == "run_command" && a["contribution_id"] == "last-result")
+        .map(|(_, a)| a["parameters"]["unit"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        units,
+        [
+            "s:lab-a-backup.service",
+            "s:lab-b-backup.service",
+            "s:lab-c-backup.service"
+        ]
+    );
+    assert_eq!(host.asked.len(), 1 + 3 * 3);
+    assert_eq!(
+        outcome.logs,
+        [
+            "ok lab-a-backup.service: success, last finished Wed 2026-11-18 03:00:12 SAST, 0 restarts",
+            "FAILING lab-b-backup.service: exit-code, last finished Wed 2026-11-18 03:00:12 SAST, 0 restarts",
+            "FAILING lab-c-backup.service: success, last finished Wed 2026-11-18 03:00:12 SAST, 41 restarts",
+            "3 backups checked, 2 failing",
+        ]
+    );
+    let result = outcome.result.unwrap();
+    assert_eq!(result["failing"], 2);
+    assert_eq!(result["backups"][1]["result"], "exit-code");
+}
