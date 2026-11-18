@@ -45,7 +45,7 @@ Audit report; a clean clone builds from the public documents alone.
 
 ### Evidence and closure
 
-Accepted on `020f687`: [T050 acceptance](../evidence/T050-acceptance.md). Owner decision [D062](../discovery/D062-licence-and-public-repository.md): MIT OR Apache-2.0, all history rewritten into a separate public copy, `agent/` published with lab details replaced, security reports through GitHub private vulnerability reporting. The dry-run public copy has 0 problems and a clean clone of it builds. The owner approved publication on 2026-11-18 ("Yes, approve"). Publishing, from `master` once S12 is complete, is the owner's action by [PUBLISHING.md](../PUBLISHING.md); nothing was pushed. No separate review pass was run.
+Accepted on `71cbcae`: [T050 acceptance](../evidence/T050-acceptance.md). Owner decision [D062](../discovery/D062-licence-and-public-repository.md): MIT OR Apache-2.0, all history rewritten into a separate public copy, `agent/` published with lab details replaced, security reports through GitHub private vulnerability reporting. The dry-run public copy has 0 problems and a clean clone of it builds. The owner approved publication on 2026-11-18 ("Yes, approve"). Publishing, from `master` once S12 is complete, is the owner's action by [PUBLISHING.md](../PUBLISHING.md); nothing was pushed. No separate review pass was run.
 
 ### Stop conditions
 
