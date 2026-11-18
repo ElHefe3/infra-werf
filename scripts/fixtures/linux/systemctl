@@ -36,28 +36,28 @@ backup_property() {
     *) return 1 ;;
   esac
 }
+# Without the marker these commands are unanswered, exactly as before.
+if backups_on; then
 case "$*" in
   "list-units --all --type=service --state=failed,auto-restart --no-legend --no-pager --plain --full")
-    if backups_on; then
-      printf '%s\n' 'fixture-backup.service loaded failed failed Synthetic failed backup'
-      printf '%s\n' 'fixture-loop-backup.service loaded activating auto-restart Synthetic restarting backup'
-    fi
+    printf '%s\n' 'fixture-backup.service loaded failed failed Synthetic failed backup'
+    printf '%s\n' 'fixture-loop-backup.service loaded activating auto-restart Synthetic restarting backup'
     exit 0 ;;
   "--user list-units --all --type=service --state=failed,auto-restart --no-legend --no-pager --plain --full")
     exit 0 ;;
   "is-system-running")
-    if backups_on; then printf 'degraded\n'; exit 1; fi
-    printf 'running\n'; exit 0 ;;
+    printf 'degraded\n'; exit 1 ;;
   "show --no-pager --value --property="*)
     set -- $*
     property="${4#--property=}"; unit="$5"
-    if backups_on && [ $# -eq 5 ]; then
+    if [ $# -eq 5 ]; then
       case "$unit" in fixture-backup.service|fixture-loop-backup.service|fixture-nightly-backup.service)
         backup_property "$property" "$unit"; exit $? ;;
       esac
     fi
     printf 'Unit %s could not be found.\n' "$unit" >&2; exit 4 ;;
 esac
+fi
 case "$*" in
   "--system list-units --all --type=service --no-legend --no-pager --plain --full")
     printf '%s\n' 'atlas-fixture.service loaded active running Synthetic Atlas fixture service'
