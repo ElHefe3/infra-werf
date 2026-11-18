@@ -2,7 +2,8 @@
 
 Date: 2026-11-18. Feature: F25 / S12. Ticket: T050.
 Revision: 71cbcae
-Result: pass. The owner approved publication on 2026-11-18; publishing itself, from `master` once S12 is complete, is the owner's action
+Result: pass
+Publication: approved by the owner on 2026-11-18; publishing itself, from `master` once S12 is complete, is the owner's action.
 
 Branch `feature/s12-extensibility`. Nothing was pushed anywhere. The public copy described below exists only on the owner's PC.
 
