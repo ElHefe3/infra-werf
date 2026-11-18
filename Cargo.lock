@@ -209,6 +209,7 @@ dependencies = [
  "chrono",
  "flate2",
  "minisign-verify",
+ "ring",
  "rusqlite",
  "schemars 1.2.3",
  "serde",
@@ -228,7 +229,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-native"
-version = "0.1.6"
+version = "0.1.11"
 dependencies = [
  "atlas-core",
  "chrono",
@@ -238,6 +239,8 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-dialog",
  "tauri-plugin-single-instance",
+ "tempfile",
+ "zeroize",
 ]
 
 [[package]]

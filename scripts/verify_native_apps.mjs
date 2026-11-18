@@ -59,29 +59,35 @@ try {
   expect(node).toBeTruthy(); expect(forwarding).toBeTruthy();
   await invoke('monitoring_configure', { serverId: node.id, policy }); await invoke('monitoring_configure', { serverId: forwarding.id, policy });
 
-  // 1. Native UI: workspace → Apps → discovery dropdown → open, without typing a port.
+  // 1. Native UI: workspace → Apps → discovered tiles → open, without typing a port.
   await page.getByRole('button', { name: `Open ${node.name} workspace`, exact: true }).click();
   await page.getByRole('tab', { name: 'Apps', exact: true }).click();
-  const picker = page.getByLabel('Detected applications');
-  await expect(picker).toBeEnabled({ timeout: 30000 });
-  await expect(picker.locator('optgroup[label="Web applications"] option')).toHaveText([`Fixture Dashboard — localhost:${info.app_port}`, `Second app — 127.0.0.2:${info.second_port}`]);
-  await expect(picker.locator('optgroup[label="Other listening ports"] option')).toHaveText(['sshd — localhost:22 (not a web page)', 'Port 9443 — localhost:9443 (HTTPS only, not supported yet)']);
-  expect(await picker.inputValue()).toBe(`localhost:${info.app_port}`);
+  const tiles = page.locator('.app-grid[aria-label="Detected applications"] .app-tile');
+  await expect(tiles).toHaveCount(2, { timeout: 30000 });
+  await expect(tiles.nth(0)).toContainText('Fixture Dashboard'); await expect(tiles.nth(1)).toContainText('Second app');
+  // Addresses stay behind each tile's details button (no PIN is set here).
+  await page.getByRole('button', { name: 'Details for Fixture Dashboard', exact: true }).click();
+  await expect(page.locator('.app-details').first()).toContainText(`localhost:${info.app_port}`);
+  await page.getByRole('button', { name: 'Details for Second app', exact: true }).click();
+  await expect(page.locator('.app-details').nth(1)).toContainText(`127.0.0.2:${info.second_port}`);
+  await expect(tiles.nth(1)).toBeEnabled();
+  await page.getByText('Other listening ports (2)').click();
+  await expect(page.locator('.app-others li')).toHaveText(['sshd — localhost:22 (not a web page)', 'Port 9443 — localhost:9443 (HTTPS only, not supported yet)']);
   expect((await stats()).discoveries).toBe(1);
-  await page.getByRole('button', { name: 'Open', exact: true }).click();
+  await page.getByRole('button', { name: 'Open Fixture Dashboard', exact: true }).click();
   await expect(page.locator('.tunnel-list li')).toHaveCount(1, { timeout: 30000 });
   // Manual entry and shortcuts remain available under the disclosure.
   await page.getByText('Enter a port manually').click();
   await page.getByLabel('Remote port').fill(String(info.app_port));
   await page.getByLabel('Application name').fill('Fixture dashboard');
   await page.getByRole('button', { name: 'Save shortcut', exact: true }).click();
-  await expect(page.locator('button.app-launch', { hasText: 'Fixture dashboard' })).toBeVisible();
+  await expect(page.locator('button.app-tile', { hasText: 'Fixture dashboard' })).toBeVisible();
   let [tunnel] = await invoke('tunnel_list');
   expect(tunnel.url).toBe(`http://127.0.0.1:${tunnel.local_port}/`); expect(tunnel.remote_port).toBe(info.app_port);
   const { viewer, view } = await appPage(tunnel.url);
   await expect(view.locator('#api')).toHaveText('online'); await expect(view.locator('#ws')).toHaveText('pong');
   expect((await stats()).forwards.every(([host, port]) => host === 'localhost' && port === info.app_port)).toBe(true);
-  results.push('Apps tab discovers listening applications into a dropdown (web apps openable; SSH and HTTPS-only listed but disabled), and opening the selection verifies SSH and shows the private app over HTTP and WebSocket in an isolated window');
+  results.push('Apps tab discovers listening applications into tiles (web apps openable; SSH and HTTPS-only listed separately), and opening a tile verifies SSH and shows the private app over HTTP and WebSocket in an isolated window');
   console.log('PASS: open application through tunnel');
 
   // 2. Isolation: no InfraWerf commands, no off-origin navigation, loopback-only listener.

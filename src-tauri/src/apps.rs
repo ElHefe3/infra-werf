@@ -57,6 +57,7 @@ pub async fn tunnel_open(
 ) -> Result<TunnelInfo, AtlasError> {
     local_desktop(&window)?;
     workspace.require_extension(atlas_core::extensions::REMOTE_APPS_OWNER)?;
+    workspace.require_pin()?;
     let workspace = workspace.inner().clone();
     let opened = workspace.clone();
     let info =
@@ -85,6 +86,7 @@ pub async fn pack_app_open(
 ) -> Result<TunnelInfo, AtlasError> {
     local_desktop(&window)?;
     workspace.require_extension(atlas_core::extensions::REMOTE_APPS_OWNER)?;
+    workspace.require_pin()?;
     let workspace = workspace.inner().clone();
     let opened = workspace.clone();
     let info = tauri::async_runtime::spawn_blocking(move || {

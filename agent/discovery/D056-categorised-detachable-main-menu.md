@@ -22,3 +22,5 @@ The owner asked on 2026-11-14 for the main menu to work like the settings naviga
 
 - Whether views other than menus (for example a server workspace) should ever float. Not planned.
 - The layout is stored in the WebView's local storage, like remote-app shortcuts, not in the native database. It is a display preference; nothing else depends on it.
+
+Update 2026-11-18: detaching categories is disabled; see [D064](D064-menu-pop-outs-disabled.md).

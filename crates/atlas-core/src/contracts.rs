@@ -28,6 +28,8 @@ pub enum ErrorCode {
     OutputLimit,
     RemoteRejected,
     OutcomeUnknown,
+    /// A PIN is set and InfraWerf is locked (F27/T065).
+    PinRequired,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -59,6 +61,7 @@ impl AtlasError {
             ErrorCode::OutcomeUnknown => {
                 "The server may have applied this change. Open a new session and inspect the target before retrying."
             }
+            ErrorCode::PinRequired => "Enter your InfraWerf PIN to continue.",
         };
         Self {
             code,
@@ -497,6 +500,11 @@ pub fn typescript_contracts() -> String {
     output.push_str(&crate::monitoring::typescript_contracts(&cfg));
     output.push_str(&crate::ssh::typescript_contracts(&cfg));
     output.push_str(&crate::tunnel::typescript_contracts(&cfg));
+    output.push_str(&format!(
+        "export {}
+",
+        crate::pin::PinStatus::decl(&cfg)
+    ));
     output.push_str(&crate::files::typescript_contracts());
     output.push_str(&crate::workloads::typescript_contracts());
     output.push_str(&crate::extensions::typescript_contracts(&cfg));

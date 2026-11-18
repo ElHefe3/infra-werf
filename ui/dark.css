@@ -1,0 +1,106 @@
+/* Dark theme, for both looks. Active while <html data-theme="dark">. Rules
+   carry one more attribute than the light rules they replace, so they win
+   without !important. */
+
+/* ---- Shared: text and semantic tones ---- */
+:root[data-theme="dark"][data-look] {
+  --green: #5fd19a;
+  --muted: #9fb5a8;
+  --border: rgba(255, 255, 255, .1);
+  color: #e6efe9;
+}
+:root[data-theme="dark"][data-look] :is(h1, h2, h3, h4, h5, strong, b, .wordmark, .metrics strong, .server-card h3, .inspector h2, .topbar strong) { color: #f1f7f3; }
+:root[data-theme="dark"][data-look] :is(.topbar, .menu-category-toggle, .menu-icon, .menu-detach, .quit-button, .local-badge, .node-workloads > div, .node-workloads p, .small-state, .workload-icon, .server-card footer, .canvas-caption b, .canvas-caption span, .canvas-hint, .access-strip p, .access-icon, .access-status, .app-footer, .map-footer, .inspector-tabs button, .view-tabs button, .metrics span, .metrics small, kbd, .search-box > span, .workspace-server-line, .section-heading p, th, .workspace-tabs button, .inventory-summary, .inventory-summary span, .unavailable p, .empty-copy, .notice, .notice > span, .workspace-footer, form label, .terminal-help, .terminal-message, .dialog-title > button, .observation-tag, .relationship-item span, .activity-list li, .activity-list time, .activity-view > p, .loading-state p, .plugin-status, .plugin-facts dt, td small, dd, td, .muted, small, .hostname, .facts dt, dt, .eyebrow, .section-label, .inspector-title, .state-pill, .menu-items button, .app-launch span, .workload-detail-grid dt, .ssh-result p, .ssh-fingerprint, .health-results dd, .pack-command label, .plugin-view-bar, .install-kind legend, .trust-choice legend, .terminal-host, .terminal-state) { color: #c2d3c9; }
+:root[data-theme="dark"][data-look] :is(.text-button, .menu-items button.active, .menu-items button.active .menu-icon, .save-message, .apps-notice, .update-ok, .integrity.verified, .plugin-status.enabled, .ssh-fingerprint code) { color: #6fdca6; }
+:root[data-theme="dark"][data-look] input::placeholder { color: #8aa194; }
+:root[data-theme="dark"][data-look] .danger { color: #f0a493; }
+:root[data-theme="dark"][data-look] :is(.live-status.reachable, .state-pill.reachable, .state-pill.healthy, .pack-badge.healthy, .workload-running) { background: rgba(60, 190, 120, .18); border-color: rgba(90, 210, 140, .3); color: #8ce6b5; }
+:root[data-theme="dark"][data-look] :is(.live-status.unreachable, .live-status.offline, .state-pill.unreachable, .state-pill.unhealthy, .pack-badge.unhealthy, .workload-permission_denied, .workload-unavailable) { background: rgba(230, 90, 70, .18); border-color: rgba(240, 120, 100, .32); color: #ffab9b; }
+:root[data-theme="dark"][data-look] :is(.live-status.stale, .state-pill.degraded, .observation-tag, .workload-stopped) { background: rgba(230, 180, 70, .16); border-color: rgba(240, 200, 100, .28); color: #f3d38a; }
+:root[data-theme="dark"][data-look] .observation-tag.saved { background: rgba(60, 190, 120, .16); color: #8ce6b5; }
+:root[data-theme="dark"][data-look] :is(.error-banner, .form-error) { background: rgba(200, 70, 55, .22); border: 1px solid rgba(240, 120, 100, .3); color: #ffc2b6; }
+:root[data-theme="dark"][data-look] .error-banner button { color: #ffc2b6; }
+:root[data-theme="dark"][data-look] .kind { background: rgba(90, 210, 140, .16); color: #8ce6b5; }
+:root[data-theme="dark"][data-look] .kind.change { background: rgba(240, 190, 90, .16); color: #f3d38a; }
+:root[data-theme="dark"][data-look] .kind.elevation { background: rgba(240, 120, 100, .18); color: #ffab9b; }
+:root[data-theme="dark"][data-look] .react-flow__edge-path { stroke: #7f998a; }
+:root[data-theme="dark"][data-look] .react-flow__edge-text { fill: #dce8e1; }
+
+/* ---- Classic dark: solid surfaces ---- */
+:root[data-look="classic"][data-theme="dark"] { background: #121815; }
+:root[data-look="classic"][data-theme="dark"] :is(.rail, .menu-panel) { background: #161e1a; border-color: #26322c; }
+:root[data-look="classic"][data-theme="dark"] :is(.map-panel, .inspector, .metrics > div, dialog, .server-card, .plugin-list li, .plugin-server, .pack-command, .update-diff, .tunnel-list li, .managed-server, .transfer-row, .plugin-activity, .map-controls, .menu-toggle) { background: #1a231f; border-color: #2a3731; color: #e6efe9; box-shadow: none; }
+:root[data-look="classic"][data-theme="dark"] :is(.map-canvas, th, .access-strip, .notice, .app-form, .workload-result, .ssh-result, .health-results > div, .file-change-review, .file-move-choice, .plugin-view-area, .job-logs, .pack-shown code, .pack-argv, .local-badge, .local-avatar, .server-icon, .state-pill, .pack-badge) { background: #151d19; border-color: #2a3731; }
+:root[data-look="classic"][data-theme="dark"] :is(.topbar, .map-toolbar, .map-footer, .inspector-tabs, .inspector-footer, .workspace-tabs, .workspace-footer, td, .activity-list li, .relationship-item, .node-workloads, .server-card footer, .ssh-connection, .workload-inspection, .file-layout, .file-details, .file-list td, .file-list th) { border-color: #26322c; }
+:root[data-look="classic"][data-theme="dark"] .menu-panel-title { background: #22302a; color: #cfe3d7; }
+:root[data-look="classic"][data-theme="dark"] button { background: #1f2a25; border-color: #33423a; color: #d6e4dc; }
+:root[data-look="classic"][data-theme="dark"] button:hover:not(:disabled) { background: #26342d; border-color: #43574c; }
+:root[data-look="classic"][data-theme="dark"] :is(.icon-button, .text-button, .menu-detach, .menu-category-toggle, .menu-items button, .quit-button, .view-tabs button, .inspector-tabs button, .workspace-tabs button, .map-controls button, .search-box button, .menu-panel-title button) { background: transparent; border-color: transparent; }
+:root[data-look="classic"][data-theme="dark"] :is(.menu-items button.active, .view-tabs button.active, .menu-detach[aria-pressed="true"]) { background: #22332a; }
+:root[data-look="classic"][data-theme="dark"] :is(.menu-items button:hover:not(.active), .quit-button:hover) { background: #1d2822; }
+:root[data-look="classic"][data-theme="dark"] .primary { background: #2c8a5f; border-color: #2c8a5f; color: #fff; }
+:root[data-look="classic"][data-theme="dark"] .primary:hover:not(:disabled) { background: #349b6b; border-color: #349b6b; }
+:root[data-look="classic"][data-theme="dark"] :is(input, select, .search-box, .app-discovery select) { background: #121916; border-color: #33423a; color: #e6efe9; }
+:root[data-look="classic"][data-theme="dark"] .search-box input { background: transparent; }
+:root[data-look="classic"][data-theme="dark"] .server-card.is-selected { border-color: #4fae80; box-shadow: 0 0 0 2px rgba(79, 174, 128, .25); }
+:root[data-look="classic"][data-theme="dark"] :is(.server-card.status-unreachable, .server-card.status-offline) { background: #2a1d1a; border-color: #b3584a; }
+:root[data-look="classic"][data-theme="dark"] :is(.file-list tr[aria-selected=true]) { background: #22332a; }
+:root[data-look="classic"][data-theme="dark"] .react-flow__handle { border-color: #1a231f; }
+:root[data-look="classic"][data-theme="dark"] dialog::backdrop { background: rgba(0, 0, 0, .5); }
+
+/* ---- Glass dark: smoked glass over the clear window ---- */
+:root[data-look="glass"][data-theme="dark"] {
+  --glass: rgba(20, 28, 25, .7);
+  --glass-strong: rgba(30, 40, 36, .66);
+  --glass-soft: rgba(15, 21, 19, .6);
+  --glass-edge: rgba(255, 255, 255, .14);
+  --glass-line: rgba(255, 255, 255, .09);
+  --glass-shadow: 0 1px 0 rgba(255, 255, 255, .12) inset, 0 -1px 0 rgba(0, 0, 0, .2) inset, 0 10px 30px rgba(0, 0, 0, .35);
+  --border: rgba(255, 255, 255, .1);
+}
+:root[data-look="glass"][data-theme="dark"] body { background: rgba(8, 12, 10, .06); }
+:root[data-look="glass"][data-theme="dark"] :is(.rail, .map-panel, .inspector, .metrics > div, .access-strip, .menu-panel, dialog, .plugin-list li, .plugin-server, .pack-command, .update-diff, .app-form, .tunnel-list li, .managed-server, .transfer-row, .workload-result, .ssh-result, .health-results > div, .file-change-review, .file-move-choice) {
+  background: linear-gradient(180deg, rgba(44, 56, 51, .76) 0%, var(--glass) 30%, var(--glass-soft) 100%);
+}
+:root[data-look="glass"][data-theme="dark"] .topbar { background: var(--glass); }
+:root[data-look="glass"][data-theme="dark"] dialog { background: linear-gradient(180deg, rgba(34, 44, 40, .78), rgba(22, 30, 27, .7)); color: #e6efe9; }
+:root[data-look="glass"][data-theme="dark"] dialog::backdrop { background: rgba(0, 0, 0, .25); }
+:root[data-look="glass"][data-theme="dark"] .menu-panel-title { background: rgba(255, 255, 255, .06); color: #cfe3d7; }
+:root[data-look="glass"][data-theme="dark"] :is(.app-main, .rail, dialog) { text-shadow: 0 0 10px rgba(0, 0, 0, .45); }
+:root[data-look="glass"][data-theme="dark"] button { background: rgba(255, 255, 255, .07); border-color: rgba(255, 255, 255, .14); color: #dce8e1; box-shadow: 0 1px 0 rgba(255, 255, 255, .1) inset, 0 1px 3px rgba(0, 0, 0, .25); }
+:root[data-look="glass"][data-theme="dark"] button:hover:not(:disabled) { background: rgba(255, 255, 255, .14); border-color: rgba(255, 255, 255, .24); }
+:root[data-look="glass"][data-theme="dark"] :is(.icon-button, .text-button, .menu-detach, .menu-category-toggle, .menu-panel-title button, .search-box button, .view-tabs button, .inspector-tabs button, .workspace-tabs button, .map-controls button, .menu-items button, .quit-button) { background: transparent; border-color: transparent; box-shadow: none; }
+:root[data-look="glass"][data-theme="dark"] :is(.menu-items button:hover:not(.active), .quit-button:hover) { background: rgba(255, 255, 255, .07); }
+:root[data-look="glass"][data-theme="dark"] :is(.menu-items button.active, .view-tabs button.active) { background: rgba(255, 255, 255, .13); border-color: rgba(255, 255, 255, .18); box-shadow: 0 1px 0 rgba(255, 255, 255, .14) inset, 0 4px 14px rgba(0, 0, 0, .3); }
+:root[data-look="glass"][data-theme="dark"] .primary { color: #fff; background: linear-gradient(180deg, rgba(56, 170, 118, .9), rgba(28, 120, 80, .9)); border-color: rgba(255, 255, 255, .2); }
+:root[data-look="glass"][data-theme="dark"] :is(input, select, .search-box, .view-tabs, .local-badge, .local-avatar, .menu-toggle, .map-controls, .server-icon, .notice, .state-pill, .pack-badge, .inventory-refresh-status, th, .plugin-view-area) { background: rgba(0, 0, 0, .22); border-color: rgba(255, 255, 255, .12); color: #dce8e1; }
+:root[data-look="glass"][data-theme="dark"] .search-box input { background: transparent; }
+:root[data-look="glass"][data-theme="dark"] .server-card { background: linear-gradient(180deg, rgba(44, 56, 51, .72), rgba(24, 32, 29, .58)); border-color: rgba(255, 255, 255, .16); box-shadow: 0 1px 0 rgba(255, 255, 255, .1) inset, 0 10px 26px rgba(0, 0, 0, .35); }
+:root[data-look="glass"][data-theme="dark"] .server-card.is-selected { border-color: rgba(95, 209, 154, .7); box-shadow: 0 0 0 3px rgba(95, 209, 154, .18), 0 12px 30px rgba(0, 0, 0, .4); }
+:root[data-look="glass"][data-theme="dark"] :is(.server-card.status-unreachable, .server-card.status-offline) { background: linear-gradient(180deg, rgba(90, 40, 34, .7), rgba(60, 26, 22, .55)); border-color: rgba(240, 120, 100, .55); }
+:root[data-look="glass"][data-theme="dark"] :is(.server-card footer, .node-workloads, td, .activity-list li, .relationship-item) { border-color: rgba(255, 255, 255, .07); }
+:root[data-look="glass"][data-theme="dark"] .react-flow__handle { border-color: rgba(20, 28, 25, .9); }
+:root[data-look="glass"][data-theme="dark"] .file-list tr[aria-selected=true] { background: rgba(255, 255, 255, .08); }
+
+:root[data-theme="dark"][data-look] .topbar-stats dd { color: #f1f7f3; }
+:root[data-theme="dark"][data-look] .topbar-stats dt { color: #a9bdb1; }
+:root[data-theme="dark"][data-look] .feedback .save-message:not(:empty) { background: rgba(26, 35, 31, .85); border-color: rgba(255, 255, 255, .14); color: #8ce6b5; }
+:root[data-theme="dark"][data-look] { --edge-label: #dce8e1; --edge-label-bg: #1d2a24; }
+:root[data-look="classic"][data-theme="dark"] .panel-toggle { background: #1a231f; border-color: #2a3731; color: #d6e4dc; }
+:root[data-look="glass"][data-theme="dark"] .panel-toggle { background: rgba(0, 0, 0, .22); border-color: rgba(255, 255, 255, .12); color: #dce8e1; }
+/* Native dropdown lists draw their own popup; give options dark colours. */
+:root[data-theme="dark"][data-look] :is(option, optgroup) { background-color: #1a231f; color: #e6efe9; }
+:root[data-theme="dark"][data-look] option:disabled { color: #7f948a; }
+:root[data-theme="dark"][data-look] img.app-icon { background: rgba(255, 255, 255, .9); }
+:root[data-theme="dark"][data-look] .app-details { background: #1a231f; border-color: rgba(255, 255, 255, .14); }
+
+/* Plugin pages and a few other surfaces with fixed light backgrounds. */
+:root[data-theme="dark"][data-look] :is(.pack-shown code, .pack-argv, .job-logs) { background: rgba(0, 0, 0, .32); border-color: rgba(255, 255, 255, .12); color: #e6efe9; }
+:root[data-theme="dark"][data-look] .plugin-activity { background: rgba(0, 0, 0, .22); border-color: rgba(255, 255, 255, .12); }
+:root[data-theme="dark"][data-look] .plugin-activity th { background: rgba(255, 255, 255, .06); color: #c2d3c9; }
+:root[data-theme="dark"][data-look] .plugin-activity td { border-color: rgba(255, 255, 255, .08); color: #dce8e1; }
+:root[data-theme="dark"][data-look] .plugin-activity tr.refused td:last-child { color: #ffab9b; }
+:root[data-theme="dark"][data-look] .plugin-activity tr.allowed td:last-child { color: #8ce6b5; }
+:root[data-theme="dark"][data-look] :is(.plugin-remove, .terminal-lock) { background: rgba(230, 90, 70, .14); border-color: rgba(240, 120, 100, .3); color: #ffc2b6; }
+:root[data-theme="dark"][data-look] :is(.plugins h5, .plugin-page h5, .plugin-view-bar, .trust-choice legend) { color: #dce8e1; }
+:root[data-theme="dark"][data-look] .pack-command .kind { background: transparent; border-color: rgba(255, 255, 255, .16); color: #c2d3c9; }

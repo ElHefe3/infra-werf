@@ -1,9 +1,9 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Background, BackgroundVariant, Handle, MarkerType, Position, ReactFlow, ReactFlowProvider, useNodesInitialized, useNodesState, useReactFlow, type Connection, type Node, type NodeProps } from "@xyflow/react";
+import { Background, BackgroundVariant, BaseEdge, EdgeLabelRenderer, getSmoothStepPath, Handle, MarkerType, Position, ReactFlow, ReactFlowProvider, useNodesInitialized, useNodesState, useReactFlow, useUpdateNodeInternals, type Connection, type EdgeProps, type Node, type NodeProps } from "@xyflow/react";
 import { createWorkspaceClient } from "./workspace-client";
 import { TransferQueue, useTransfers } from "./transfer-queue";
 import { BrandMark } from "./brand";
@@ -19,30 +19,50 @@ import type { View } from "./menu-model";
 import type { MonitoringState, PackMapState } from "./contracts.gen";
 import { edgeLook, kindKey, kindsBetween } from "./pack-map-model";
 import type { MapServer, MapState, Relationship, WorkspaceStatus } from "./contracts.gen";
-import { errorMessage, matches, observedLabel, reachabilityLabel, workloads } from "./map-model";
+import { CARD, errorMessage, labelSize, matches, observedLabel, pathPoints, placeLabels, reachabilityLabel, routeEdges, workloads, type Point, type Port, type Side } from "./map-model";
 import "@xyflow/react/dist/style.css";
 import "./style.css";
+import "./liquid-glass.css";
+import "./dark.css";
+import { useLook } from "./look";
+import { LockButton, PinProvider } from "./pin";
 
 const client = createWorkspaceClient();
 // A workspace tab is identified by its contribution ID (for example TAB.files).
 type WorkspaceTab = string;
 type Modal = { kind: "add" } | { kind: "edit"; id: string } | { kind: "relationship"; source: string; target: string } | { kind: "remove-server"; id: string } | { kind: "remove-edge"; edge: Relationship };
-type ServerFlowNode = Node<{ server: MapServer; matched: boolean; open: (id: string) => void }, "server">;
+type ServerFlowNode = Node<{ server: MapServer; matched: boolean; open: (id: string) => void; ports: Port[] }, "server">;
+const SIDE: Record<Side, Position> = { top: Position.Top, right: Position.Right, bottom: Position.Bottom, left: Position.Left };
 
 
 function ServerNode({ data, selected }: NodeProps<ServerFlowNode>) {
   const { server } = data;
   const live=liveStatus(server);
   return <article className={`server-card status-${live.kind} ${selected ? "is-selected" : ""} ${data.matched ? "" : "dimmed"}`} data-server-id={server.id}>
-    <Handle type="target" position={Position.Left} aria-label={`Connect to ${server.name}`} />
+    <Handle type="target" id="connect-in" position={Position.Left} aria-label={`Connect to ${server.name}`} />
+    {data.ports.map(port => <Handle key={port.id} id={port.id} type={port.type} position={SIDE[port.side]} isConnectable={false} className="route-handle" style={port.side === "left" || port.side === "right" ? { top: `${port.offset * 100}%` } : { left: `${port.offset * 100}%` }} />)}
     <div className="server-heading"><span className="server-icon">▤</span><ServerBadges server={server} slot="heading" /></div>
     <h3>{server.name}</h3><p className="hostname">{server.host}</p>
     <ServerBadges server={server} slot="body" />
     <footer><span>{observedLabel(server)}</span><button className="nodrag nopan icon-button" aria-label={`Open ${server.name} workspace`} onClick={e => { e.stopPropagation(); data.open(server.id); }}>↗</button></footer>
-    <Handle type="source" position={Position.Right} aria-label={`Connect from ${server.name}`} />
+    <Handle type="source" id="connect-out" position={Position.Right} aria-label={`Connect from ${server.name}`} />
   </article>;
 }
 const nodeTypes = { server: ServerNode };
+
+// Relationship lines draw their own label so the map can place every label
+// where it covers no other label and no card (T063).
+type LabelReport = { points: Point[]; width: number; height: number };
+const Labels = createContext<{ report: (id: string, value: LabelReport | null) => void; places: Map<string, Point> }>({ report: () => {}, places: new Map() });
+function RoutedEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, markerEnd, style, label }: EdgeProps) {
+  const [path, labelX, labelY] = getSmoothStepPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, borderRadius: 10, offset: 18 });
+  const { report, places } = useContext(Labels);
+  const text = typeof label === "string" ? label : "";
+  useLayoutEffect(() => { if (text) report(id, { points: pathPoints(path), ...labelSize(text) }); return () => report(id, null); }, [id, path, text, report]);
+  const at = places.get(id) ?? { x: labelX, y: labelY };
+  return <><BaseEdge id={id} path={path} markerEnd={markerEnd} style={style} />{text && <EdgeLabelRenderer><div className="edge-label" style={{ transform: `translate(-50%, -50%) translate(${at.x}px, ${at.y}px)` }}>{text}</div></EdgeLabelRenderer>}</>;
+}
+const edgeTypes = { routed: RoutedEdge };
 
 function MapCanvas({ state, packs, selected, query, busy, select, open, move, connect }: { state: MapState; packs: PackMapState | null; selected: string | null; query: string; busy: boolean; select: (id: string | null) => void; open: (id: string) => void; move: (id: string, x: number, y: number) => Promise<boolean>; connect: (connection: Connection) => void }) {
   const [nodes, setNodes, onNodesChange] = useNodesState<ServerFlowNode>([]);
@@ -51,8 +71,27 @@ function MapCanvas({ state, packs, selected, query, busy, select, open, move, co
   const fitted = useRef(false);
   const dragging=useRef(false);
   useEffect(() => { if (measured && !fitted.current) { fitted.current = true; void flow.fitView({ padding: .15, maxZoom: 1 }); } }, [measured, flow]);
-  useEffect(() => {if(!dragging.current) setNodes(state.servers.map(server => ({ id: server.id, type: "server", ariaLabel: server.name, position: { x: server.x, y: server.y }, selected: server.id === selected, data: { server, matched: matches(server, query), open } })));}, [state, selected, query, open, setNodes]);
-  const edges = state.edges.map(edge => { const look = edgeLook(edge, packs?.relationship_kinds ?? []); return { ...edge, label: look.label, type: "smoothstep", markerEnd: { type: MarkerType.ArrowClosed, color: look.color }, style: { stroke: look.color, strokeWidth: 1.5, strokeDasharray: look.dash }, labelStyle: { fill: "#51685a", fontSize: 11 }, labelBgStyle: { fill: "#f4f8f2" }, labelBgPadding: [7, 4] as [number, number], labelBgBorderRadius: 5 }; });
+  // Each relationship gets its own connection points (T063); recomputed when servers move.
+  const routing = useMemo(() => routeEdges(state.servers, state.edges), [state.servers, state.edges]);
+  const updateInternals = useUpdateNodeInternals();
+  useEffect(() => {if(!dragging.current) setNodes(state.servers.map(server => ({ id: server.id, type: "server", ariaLabel: server.name, position: { x: server.x, y: server.y }, selected: server.id === selected, data: { server, matched: matches(server, query), open, ports: routing.ports.get(server.id) ?? [] } })));}, [state, selected, query, open, setNodes, routing]);
+  useEffect(() => { updateInternals(state.servers.map(server => server.id)); }, [routing, updateInternals, state.servers]);
+  const edges = state.edges.map(edge => { const look = edgeLook(edge, packs?.relationship_kinds ?? []); const route = routing.routes.get(edge.id); return { ...edge, ...(route ?? { sourceHandle: "connect-out", targetHandle: "connect-in" }), label: look.label, type: "routed", markerEnd: { type: MarkerType.ArrowClosed, color: look.color }, style: { stroke: look.color, strokeWidth: 1.5, strokeDasharray: look.dash } }; });
+  // Label placement: each line reports its path; one pass places them all.
+  const reports = useRef(new Map<string, LabelReport>());
+  const [reported, setReported] = useState(0);
+  const pending = useRef(0);
+  const report = useCallback((id: string, value: LabelReport | null) => {
+    if (value) reports.current.set(id, value); else reports.current.delete(id);
+    if (!pending.current) pending.current = requestAnimationFrame(() => { pending.current = 0; setReported(n => n + 1); });
+  }, []);
+  useEffect(() => () => cancelAnimationFrame(pending.current), []);
+  const places = useMemo(() => placeLabels(
+    [...reports.current].sort(([a], [b]) => a < b ? -1 : 1).map(([id, value]) => ({ id, ...value })),
+    nodes.map(node => ({ x: node.position.x, y: node.position.y, width: node.measured?.width ?? CARD.width, height: node.measured?.height ?? CARD.height })),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  ), [reported, nodes]);
+  const labels = useMemo(() => ({ report, places }), [report, places]);
   useEffect(() => {
     if (query.trim()) void flow.fitView({ nodes: state.servers.filter(s => matches(s, query)).map(s => ({ id: s.id })), padding: .25, maxZoom: 1, duration: 200 });
   }, [query, flow, state.servers]);
@@ -69,8 +108,7 @@ function MapCanvas({ state, packs, selected, query, busy, select, open, move, co
     const server = state.servers.find(s => s.id === node.dataset.id);
     if (server && server.id === selected && target === node && !busy) void move(server.id, server.x + offset[0], server.y + offset[1]);
   }}>
-    <div className="canvas-caption"><b>HOMELAB</b><span>Your infrastructure, connected</span></div>
-    <ReactFlow<ServerFlowNode> nodes={nodes} edges={edges} nodeTypes={nodeTypes} onNodesChange={changes => {
+        <Labels.Provider value={labels}><ReactFlow<ServerFlowNode> nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} onNodesChange={changes => {
       onNodesChange(changes);
       const selection = changes.find(change => change.type === "select" && change.selected);
       if (selection?.type === "select") select(selection.id);
@@ -80,11 +118,11 @@ function MapCanvas({ state, packs, selected, query, busy, select, open, move, co
       onConnect={connect} nodesDraggable={!busy} nodesConnectable={!busy} deleteKeyCode={null} fitView fitViewOptions={{ padding: .18, maxZoom: 1 }} minZoom={.15} maxZoom={1.8} onlyRenderVisibleElements={false}
       proOptions={{ hideAttribution: false }} ariaLabelConfig={{ "controls.zoomIn.ariaLabel": "Zoom in", "controls.zoomOut.ariaLabel": "Zoom out" }}>
       <Background variant={BackgroundVariant.Dots} gap={18} size={1} color="#d5dfcf" />
-    </ReactFlow>
+    </ReactFlow></Labels.Provider>
     {!state.servers.length && <div className="map-empty"><strong>A clear place to start.</strong><p>Add your first server to build the map.</p></div>}
     {query && !state.servers.some(s => matches(s, query)) && <div className="map-empty"><strong>No matching servers</strong><p>Try a host, service or container name.</p></div>}
     <div className="map-controls"><button aria-label="Zoom out" onClick={() => void flow.zoomOut()}>−</button><button aria-label="Zoom in" onClick={() => void flow.zoomIn()}>+</button><button onClick={() => void flow.fitView({ padding: .18, maxZoom: 1, duration: 200 })}>Fit map</button></div>
-    <div className="canvas-hint">Drag to arrange · Scroll to zoom · Drag handles to connect</div>
+    <div className="canvas-hint"><span><i className="legend-dot saved" /> Saved observation</span><span><i className="legend-dot stale" /> Stale / unknown</span><span className="hint-help">Drag to arrange · Scroll to zoom · Drag handles to connect</span></div>
   </div>;
 }
 
@@ -142,12 +180,15 @@ function App() {
   const [status, setStatus] = useState<WorkspaceStatus | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  // A confirmation fades after a moment; errors stay until dismissed.
+  useEffect(() => { if (!notice) return; const timer = window.setTimeout(() => setNotice(""), 3000); return () => window.clearTimeout(timer); }, [notice]);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [view, setView] = useState<View>("topology");
   const menu = useMenu();
+  const { look, theme, toggleLook, toggleTheme } = useLook();
   const [pluginFocus, setPluginFocus] = useState<string | null>(null);
   const [inspector, setInspector] = useState(true);
   const [inspectorTab, setInspectorTab] = useState("Overview");
@@ -207,12 +248,12 @@ function App() {
   }
   return <ExtensionsContext.Provider value={extensions}><PackMapContext.Provider value={packs}><div className={`app-shell ${menu.layout.open ? "" : "menu-hidden"}`}>
     <MenuSystem groups={extensions?.menu ?? []} view={view} go={setView} menu={menu} quit={() => { if (isTauri()) void getCurrentWindow().close().catch(e => setError(errorMessage(e))); }} />
-    <div className="app-main"><header className="topbar"><div><strong className="wordmark">InfraWerf</strong><span>/</span> Homelab</div><span className="local-badge"><i /> LOCAL WORKSPACE</span></header>
-      <main className="desktop-main"><section className="intro"><div><p className="eyebrow">YOUR INFRASTRUCTURE, CONNECTED</p><h1>A little clarity. <span>Across every server.</span></h1><p>Your infrastructure, thoughtfully mapped. One place to see how it all connects.</p></div><button className="primary" disabled={!available} onClick={() => setModal({ kind: "add" })}><span>＋</span> Add server</button></section>
-        <section className="metrics" aria-label="Workspace summary"><div><span>Servers</span><strong>{state ? state.servers.length : "—"}</strong><small>{visibleState?.servers.length ?? 0} active on map</small></div><div><span>Observed workloads</span><strong>{state ? countWorkloads.toLocaleString() : "—"}</strong><small>Services & containers</small></div><div><span>Needs an observation</span><strong>{state ? state.servers.filter(s => s.freshness !== "saved").length : "—"}</strong><small>Stale or not yet observed</small></div><div><span>Saved inventories</span><strong>{state ? state.servers.filter(s => s.inventory).length : "—"}</strong><small>{visibleState?.servers.filter(s=>["offline","unreachable"].includes(liveStatus(s).kind)).length ?? 0} offline / unreachable</small></div></section>
-        <div className="feedback" aria-live="polite">{error ? <div role="alert" className="error-banner"><span>{error}</span><button disabled={busy || !isTauri()} onClick={() => void refresh()}>Retry load</button><button aria-label="Dismiss error" onClick={() => setError("")}>×</button></div> : <span className="save-message">{busy ? "Saving to this PC…" : notice}</span>}</div>
+    <div className="app-main"><header className="topbar"><div className="topbar-title"><strong className="wordmark">InfraWerf</strong><span>/</span> Homelab</div><dl className="topbar-stats" aria-label="Workspace summary"><div title={`${visibleState?.servers.length ?? 0} active on the map`}><dt>Servers</dt><dd>{state ? state.servers.length : "—"}</dd></div><div title="Saved services and containers"><dt>Workloads</dt><dd>{state ? countWorkloads.toLocaleString() : "—"}</dd></div><div title="Stale or not yet observed"><dt>Need observation</dt><dd>{state ? state.servers.filter(s => s.freshness !== "saved").length : "—"}</dd></div><div title={`Servers with a saved inventory · ${visibleState?.servers.filter(s=>["offline","unreachable"].includes(liveStatus(s).kind)).length ?? 0} offline or unreachable`}><dt>Inventories</dt><dd>{state ? state.servers.filter(s => s.inventory).length : "—"}</dd></div></dl><div className="topbar-end"><button className="primary add-server" disabled={!available} onClick={() => setModal({ kind: "add" })}><span>＋</span> Add server</button><button className="look-switch" onClick={toggleLook}>{look === "glass" ? "◑ Classic look" : "◐ Glass look"}</button><button className="look-switch" onClick={toggleTheme}>{theme === "dark" ? "☀ Light mode" : "☾ Dark mode"}</button><LockButton /><span className="local-badge" title="Saved inventory stays on this PC. Protected operations require an authenticated connection. Phone coordinator: unavailable."><i /> Local</span></div></header>
+      <main className="desktop-main">
+        <div className={`feedback ${error || busy || notice ? "shown" : ""}`} aria-live="polite">{error ? <div role="alert" className="error-banner"><span>{error}</span><button disabled={busy || !isTauri()} onClick={() => void refresh()}>Retry load</button><button aria-label="Dismiss error" onClick={() => setError("")}>×</button></div> : <span className="save-message">{busy ? "Saving to this PC…" : notice}</span>}</div>
+        {!inspector && view === "topology" && <button className="panel-toggle inspector-open" aria-label="Show inspector" title="Show inspector" aria-expanded="false" aria-controls="inspector" onClick={() => setInspector(true)}>◨</button>}
         <section className={`workspace-grid ${inspector && view === "topology" ? "with-inspector" : ""}`}>
-          <div className="map-panel"><div className="map-toolbar"><div className="view-tabs" aria-label="Map view"><button className={view === "topology" ? "active" : ""} onClick={() => setView("topology")}>Topology</button><button className={view === "inventory" ? "active" : ""} onClick={() => setView("inventory")}>Inventory</button></div><div className="search-box"><span aria-hidden>⌕</span><input ref={search} aria-label="Find a server or workload" placeholder="Find a server or workload…" value={query} onChange={e => setQuery(e.target.value)} />{query ? <button aria-label="Clear search" onClick={() => setQuery("")}>×</button> : <kbd>/</kbd>}</div>{view === "topology" && <button className="icon-button" aria-label="Toggle inspector" aria-pressed={inspector} onClick={() => setInspector(v => !v)}>◧</button>}</div>
+          <div className="map-panel"><div className="map-toolbar"><div className="view-tabs" aria-label="Map view"><button className={view === "topology" ? "active" : ""} onClick={() => setView("topology")}>Topology</button><button className={view === "inventory" ? "active" : ""} onClick={() => setView("inventory")}>Inventory</button></div><div className="search-box"><span aria-hidden>⌕</span><input ref={search} aria-label="Find a server or workload" placeholder="Find a server or workload…" value={query} onChange={e => setQuery(e.target.value)} />{query ? <button aria-label="Clear search" onClick={() => setQuery("")}>×</button> : <kbd>/</kbd>}</div>{status?.report_import_available && <button className="text-button" disabled={!available} title="Import newer approved saved reports" onClick={() => void mutate(client.importReports, "Approved report import finished.")}>↻ Import reports</button>}</div>
             {!state ? <div className="loading-state"><BrandMark /><h2>{error ? "Your workspace couldn’t be opened." : "Opening your workspace…"}</h2><p>{error ? "Resolve the message above, then retry. Your saved data has not been replaced." : "Reading the native Rust store on this PC."}</p></div> : <>
               {view === "topology" && <ReactFlowProvider><MapCanvas state={visibleState!} packs={packs} selected={selected} query={query} busy={busy} select={setSelected} open={open} move={(id, x, y) => mutate(() => client.update(id, { x, y }), "Map position saved.")} connect={c => relationship(c.source, c.target)} /></ReactFlowProvider>}
               {view === "servers" && <MonitoringHub state={state} monitoring={monitoring} client={client} reload={reloadLive} remove={id=>setModal({kind:"remove-server",id})} open={open} openSettings={()=>setView("settings")} />}
@@ -221,17 +262,16 @@ function App() {
               {view === "activity" && <div className="activity-view"><h2>Workspace activity</h2><p>Timestamped reachability, inventory and lifecycle changes. Use Settings to set history retention.</p><ActivityList state={state} /></div>}
               {view === "transfers" && <TransferQueue rows={transfers.rows} failure={transfers.failure} retry={id => { setWorkspaceTab(TAB.files); setSelected(id); setWorkspace(id); }} />}
             </>}
-            <footer className="map-footer"><div><span><i className="legend-dot saved" /> Inventory observation</span><span><i className="legend-dot stale" /> Stale / unknown</span></div><button className="text-button" onClick={()=>setView("servers")}>Servers & monitoring</button><button className="text-button" disabled={!available || !status?.report_import_available} title={status?.report_import_available ? "Import newer approved saved reports" : "No report directory configured for this native workspace"} onClick={() => void mutate(client.importReports, "Approved report import finished.")}>↻ Import newer reports</button></footer>
+            
           </div>
-          {inspector && view === "topology" && <aside className="inspector"><div className="inspector-title"><span>INSPECTOR</span><span>⌘</span></div><div className="inspector-tabs">{["Overview", "Relationships", "Activity"].map(name => <button className={inspectorTab === name ? "active" : ""} key={name} onClick={() => setInspectorTab(name)}>{name}</button>)}</div><div className="inspector-body">{server ? <>
+          {inspector && view === "topology" && <aside className="inspector" id="inspector"><button className="panel-toggle inspector-close" aria-label="Hide inspector" title="Hide inspector" aria-expanded="true" aria-controls="inspector" onClick={() => setInspector(false)}>◨</button><div className="inspector-tabs">{["Overview", "Relationships", "Activity"].map(name => <button className={inspectorTab === name ? "active" : ""} key={name} onClick={() => setInspectorTab(name)}>{name}</button>)}</div><div className="inspector-body">{server ? <>
             <div className="selected-heading"><span className="server-icon">▤</span><span className={`observation-tag ${server.freshness}`}>{observedLabel(server)}</span></div><h2>{server.name}</h2><p className="hostname">{server.host}</p>
             {inspectorTab === "Overview" && <><p className="section-label">SAVED OBSERVATION</p><dl className="facts"><div><dt>Collected</dt><dd>{date(server.inventory?.collected_at)}</dd></div><div><dt>Logical CPUs</dt><dd>{server.inventory?.cpus ?? "Unknown"}</dd></div><div><dt>Total memory</dt><dd>{server.inventory ? memory(server.inventory.memory_total_kib) : "Unknown"}</dd></div><div><dt>Workloads</dt><dd>{workloads(server).length}</dd></div><div><dt>Reachability</dt><dd>{reachabilityLabel(server)}</dd></div></dl><Notice>Files, live metrics and controls become available through an authenticated SSH session.</Notice><div className="inspector-actions"><button disabled={busy} onClick={() => setModal({ kind: "edit", id: server.id })}>Edit details</button><button disabled={!available || state!.servers.length < 2} onClick={() => relationship()}>＋ Document relationship</button></div></>}
             {inspectorTab === "Relationships" && <><p className="section-label">DOCUMENTED CONNECTIONS</p>{related.map(edge => <div className="relationship-item" key={edge.id}><strong>{state!.servers.find(s => s.id === edge.source)?.name} → {state!.servers.find(s => s.id === edge.target)?.name}</strong><span>{edgeLook(edge, packs?.relationship_kinds ?? []).label || "Unlabelled"}</span><button className="text-button" disabled={busy} onClick={() => setModal({ kind: "remove-edge", edge })}>Remove relationship</button></div>)}{!related.length && <p>No relationships documented.</p>}<button disabled={!available || state!.servers.length < 2} onClick={() => relationship()}>＋ Document relationship</button><p className="muted">Diagram links describe your infrastructure. They do not change server configuration.</p></>}
             {inspectorTab === "Activity" && state && <ActivityList state={{ ...state, events: state.events.filter(e => e.server_id === server.id) }} />}
           </> : <p className="empty-copy">Select a server to inspect its saved details.</p>}</div>{server && <footer className="inspector-footer"><button className="primary" onClick={() => open(server.id)}>Open workspace <span>↗</span></button></footer>}</aside>}
         </section>
-        <section className="access-strip"><span className="access-icon">⌁</span><div><strong>Your map is visible. Your access is deliberate.</strong><p>Saved inventory on this PC. Protected operations require an authenticated connection.</p></div><span className="access-status">Phone coordinator · unavailable</span></section>
-        <footer className="app-footer"><b>InfraWerf</b><span>Your homelab, connected.</span></footer>
+        
       </main>
     </div>
     {workspaceServer && state && extensions && <ServerWorkspace key={workspaceServer.id} server={workspaceServer} state={state} openPlugin={id => { setWorkspace(null); setPluginFocus(id); setView("settings"); }} reload={async () => { setState(await client.retry()); }} initialTab={workspaceTab} close={() => setWorkspace(null)} edit={() => { setWorkspace(null); setModal({ kind: "edit", id: workspaceServer.id }); }} />}
@@ -254,4 +294,4 @@ function RelationshipKindField({ kinds }: { kinds: PackMapState["relationship_ki
 
 function ActivityList({ state }: { state: MapState }) { return <ol className="activity-list">{state.events.length ? state.events.map(event => <li key={event.id}><span>{event.server_id && <strong>{state.servers.find(s=>s.id===event.server_id)?.name ?? "Removed server"}: </strong>}{event.message}</span><time dateTime={event.at}>{date(event.at)}</time></li>) : <li>No recorded activity yet.</li>}</ol>; }
 
-createRoot(document.getElementById("root")!).render(<React.StrictMode><App /></React.StrictMode>);
+createRoot(document.getElementById("root")!).render(<React.StrictMode><PinProvider><App /></PinProvider></React.StrictMode>);

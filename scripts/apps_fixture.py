@@ -90,10 +90,10 @@ async def main(directory):
             # Canned read-only discovery reply describing this fixture.
             stats["discoveries"] += 1; save()
             proc.stdout.write("ATLAS_APPS_V1\n"
-                f"APP\t127.0.0.1\t{app_port}\t200\t0\tpython\tFixture Dashboard\n"
-                f"APP\t127.0.0.2\t{second_port}\t200\t0\tpython\tSecond app\n"
-                "APP\t0.0.0.0\t22\t000\t0\tsshd\t\n"
-                "APP\t*\t9443\t000\t1\t\t\n"
+                f"APP\t127.0.0.1\t{app_port}\t200\t0\tpython\t\t\tFixture Dashboard\n"
+                f"APP\t127.0.0.2\t{second_port}\t200\t0\tpython\t\t\tSecond app\n"
+                "APP\t0.0.0.0\t22\t000\t0\tsshd\t\t\t\n"
+                "APP\t*\t9443\t000\t1\t\t\t\t\n"
                 "END\n")
             proc.exit(0)
         else: proc.exit(1)

@@ -547,6 +547,13 @@ pub fn builtin_with(disabled: &[String]) -> ExtensionRegistry {
             &[ReadSavedState],
         ),
         (
+            "builtin.app-settings.pin",
+            AppSettingsSection,
+            "PIN",
+            35,
+            &[ReadSavedState],
+        ),
+        (
             "builtin.app-settings.plugins",
             AppSettingsSection,
             "Plugins",
@@ -805,6 +812,7 @@ mod tests {
                 "History retention",
                 "SSH alias discovery",
                 "Menu layout",
+                "PIN",
                 "Plugins",
                 "Plugin activity"
             ]

@@ -8,6 +8,7 @@ pub mod inventory;
 pub mod monitoring;
 pub mod operations;
 pub mod pack;
+pub mod pin;
 pub mod plugin;
 pub mod plugin_host;
 pub mod plugin_install;

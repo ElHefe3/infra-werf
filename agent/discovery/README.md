@@ -70,3 +70,7 @@ Link important discoveries from affected feature packets and the checkpoint. Nev
 - [D056 A categorised main menu with detachable category copies](D056-categorised-detachable-main-menu.md)
 - [D057 Rule 6 widens to reviewed read-only pack commands](D057-reviewed-read-only-pack-commands.md)
 - [D063 The Claude desktop shell is also a packaged (redirected) context](D063-claude-desktop-shell-is-also-packaged.md)
+- [D064 Detachable menu categories are disabled](D064-menu-pop-outs-disabled.md)
+- [D065 The owner requests an interface redesign](D065-owner-requests-interface-redesign.md)
+- [D066 Discovered apps are cached on this PC and carry their own icons](D066-cached-app-discovery-and-icons.md)
+- [D067 An owner PIN hides sensitive details and gates protected views](D067-owner-pin.md)

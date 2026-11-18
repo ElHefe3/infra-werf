@@ -1,9 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
+import { pinAware } from "./pin-model.ts";
 import type { MonitoringState, MonitoringPolicy, TunnelInfo, TunnelRequest, AppDiscovery, ExtensionCatalogue, PluginsState, PluginActivityLog, TrustLevel, Capability, PackServerState, PackMapState, PackAppsState, InstallRequest, InstallReport, UpdatePreview, PluginViewsState, ViewActionState, JobsState, JobAsk } from "./contracts.gen";
 import { CONTRACT_VERSION, type AddRelationship, type AddServer, type MapState, type UpdateServer, type WorkspaceStatus, type OperationTicket, type SshVerification, type FileSession, type FileAction, type FileResult, type FileChange, type FileMutationPreview, type FileMutationReceipt, type LocalSelection, type TransferView, type ElevationPreview, type ElevationReceipt, type ProtectedPlacementRequest, type ProtectedPlacementStage, type ProtectedPlacementReceipt, type HealthProbeConfig, type HealthSnapshot, type InventoryRefreshResult, type TerminalPoll, type WorkloadInspection, type WorkloadAction, type WorkloadControlPreview, type WorkloadControlReceipt } from "./contracts.gen.ts";
 
 export type NativeTransport = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
-export function createWorkspaceClient(transport: NativeTransport = invoke) {
+export function createWorkspaceClient(transport: NativeTransport = pinAware(invoke)) {
   async function request<T extends { contract_version: number }>(command: string, args?: Record<string, unknown>): Promise<T> {
     const value = await transport<T>(command, args);
     if (value.contract_version !== CONTRACT_VERSION) throw new Error("InfraWerf contract version is incompatible.");

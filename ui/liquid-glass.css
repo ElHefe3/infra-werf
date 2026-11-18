@@ -1,0 +1,140 @@
+/* Liquid glass look. Layered over style.css and active only while
+   <html data-look="glass">; removing the attribute restores the classic look. */
+/* In the native window the page background is clear: Windows draws a
+   blurred (acrylic) view of whatever is behind InfraWerf, and only a faint
+   tint is laid over it. Content surfaces are frosted glass on top. */
+:root[data-look="glass"] {
+  --glass: rgba(255, 255, 255, .34);
+  --glass-strong: rgba(255, 255, 255, .5);
+  --glass-soft: rgba(255, 255, 255, .22);
+  --glass-edge: rgba(255, 255, 255, .55);
+  --glass-line: rgba(255, 255, 255, .32);
+  --glass-shadow: 0 1px 0 rgba(255, 255, 255, .6) inset, 0 -1px 0 rgba(255, 255, 255, .12) inset, 0 8px 28px rgba(10, 30, 20, .1);
+  --glass-blur: blur(14px) saturate(170%);
+  --border: rgba(255, 255, 255, .4);
+  --green: #13704a;
+  --muted: #3f5a4b;
+  color: #10261b;
+  background: transparent;
+}
+:root[data-look="glass"] body {
+  min-height: 100dvh;
+  background:
+    rgba(240, 248, 244, .03);
+  background-attachment: fixed;
+}
+
+/* Glass surfaces: a thin fill, light frosting, a bright rim and a
+   specular sheen across the top edge. */
+:root[data-look="glass"] :is(.rail, .map-panel, .inspector, .metrics > div, .access-strip, .menu-panel, dialog, .plugin-list li, .plugin-server, .pack-command, .update-diff, .app-form, .tunnel-list li, .managed-server, .transfer-row, .workload-result, .ssh-result, .health-results > div, .file-change-review, .file-move-choice) {
+  background: linear-gradient(180deg, rgba(255, 255, 255, .46) 0%, var(--glass) 30%, var(--glass-soft) 100%);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-edge);
+  box-shadow: var(--glass-shadow);
+}
+:root[data-look="glass"] .rail { margin: 10px 0 10px 10px; border-radius: 22px; border-right: 1px solid var(--glass-edge); }
+:root[data-look="glass"] .map-panel, :root[data-look="glass"] .inspector { border-radius: 22px; }
+:root[data-look="glass"] .metrics > div { border-radius: 14px; }
+:root[data-look="glass"] .access-strip { border-radius: 18px; }
+:root[data-look="glass"] .menu-panel { border-radius: 18px; }
+:root[data-look="glass"] .menu-panel-title { background: rgba(255, 255, 255, .35); color: #24573f; }
+:root[data-look="glass"] dialog { border-radius: 26px; background: linear-gradient(180deg, rgba(255, 255, 255, .64), rgba(255, 255, 255, .5)); -webkit-backdrop-filter: blur(22px) saturate(170%); backdrop-filter: blur(22px) saturate(170%); color: #10261b; }
+:root[data-look="glass"] dialog::backdrop { background: rgba(20, 40, 30, .1); backdrop-filter: blur(4px); }
+
+/* The top bar floats as a thin glass strip. */
+:root[data-look="glass"] .topbar { margin: 10px 10px 0 14px; height: 52px; border: 1px solid var(--glass-edge); border-radius: 18px; background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: var(--glass-shadow); padding: 0 12px 0 18px; }
+:root[data-look="glass"] .topbar .wordmark { color: #17513a; }
+:root[data-look="glass"] .desktop-main { padding-inline: 14px 10px; }
+:root[data-look="glass"] .menu-hidden .topbar { padding-left: 54px; }
+:root[data-look="glass"] .local-badge { border: 1px solid var(--glass-edge); background: rgba(255, 255, 255, .4); border-radius: 999px; padding: 6px 11px; }
+
+/* Controls become pills of glass; the primary action is tinted glass. */
+:root[data-look="glass"] button { border-radius: 999px; border: 1px solid var(--glass-edge); background: rgba(255, 255, 255, .2); color: #1d3a2b; box-shadow: 0 1px 0 rgba(255, 255, 255, .9) inset, 0 1px 3px rgba(28, 58, 44, .08); -webkit-backdrop-filter: blur(12px) saturate(170%); backdrop-filter: blur(12px) saturate(170%); }
+:root[data-look="glass"] button:hover:not(:disabled) { background: rgba(255, 255, 255, .42); border-color: rgba(255, 255, 255, .95); }
+:root[data-look="glass"] :is(.icon-button, .text-button, .menu-detach, .menu-category-toggle, .menu-panel-title button, .search-box button, .view-tabs button, .inspector-tabs button, .workspace-tabs button, .map-controls button) { box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; border-color: transparent; background: transparent; }
+:root[data-look="glass"] .primary { color: white; border-color: rgba(255, 255, 255, .45); background: linear-gradient(180deg, rgba(58, 160, 115, .92), rgba(28, 118, 80, .92)); box-shadow: 0 1px 0 rgba(255, 255, 255, .5) inset, 0 6px 18px rgba(31, 122, 85, .32); }
+:root[data-look="glass"] .primary:hover:not(:disabled) { background: linear-gradient(180deg, rgba(66, 172, 124, .96), rgba(24, 106, 72, .96)); border-color: rgba(255, 255, 255, .6); }
+:root[data-look="glass"] .danger-button { background: linear-gradient(180deg, rgba(200, 104, 86, .92), rgba(160, 76, 62, .92)); border-color: rgba(255, 255, 255, .45); color: white; }
+:root[data-look="glass"] input, :root[data-look="glass"] select { border-radius: 12px; border: 1px solid var(--glass-edge); background: rgba(255, 255, 255, .24); box-shadow: 0 1px 2px rgba(28, 58, 44, .06) inset; color: #22382c; }
+:root[data-look="glass"] input:focus-visible, :root[data-look="glass"] select:focus-visible, :root[data-look="glass"] button:focus-visible { outline: 2px solid rgba(31, 122, 85, .55); outline-offset: 2px; }
+
+/* Menu: the active item is a lens of brighter glass. */
+:root[data-look="glass"] .menu-items button, :root[data-look="glass"] .quit-button { border-radius: 12px; border: 1px solid transparent; background: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; color: #183527; }
+:root[data-look="glass"] .menu-items button:hover:not(.active), :root[data-look="glass"] .quit-button:hover { background: rgba(255, 255, 255, .42); }
+:root[data-look="glass"] .menu-items button.active { background: rgba(255, 255, 255, .42); border-color: rgba(255, 255, 255, .95); box-shadow: 0 1px 0 #fff inset, 0 4px 14px rgba(28, 58, 44, .12); color: #17603f; }
+:root[data-look="glass"] .menu-category-toggle { color: #5d7a69; }
+:root[data-look="glass"] .menu-toggle { border-radius: 50%; background: rgba(255, 255, 255, .6); border-color: var(--glass-edge); top: 20px; left: calc(var(--menu-width) - 30px); }
+:root[data-look="glass"] .menu-hidden .menu-toggle { left: 20px; }
+:root[data-look="glass"] .local-avatar { background: rgba(255, 255, 255, .55); border: 1px solid var(--glass-edge); color: #2f6a4c; }
+
+/* Segmented tabs sit in a recessed track. */
+:root[data-look="glass"] .view-tabs { padding: 3px; border-radius: 999px; background: rgba(255, 255, 255, .12); border: 1px solid rgba(255, 255, 255, .55); }
+:root[data-look="glass"] .view-tabs button { border-radius: 999px; color: #567061; }
+:root[data-look="glass"] .view-tabs button.active { background: rgba(255, 255, 255, .5); color: #17603f; box-shadow: 0 1px 0 #fff inset, 0 2px 8px rgba(28, 58, 44, .14); }
+:root[data-look="glass"] .search-box { border-radius: 999px; border: 1px solid var(--glass-edge); background: rgba(255, 255, 255, .2); }
+:root[data-look="glass"] .search-box input { background: transparent; border: none; box-shadow: none; }
+:root[data-look="glass"] .map-toolbar, :root[data-look="glass"] .map-footer, :root[data-look="glass"] .inspector-tabs, :root[data-look="glass"] .inspector-footer, :root[data-look="glass"] .workspace-tabs, :root[data-look="glass"] .workspace-footer { border-color: var(--glass-line); }
+:root[data-look="glass"] .inspector-tabs button.active, :root[data-look="glass"] .workspace-tabs button[aria-selected=true] { color: #17603f; border-bottom-color: #2f9a6b; }
+
+/* The map canvas is clear glass so the background tints show through. */
+:root[data-look="glass"] .map-canvas { background: transparent; }
+:root[data-look="glass"] .react-flow__background { opacity: .35; }
+:root[data-look="glass"] .server-card { border-radius: 18px; background: linear-gradient(180deg, rgba(255, 255, 255, .58), rgba(255, 255, 255, .36)); border: 1px solid rgba(255, 255, 255, .9); -webkit-backdrop-filter: blur(10px) saturate(170%); backdrop-filter: blur(10px) saturate(170%); box-shadow: 0 1px 0 rgba(255,255,255,.8) inset, 0 8px 22px rgba(10, 30, 20, .12); }
+:root[data-look="glass"] .react-flow__node-server { border-radius: 18px; }
+:root[data-look="glass"] .server-card.is-selected { border-color: rgba(47, 154, 107, .8); box-shadow: 0 0 0 3px rgba(47, 154, 107, .18), 0 1px 0 #fff inset, 0 14px 32px rgba(28, 58, 44, .18); }
+:root[data-look="glass"] .server-card footer, :root[data-look="glass"] .node-workloads { border-color: rgba(30, 60, 45, .08); }
+:root[data-look="glass"] .server-card footer { border-radius: 0 0 18px 18px; }
+:root[data-look="glass"] .server-icon { border-radius: 10px; background: rgba(255, 255, 255, .7); box-shadow: 0 1px 0 #fff inset, 0 1px 3px rgba(28, 58, 44, .1); color: #2f7a55; }
+:root[data-look="glass"] .server-card.status-unreachable, :root[data-look="glass"] .server-card.status-offline { border: 1px solid rgba(196, 91, 75, .7); background: linear-gradient(180deg, rgba(255, 240, 236, .85), rgba(255, 228, 222, .6)); }
+:root[data-look="glass"] .map-controls { border-radius: 999px; overflow: hidden; background: rgba(255, 255, 255, .55); border: 1px solid var(--glass-edge); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: var(--glass-shadow); }
+:root[data-look="glass"] .map-controls button { border-right: 1px solid var(--glass-line); border-radius: 0; }
+:root[data-look="glass"] .react-flow__handle { background: #5fae85; border-color: rgba(255, 255, 255, .9); }
+
+/* Inset surfaces and pills. */
+:root[data-look="glass"] :is(.notice, .state-pill, .observation-tag, .pack-badge, .live-status, .kind, .inventory-refresh-status) { border-radius: 999px; background: rgba(255, 255, 255, .45); border: 1px solid rgba(255, 255, 255, .7); }
+:root[data-look="glass"] .notice { border-radius: 14px; }
+:root[data-look="glass"] .live-status.reachable, :root[data-look="glass"] .state-pill.reachable, :root[data-look="glass"] .state-pill.healthy { background: rgba(200, 238, 214, .7); color: #1c6a43; }
+:root[data-look="glass"] .live-status.unreachable, :root[data-look="glass"] .live-status.offline, :root[data-look="glass"] .state-pill.unreachable, :root[data-look="glass"] .state-pill.unhealthy { background: rgba(252, 220, 212, .75); color: #9b3323; }
+:root[data-look="glass"] .live-status.stale, :root[data-look="glass"] .state-pill.degraded { background: rgba(255, 236, 196, .75); color: #855d12; }
+:root[data-look="glass"] .error-banner { border-radius: 14px; background: rgba(255, 232, 224, .72); border: 1px solid rgba(255, 255, 255, .7); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
+:root[data-look="glass"] th { background: rgba(255, 255, 255, .3); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border-color: var(--glass-line); }
+:root[data-look="glass"] td, :root[data-look="glass"] .activity-list li, :root[data-look="glass"] .relationship-item { border-color: rgba(30, 60, 45, .08); }
+:root[data-look="glass"] .file-list tr[aria-selected=true] { background: rgba(255, 255, 255, .55); }
+:root[data-look="glass"] .terminal-screen, :root[data-look="glass"] .workload-logs { border-radius: 16px; border: 1px solid rgba(255, 255, 255, .35); background: rgba(16, 32, 25, .86); box-shadow: 0 10px 30px rgba(10, 30, 20, .25); }
+:root[data-look="glass"] .plugin-view-area { border-radius: 16px; background: rgba(255, 255, 255, .3); }
+
+/* Text tones tuned for the brighter, tinted backdrop. */
+:root[data-look="glass"] :is(.eyebrow, .canvas-caption b, .section-label, .inspector-title) { color: #2e5a44; }
+:root[data-look="glass"] :is(.metrics span, .metrics small, .hostname, .canvas-caption span, .map-footer, .canvas-hint, .app-footer) { color: #34503f; }
+:root[data-look="glass"] .metrics strong { color: #1b3a2b; }
+
+/* The look switch itself. */
+.look-switch { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; font-size: 12px; }
+.topbar-end { display: flex; align-items: center; gap: 10px; }
+
+@media (prefers-reduced-transparency: reduce) {
+  :root[data-look="glass"] :is(.rail, .map-panel, .inspector, .metrics > div, .topbar, dialog, .server-card) { background: rgba(250, 253, 251, .96); -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+
+/* Body text sits on an unknown backdrop, so keep it dark and add a soft
+   light halo for legibility. */
+:root[data-look="glass"] :is(.app-main, .rail, dialog) { text-shadow: 0 0 10px rgba(255, 255, 255, .55); }
+:root[data-look="glass"] :is(.terminal-screen, .workload-logs, .primary, .danger-button) { text-shadow: none; }
+:root[data-look="glass"] :is(dd, td, .muted, small, .hostname, .node-workloads > div, .facts dt, dt) { color: #2b4637; }
+:root[data-look="glass"] :is(.topbar, .menu-category-toggle, .menu-icon, .menu-detach, .quit-button, .local-badge, .node-workloads > div, .node-workloads p, .small-state, .workload-icon, .server-card footer, .canvas-caption b, .canvas-caption span, .canvas-hint, .access-strip strong, .access-strip p, .access-icon, .access-status, .app-footer, .app-footer b, .app-footer b span, .map-footer, .text-button, .inspector-tabs button, .view-tabs button, .metrics span, .metrics small, kbd, .search-box > span, .workspace-server-line, .section-heading p, th, .workspace-tabs button, .inventory-summary, .inventory-summary span, .unavailable p, .empty-copy, .notice, .notice > span, .workspace-footer, form label, .terminal-help, .terminal-message, .dialog-title > button, .observation-tag, .relationship-item span, .activity-list li, .activity-list time, .activity-view > p, .loading-state p, .plugin-status, .plugin-facts dt, td small) { color: #22402f; }
+:root[data-look="glass"] .topbar strong { color: #10261b; }
+:root[data-look="glass"] :is(.text-button, .menu-items button.active, .menu-items button.active .menu-icon) { color: #0f5e3d; }
+:root[data-look="glass"] input::placeholder { color: #3f5a4b; }
+:root[data-look="glass"] .server-card .observation-tag, :root[data-look="glass"] .observation-tag { font-weight: 500; }
+:root[data-look="glass"] .state-pill { color: #22402f; }
+:root[data-look="glass"] .inventory-refresh-status { border-radius: 14px; }
+
+:root[data-look="glass"] .topbar { height: 48px; }
+:root[data-look="glass"] .desktop-main { padding: 10px 10px 10px 14px; }
+:root[data-look="glass"] .topbar-stats dd { color: #10261b; }
+:root[data-look="glass"] .feedback .save-message:not(:empty) { background: rgba(255, 255, 255, .6); border-color: var(--glass-edge); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
+:root[data-look="glass"] .panel-toggle { border-radius: 50%; background: rgba(255, 255, 255, .6); border-color: var(--glass-edge); }
+:root[data-look="glass"] .inspector-open { top: 16px; right: 18px; }
+:root[data-look="glass"] .app-tile { border-radius: 16px; }
+:root[data-look="glass"] .app-details { background: rgba(250, 253, 251, .96); }

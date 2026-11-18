@@ -66,3 +66,36 @@ test("structured SSH errors explain trust, authentication and session failures",
   assert.match(errorMessage({code: "unauthenticated"}), /SSH identity/);
   assert.match(errorMessage({code: "expired_session"}), /Reconnect/);
 });
+
+test("relationship lines get their own connection points on facing sides", async () => {
+  const { routeEdges } = await import("./map-model.ts");
+  const servers = [{ id: "dns", x: 0, y: 0 }, { id: "a", x: 600, y: -300 }, { id: "b", x: 600, y: 0 }, { id: "c", x: 600, y: 300 }, { id: "d", x: 0, y: 600 }];
+  const edges = ["a", "b", "c", "d"].map(target => ({ id: `e-${target}`, source: "dns", target }));
+  const { ports, routes } = routeEdges(servers, edges);
+  // Three servers to the right share the right side, in top-to-bottom order; the one below uses the bottom.
+  const right = ports.get("dns")!.filter(p => p.side === "right");
+  assert.deepEqual(right.map(p => p.id), ["right-source-e-a", "right-source-e-b", "right-source-e-c"]);
+  assert.ok(right[0].offset < right[1].offset && right[1].offset < right[2].offset);
+  assert.equal(routes.get("e-d")?.sourceHandle, "bottom-source-e-d");
+  assert.equal(routes.get("e-d")?.targetHandle, "top-target-e-d");
+  assert.equal(routes.get("e-a")?.targetHandle, "left-target-e-a");
+  assert.equal(new Set([...ports.values()].flat().map(p => p.id)).size, 8);
+  // A line to a missing server or to itself is left to the default.
+  assert.equal(routeEdges(servers, [{ id: "x", source: "dns", target: "gone" }, { id: "y", source: "a", target: "a" }]).routes.size, 0);
+});
+
+test("labels move along their own line until nothing covers them", async () => {
+  const { pathPoints, pointAlong, placeLabels } = await import("./map-model.ts");
+  const points = pathPoints("M 0,0 L 90,0Q 100,0 100,10 L 100,100");
+  assert.deepEqual(points, [{ x: 0, y: 0 }, { x: 90, y: 0 }, { x: 100, y: 10 }, { x: 100, y: 100 }]);
+  assert.deepEqual(pointAlong([{ x: 0, y: 0 }, { x: 100, y: 0 }], 0.25), { x: 25, y: 0 });
+  // Two lines on top of each other: the second label slides away from the first.
+  const line = [{ x: 0, y: 0 }, { x: 400, y: 0 }];
+  const places = placeLabels([{ id: "a", points: line, width: 80, height: 20 }, { id: "b", points: line, width: 80, height: 20 }], []);
+  assert.deepEqual(places.get("a"), { x: 200, y: 0 });
+  assert.ok(Math.abs(places.get("b")!.x - 200) >= 80);
+  // A card over the middle pushes the label off it.
+  const card = [{ x: 150, y: -50, width: 100, height: 100 }];
+  const clear = placeLabels([{ id: "c", points: line, width: 60, height: 20 }], card).get("c")!;
+  assert.ok(clear.x + 30 < 150 || clear.x - 30 > 250);
+});

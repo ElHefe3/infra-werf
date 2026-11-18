@@ -94,6 +94,15 @@ pub struct DiscoveredApp {
     pub title: Option<String>,
     /// Process name when visible to the SSH account.
     pub process: Option<String>,
+    /// The app's own favicon as a `data:` URL, when it served a small PNG,
+    /// ICO, GIF, JPEG or WebP image. The type comes from the image bytes,
+    /// never from the server's claim; anything else is dropped.
+    #[serde(default)]
+    pub icon: Option<String>,
+    /// What the page says it is built with (its `generator` meta tag), which
+    /// often includes a version. Display text only.
+    #[serde(default)]
+    pub version: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -115,7 +124,7 @@ pub(crate) const REMOTE_APPS_COMMAND: &str = r#####"
 LC_ALL=C; LANG=C; export LC_ALL LANG
 printf 'ATLAS_APPS_V1\n'
 if ! command -v ss >/dev/null 2>&1; then printf 'NO_SS\nEND\n'; exit 0; fi
-seen=' '
+seen=' '; budget=40000
 ss -Hltnp 2>/dev/null | awk '{print $4, $6}' | head -n 256 | while read -r local proc; do
   port=${local##*:}; addr=${local%:*}; addr=${addr#\[}; addr=${addr%\]}; addr=${addr%%%*}
   case "$port" in ''|*[!0-9]*) continue;; esac
@@ -128,7 +137,7 @@ ss -Hltnp 2>/dev/null | awk '{print $4, $6}' | head -n 256 | while read -r local
     *:*) host="[$addr]";;
     *) host="$addr";;
   esac
-  code=000; title=''; https=0; out=''
+  code=000; title=''; https=0; out=''; icon=''; made=''
   if command -v curl >/dev/null 2>&1; then
     out=$(curl -s -m 2 --max-filesize 65536 -H 'Accept: text/html' -w '\n__ATLAS_CODE__%{http_code}' "http://$host:$port/" 2>/dev/null | head -c 70000)
     code=${out##*__ATLAS_CODE__}; [ -n "$code" ] || code=000
@@ -138,8 +147,20 @@ ss -Hltnp 2>/dev/null | awk '{print $4, $6}' | head -n 256 | while read -r local
     flat=$(printf '%s' "$out" | tr -d '\r' | tr '\n\t' '  ')
     title=$(printf '%s' "$flat" | sed -n 's/.*<[Tt][Ii][Tt][Ll][Ee][^>]*>\([^<]*\)<.*/\1/p' | cut -c1-160)
     [ -n "$title" ] || title=$(printf '%s' "$flat" | sed -n 's/.*<[Hh]1[^>]*>\([^<]*\)<.*/\1/p' | cut -c1-160)
+    made=$(printf '%s' "$flat" | tr "'" '"' | grep -o '<[Mm][Ee][Tt][Aa][^>]*>' | grep -i 'name="generator"' | head -n 1 | sed -n 's/.*[Cc][Oo][Nn][Tt][Ee][Nn][Tt]="\([^"]*\)".*/\1/p' | cut -c1-80)
+    # The app's favicon: a same-origin <link rel=icon> path, else /favicon.ico.
+    # At most 6 KiB each and about 40 KB in total, so the reply stays small.
+    if [ "$code" != 000 ] && [ "$https" = 0 ] && [ "$budget" -gt 0 ] && command -v base64 >/dev/null 2>&1; then
+      ref=$(printf '%s' "$flat" | tr "'" '"' | grep -o '<[Ll][Ii][Nn][Kk][^>]*>' | grep -i 'rel="[^"]*icon' | head -n 1 | sed -n 's/.*[Hh][Rr][Ee][Ff]="\([^"]*\)".*/\1/p')
+      case "$ref" in //*|*://*|data:*|'') ref=/favicon.ico;; /*) ;; *) ref="/$ref";; esac
+      case "$ref" in *[!A-Za-z0-9._~/?=%-]*) ref=/favicon.ico;; esac
+      icon=$(curl -s -m 2 --max-filesize 6144 "http://$host:$port$ref" 2>/dev/null | head -c 6145 | base64 | tr -d '\n')
+      [ ${#icon} -le 8196 ] || icon=''
+      budget=$((budget - ${#icon}))
+      [ "$budget" -ge 0 ] || icon=''
+    fi
   fi
-  printf 'APP\t%s\t%s\t%s\t%s\t%s\t%s\n' "$addr" "$port" "$code" "$https" "$name" "$title"
+  printf 'APP\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$addr" "$port" "$code" "$https" "$name" "$icon" "$made" "$title"
 done
 printf 'END\n'
 "#####;
@@ -163,6 +184,38 @@ fn clean_title(raw: &str) -> Option<String> {
     (!text.is_empty()).then_some(text)
 }
 
+/// Largest favicon accepted from discovery, in bytes.
+pub const MAX_ICON_BYTES: usize = 6 * 1024;
+
+/// A `data:` URL for a small raster image, typed by its magic bytes.
+fn icon_data_url(encoded: &str) -> Option<String> {
+    use base64::Engine as _;
+    if encoded.is_empty() || encoded.len() > MAX_ICON_BYTES.div_ceil(3) * 4 {
+        return None;
+    }
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(encoded)
+        .ok()?;
+    if bytes.len() > MAX_ICON_BYTES {
+        return None;
+    }
+    let mime = if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        "image/png"
+    } else if bytes.starts_with(&[0, 0, 1, 0]) {
+        "image/x-icon"
+    } else if bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a") {
+        "image/gif"
+    } else if bytes.starts_with(&[0xff, 0xd8, 0xff]) {
+        "image/jpeg"
+    } else if bytes.len() > 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP" {
+        "image/webp"
+    } else {
+        return None;
+    };
+    let clean = base64::engine::general_purpose::STANDARD.encode(&bytes);
+    Some(format!("data:{mime};base64,{clean}"))
+}
+
 /// Strictly parse discovery output; malformed lines are skipped, never echoed.
 pub fn parse_discovery(output: &str) -> Option<(bool, Vec<DiscoveredApp>)> {
     let mut lines = output.lines();
@@ -180,8 +233,8 @@ pub fn parse_discovery(output: &str) -> Option<(bool, Vec<DiscoveredApp>)> {
             }
             "NO_SS" => complete = false,
             _ => {
-                let fields: Vec<&str> = line.splitn(7, '\t').collect();
-                if fields.len() != 7 || fields[0] != "APP" || apps.len() >= MAX_DISCOVERED {
+                let fields: Vec<&str> = line.splitn(9, '\t').collect();
+                if fields.len() != 9 || fields[0] != "APP" || apps.len() >= MAX_DISCOVERED {
                     continue;
                 }
                 let bind = fields[1];
@@ -222,8 +275,14 @@ pub fn parse_discovery(output: &str) -> Option<(bool, Vec<DiscoveredApp>)> {
                     remote_host,
                     http_status: if https_only { None } else { http_status },
                     https_only,
-                    title: clean_title(fields[6]),
+                    title: clean_title(fields[8]),
+                    version: clean_title(fields[7]).map(|text| text.chars().take(60).collect()),
                     process,
+                    icon: if https_only {
+                        None
+                    } else {
+                        icon_data_url(fields[6])
+                    },
                 };
                 if !apps
                     .iter()
@@ -602,18 +661,43 @@ mod tests {
     }
 
     #[test]
+    fn discovery_icons_are_typed_by_their_bytes_and_bounded() {
+        use base64::Engine as _;
+        let b64 = |bytes: &[u8]| base64::engine::general_purpose::STANDARD.encode(bytes);
+        let png = b64(b"\x89PNG\r\n\x1a\nrest");
+        let markup = b64(b"<svg onload=alert(1)>");
+        let big = b64(&[0u8, 0, 1, 0].repeat(MAX_ICON_BYTES / 4 + 1));
+        let output = format!(
+            "ATLAS_APPS_V1\n\
+APP\t127.0.0.1\t3000\t200\t0\tgrafana\t{png}\t\tGrafana\n\
+APP\t127.0.0.1\t3001\t200\t0\tx\t{markup}\t\tNot an image\n\
+APP\t127.0.0.1\t3002\t200\t0\tx\t{big}\t\tToo big\n\
+APP\t127.0.0.1\t3003\t200\t0\tx\tnot base64!\t\tBroken\n\
+APP\t*\t9443\t000\t1\t\t{png}\t\tHTTPS only\n\
+END\n"
+        );
+        let (_, apps) = parse_discovery(&output).unwrap();
+        assert_eq!(
+            apps[0].icon.as_deref(),
+            Some(format!("data:image/png;base64,{png}").as_str())
+        );
+        assert_eq!(apps.len(), 5);
+        assert!(apps[1..].iter().all(|app| app.icon.is_none()));
+    }
+
+    #[test]
     fn discovery_parses_only_strict_fields() {
         let output = "ATLAS_APPS_V1\n\
-APP\t127.0.0.1\t3000\t200\t0\tgrafana\t  Grafana &amp; friends \n\
-APP\t0.0.0.0\t22\t000\t0\tsshd\t\n\
-APP\t*\t9443\t000\t1\t\t\n\
-APP\t192.168.20.12\t8080\t302\t0\tjava\t\x1b[31mEvil\x07 Title\n\
-APP\t::1\t3000\t200\t0\tgrafana\tdup\n\
-APP\tnot-an-ip\t81\t200\t0\tx\tbad\n\
-APP\t127.0.0.1\t99999\t200\t0\tx\tbad\n\
+APP\t127.0.0.1\t3000\t200\t0\tgrafana\t\tGrafana v11.2\t  Grafana &amp; friends \n\
+APP\t0.0.0.0\t22\t000\t0\tsshd\t\t\t\n\
+APP\t*\t9443\t000\t1\t\t\t\t\n\
+APP\t192.168.20.12\t8080\t302\t0\tjava\t\t\t\x1b[31mEvil\x07 Title\n\
+APP\t::1\t3000\t200\t0\tgrafana\t\t\tdup\n\
+APP\tnot-an-ip\t81\t200\t0\tx\t\t\tbad\n\
+APP\t127.0.0.1\t99999\t200\t0\tx\t\t\tbad\n\
 garbage line\n\
-APP\t127.0.0.1\t5000\t200\t0\tbad name!\tok\n\
-APP\t192.168.20.12\t3000\t200\t0\tgrafana\tsame port on LAN\n\
+APP\t127.0.0.1\t5000\t200\t0\tbad name!\t\t\tok\n\
+APP\t192.168.20.12\t3000\t200\t0\tgrafana\t\t\tsame port on LAN\n\
 END\n";
         let (complete, apps) = parse_discovery(output).unwrap();
         assert!(complete);
@@ -621,13 +705,15 @@ END\n";
         assert_eq!(ports, vec![3000, 5000, 8080, 22, 9443]);
         assert_eq!(apps[0].title.as_deref(), Some("Grafana & friends"));
         assert_eq!(apps[0].process.as_deref(), Some("grafana"));
+        assert_eq!(apps[0].version.as_deref(), Some("Grafana v11.2"));
+        assert_eq!(apps[1].version, None);
         assert_eq!(apps[0].remote_host, None);
         assert_eq!(apps[1].process, None);
         assert_eq!(apps[2].remote_host.as_deref(), Some("192.168.20.12"));
         assert_eq!(apps[2].title.as_deref(), Some("[31mEvil Title"));
         assert_eq!(apps[3].http_status, None);
         assert!(apps[4].https_only);
-        assert!(parse_discovery("ATLAS_APPS_V1\nAPP\t127.0.0.1\t1\t200\t0\tx\ty\n").is_none());
+        assert!(parse_discovery("ATLAS_APPS_V1\nAPP\t127.0.0.1\t1\t200\t0\tx\t\t\ty\n").is_none());
         assert!(parse_discovery("nope\nEND\n").is_none());
         assert_eq!(
             parse_discovery("ATLAS_APPS_V1\nNO_SS\nEND\n"),

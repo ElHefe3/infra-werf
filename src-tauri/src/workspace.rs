@@ -7,6 +7,7 @@ use atlas_core::*;
 mod jobs;
 mod monitoring;
 mod packs;
+mod pin;
 mod tunnels;
 mod views;
 use atlas_core::{
@@ -114,6 +115,7 @@ pub struct Workspace {
     live: Mutex<monitoring::LiveScheduler>,
     live_contact: Mutex<()>,
     tunnels: Mutex<tunnels::Tunnels>,
+    pin: Mutex<atlas_core::pin::PinGate>,
     packs: packs::Packs,
     views: views::Views,
     jobs: jobs::Jobs,
@@ -152,6 +154,13 @@ impl Workspace {
             ssh.clone(),
             SessionPolicy::default(),
         );
+        let pin = Self::load_pin(
+            &paths
+                .database
+                .parent()
+                .unwrap_or_else(|| std::path::Path::new("."))
+                .join("pin.json"),
+        );
         let workspace = Arc::new(Self {
             paths,
             store: Mutex::new(store),
@@ -165,6 +174,7 @@ impl Workspace {
             live: Mutex::new(monitoring::LiveScheduler::default()),
             live_contact: Mutex::new(()),
             tunnels: Mutex::new(tunnels::Tunnels::default()),
+            pin: Mutex::new(pin),
             packs: packs::Packs::default(),
             updates: Mutex::new(HashMap::new()),
             views: views::Views::default(),

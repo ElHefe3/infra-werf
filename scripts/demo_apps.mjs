@@ -32,10 +32,11 @@ await page.reload(); await page.waitForFunction(() => Boolean(window.__TAURI_INT
 const label = (await invoke('map_state')).servers.find(s => s.id === node.id).name;
 await page.getByRole('button', { name: `Open ${label} workspace`, exact: true }).click();
 await page.getByRole('tab', { name: 'Apps', exact: true }).click();
+await page.getByText('Enter a port manually').click();
 await page.getByLabel('Remote port').fill(String(info.app_port));
 await page.getByLabel('Application name').fill('Private dashboard');
 await page.getByRole('button', { name: 'Save shortcut', exact: true }).click();
-await page.locator('button.app-launch', { hasText: 'Private dashboard' }).click();
+await page.locator('button.app-tile', { hasText: 'Private dashboard' }).click();
 await browser.close();
 console.log(`Demo running (fixture app on server localhost:${info.app_port}). Close InfraWerf to finish.`);
 await new Promise(r => app.once('exit', r));

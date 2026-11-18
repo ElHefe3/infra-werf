@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Secret } from "./pin";
 import type { ElevationPreview, MapServer } from "./contracts.gen";
 import { createWorkspaceClient } from "./workspace-client";
 import { useProtectedSession } from "./protected-session";
@@ -56,7 +57,7 @@ export function ElevationCheck({ server, onBusy, disabled = false }: { server: M
   return <section className="ssh-connection" aria-label="Fresh elevation check"><div className="section-heading"><div><h3>Protected access & elevation</h3><p>Check a fresh sudo password and root identity without changing files or services.</p></div>{access.session ? <button onClick={() => access.lock()}>Lock protected session</button> : access.busy ? <button onClick={() => access.lock("Connection cancelled.")}>Cancel protected connection</button> : <button disabled={busy || disabled} className="primary" onClick={() => void access.connect()}>Open protected session</button>}</div>
     {(access.error || error) && <p role="alert" className="form-error">{access.error || error}</p>}
     {(access.notice || notice) && <p role="status">{notice || access.notice}</p>}
-    {access.session && <><div className="file-session"><span className="state-pill">SSH authenticated · {access.session.profile.user}@{access.session.profile.hostname}</span><code>{access.session.fingerprint}</code></div>
+    {access.session && <><div className="file-session"><span className="state-pill">SSH authenticated · {access.session.profile.user}@{access.session.profile.hostname}</span><Secret label="Host key fingerprint" value={access.session.fingerprint} /></div>
       {!preview && <button disabled={busy || disabled} onClick={() => void review()}>Review elevated access check</button>}
       {preview && <form className="file-change-review" aria-label="Review elevated action" onSubmit={event => void confirm(event)}><dl><dt>Server</dt><dd>{server.name} · {preview.server}</dd><dt>Endpoint</dt><dd>{preview.endpoint}</dd><dt>Action</dt><dd>{preview.action}</dd></dl><label>Password for this action<input ref={password} type="password" aria-label="Password for this action" autoComplete="off" maxLength={1024} required disabled={busy} /></label><p>The password stays within this action. Cancelling or locking requires a new review before another attempt.</p><button className="primary" type="submit" disabled={busy}>{busy ? "Checking fresh access…" : "Confirm with fresh sudo"}</button><button type="button" onClick={() => void cancel()}>{busy ? "Cancel elevated action" : "Cancel elevation review"}</button></form>}
     </>}

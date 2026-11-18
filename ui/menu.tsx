@@ -2,9 +2,13 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 import { BrandMark } from "./brand";
 import { cascade, closePanel, defaultLayout, detach, loadLayout, movePanel, place, raise, saveLayout, setOpen, toggleCollapsed, toggleShade, type MenuGroup, type MenuLayout, type Panel, type Size, type View } from "./menu-model";
 
-// Main menu (T053): categories of items, one level deep. Each category can be
-// detached as a floating copy that is dragged anywhere inside the window, and
-// the main menu can be hidden; one floating button always brings it back.
+// Main menu (T053): categories of items, one level deep. The main menu can be
+// hidden; one floating button always brings it back.
+//
+// Detaching a category as a floating copy is disabled (D064): it duplicated
+// navigation without serving a purpose. The model code stays so the decision
+// can be revisited as a configuration feature rather than navigation.
+export const MENU_POPOUT_ENABLED = false;
 
 export type MenuController = { layout: MenuLayout; update: (change: (layout: MenuLayout) => MenuLayout) => void; reset: () => void };
 
@@ -92,16 +96,16 @@ export function MenuSystem({ groups, view, go, menu, quit }: { groups: MenuGroup
   }
 
   return <>
-    <button className="menu-toggle" aria-label={layout.open ? "Hide menu" : "Show menu"} title={`${layout.open ? "Hide" : "Show"} menu (Ctrl+B)`} aria-expanded={layout.open} aria-controls="main-menu" onClick={() => update(current => setOpen(current, !current.open))}>{layout.open ? "⟨" : "☰"}</button>
+    <button className="menu-toggle" aria-label={layout.open ? "Hide menu" : "Show menu"} title={`${layout.open ? "Hide" : "Show"} menu (Ctrl+B)`} aria-expanded={layout.open} aria-controls="main-menu" onClick={() => update(current => setOpen(current, !current.open))}>◧</button>
     {layout.open && <aside className="rail" id="main-menu"><div className="rail-head"><BrandMark /></div>
       <nav aria-label="Main navigation">{groups.map(group => { const collapsed = layout.collapsed.includes(group.id); const floating = detached(group.id); return <section className="menu-category" key={group.id} aria-label={group.title}>
         <div className="menu-category-head"><button className="menu-category-toggle" aria-label={`${group.title} category`} aria-expanded={!collapsed} onClick={() => update(current => toggleCollapsed(current, group.id))}><span aria-hidden>{collapsed ? "▸" : "▾"}</span>{group.title}</button>
-          <button className="menu-detach" aria-label={`${floating ? "Dock" : "Detach"} ${group.title} menu`} title={floating ? `Dock the floating ${group.title} menu` : `Detach ${group.title} as a floating menu (click or drag out)`} aria-pressed={floating} onPointerDown={event => tearDown(event, group.id)} onClick={() => { if (suppressClick.current) { suppressClick.current = false; return; } toggleDetached(group.id); }}>⧉</button></div>
+          {MENU_POPOUT_ENABLED && <button className="menu-detach" aria-label={`${floating ? "Dock" : "Detach"} ${group.title} menu`} title={floating ? `Dock the floating ${group.title} menu` : `Detach ${group.title} as a floating menu (click or drag out)`} aria-pressed={floating} onPointerDown={event => tearDown(event, group.id)} onClick={() => { if (suppressClick.current) { suppressClick.current = false; return; } toggleDetached(group.id); }}>⧉</button>}</div>
         {!collapsed && <Items group={group} view={view} go={go} />}
       </section>; })}</nav>
-      <div className="rail-bottom"><button className="quit-button" aria-label="Quit InfraWerf" title="Quit InfraWerf" onClick={quit}><span className="menu-icon" aria-hidden>⏻</span>Quit</button><span className="local-avatar" title="Local workspace">L</span></div>
+      <div className="rail-bottom"><button className="quit-button" aria-label="Quit InfraWerf" title="Quit InfraWerf" onClick={quit}><span className="menu-icon" aria-hidden>⏻</span>Quit</button></div>
     </aside>}
-    {layout.panels.map((panel, index) => { const group = groups.find(entry => entry.id === panel.category); if (!group) return null; return <section className={`menu-panel ${panel.shaded ? "shaded" : ""}`} key={panel.category} role="dialog" aria-label={`${group.title} menu`} style={{ left: panel.x, top: panel.y, zIndex: 40 + index }}
+    {MENU_POPOUT_ENABLED && layout.panels.map((panel, index) => { const group = groups.find(entry => entry.id === panel.category); if (!group) return null; return <section className={`menu-panel ${panel.shaded ? "shaded" : ""}`} key={panel.category} role="dialog" aria-label={`${group.title} menu`} style={{ left: panel.x, top: panel.y, zIndex: 40 + index }}
       ref={element => { if (element) elements.current.set(panel.category, element); else elements.current.delete(panel.category); }}
       onPointerDownCapture={() => update(current => raise(current, panel.category))}
       onKeyDown={event => { if (event.key === "Escape") { event.stopPropagation(); update(current => closePanel(current, panel.category)); } }}>

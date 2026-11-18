@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Secret } from "./pin";
 import { listen } from "@tauri-apps/api/event";
 import type { MapServer, SshVerification } from "./contracts.gen";
 import { createWorkspaceClient } from "./workspace-client";
@@ -59,7 +60,7 @@ export function SshConnection({ server, onBusy, disabled = false }: { server: Ma
       {copy && result && <div className={`ssh-result ${result.state === "verified" ? "verified" : "attention"}`} data-ssh-state={result.state}>
         <h4>{copy[0]}</h4><p>{copy[1]}</p>
         {result.profile && <dl><div><dt>Resolved endpoint</dt><dd>{result.profile.user}@{result.profile.hostname}:{result.profile.port}</dd></div><div><dt>Configured identity references</dt><dd>{result.profile.identity_files}</dd></div></dl>}
-        {result.fingerprint && <div className="ssh-fingerprint"><span>{result.state === "verified" ? "Verified host fingerprint" : "Presented fingerprint · verify independently"}</span><code>{result.key_type} {result.fingerprint}</code></div>}
+        {result.fingerprint && <div className="ssh-fingerprint"><span>{result.state === "verified" ? "Verified host fingerprint" : "Presented fingerprint · verify independently"}</span><Secret label="Host key fingerprint" value={`${result.key_type} ${result.fingerprint}`} /></div>}
         <small>Checked {new Date(result.checked_at).toLocaleString()}</small>
       </div>}
     </div>

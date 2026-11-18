@@ -127,17 +127,24 @@ impl Workspace {
         self: &Arc<Self>,
         id: &ServerId,
     ) -> Result<AppDiscovery, AtlasError> {
-        let _contact = self.live_contact_guard()?;
         let _admission = self.begin()?;
-        let target = self.ssh_target(id)?;
-        let ticket = self.files.prepare(&target)?;
-        let session_admission = self.begin()?;
-        let session = self.files.open(
-            &target,
-            &ticket.operation_id,
-            Box::new(session_admission),
-            None,
-        )?;
+        // Live contact is serialised only while the session opens, as for
+        // file sessions. The slow remote listing then runs without it, so
+        // opening a tunnel from the cached list need not wait; a target
+        // change meanwhile discards the result below.
+        let (target, session) = {
+            let _contact = self.live_contact_guard()?;
+            let target = self.ssh_target(id)?;
+            let ticket = self.files.prepare(&target)?;
+            let session_admission = self.begin()?;
+            let session = self.files.open(
+                &target,
+                &ticket.operation_id,
+                Box::new(session_admission),
+                None,
+            )?;
+            (target, session)
+        };
         let found = self
             .files
             .discover_applications(&target, &session.session_id);

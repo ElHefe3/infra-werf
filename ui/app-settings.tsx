@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { PinSettings } from "./pin";
 import type { MapServer, MonitoringState } from "./contracts.gen";
 import type { WorkspaceClient } from "./workspace-client";
 import type { Bound } from "./extensions-model";
@@ -17,7 +18,7 @@ export type AppSettingsContext = {
   busy: boolean;
   /** Runs a change, then reloads and reports the outcome in the screen's status line. */
   act: (action: () => Promise<unknown>, message: string) => Promise<void>;
-  /** Docks every floating menu, shows the main menu and expands its categories. */
+  /** Shows the main menu and expands its categories (and docks any floating copy). */
   resetMenu: () => void;
   servers: MapServer[];
   /** The plugin whose page is open, if any. */
@@ -39,8 +40,9 @@ export const appSettings: Record<string, AppSettingsRenderer> = {
   </>,
   "builtin.app-settings.plugins": ({ servers, pluginFocus, setPluginFocus }) => <PluginsSection servers={servers} focus={pluginFocus} setFocus={setPluginFocus} />,
   "builtin.app-settings.plugin-activity": ({ servers }) => <PluginActivitySection servers={servers} />,
+  "builtin.app-settings.pin": () => <PinSettings />,
   "builtin.app-settings.menu-layout": ({ busy, act, resetMenu }) => <>
-    <p className="muted">Detach a menu category with its ⧉ button, or drag that button out of the menu, to keep a floating copy anywhere in the window. Hide or show the main menu with the button in its corner or Ctrl+B. The layout is remembered on this PC.</p>
+    <p className="muted">Hide or show the main menu with the button in its corner or Ctrl+B. Collapsed categories and whether the menu is shown are remembered on this PC.</p>
     <button disabled={busy} onClick={() => void act(async () => resetMenu(), "Menu layout reset.")}>Reset menu layout</button>
   </>,
 };
