@@ -16,7 +16,7 @@ Context: The owner's instance remains theirs alone; openness is about the softwa
 
 ## T050 — Licence, public repository and contribution rules
 
-<!-- atlas-ticket: {"id":"T050","feature":"F25","status":"todo","depends_on":["T040"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T050","feature":"F25","status":"in_progress","depends_on":["T040"],"evidence":"../evidence/T050-acceptance.md"} -->
 
 ### Outcome and included work
 
@@ -34,9 +34,9 @@ Audit the repository and history for hostnames, addresses, keys and evidence tha
 
 ### Acceptance criteria
 
-- [ ] The licence decision is recorded and applied.
-- [ ] A secrets and private-data audit of the tree and history is recorded with its findings resolved.
-- [ ] Contribution, security-reporting and API-compatibility documents exist.
+- [x] The licence decision is recorded and applied.
+- [x] A secrets and private-data audit of the tree and history is recorded with its findings resolved.
+- [x] Contribution, security-reporting and API-compatibility documents exist.
 - [ ] The owner has approved publication explicitly.
 
 ### Verification
@@ -45,7 +45,7 @@ Audit report; a clean clone builds from the public documents alone.
 
 ### Evidence and closure
 
-None yet.
+In progress: [T050 acceptance](../evidence/T050-acceptance.md). Owner decision [D062](../discovery/D062-licence-and-public-repository.md): MIT OR Apache-2.0, all history rewritten into a separate public copy, `agent/` published with lab details replaced, security reports through GitHub private vulnerability reporting. Three criteria are met; the dry-run public copy has 0 problems and a clean clone of it builds. The ticket closes when the owner approves publication explicitly. Publishing itself, from `master` once S12 is complete, is the owner's action ([PUBLISHING.md](../PUBLISHING.md)).
 
 ### Stop conditions
 
