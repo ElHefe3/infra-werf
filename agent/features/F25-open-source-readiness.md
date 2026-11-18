@@ -16,7 +16,7 @@ Context: The owner's instance remains theirs alone; openness is about the softwa
 
 ## T050 — Licence, public repository and contribution rules
 
-<!-- atlas-ticket: {"id":"T050","feature":"F25","status":"in_progress","depends_on":["T040"],"evidence":"../evidence/T050-acceptance.md"} -->
+<!-- atlas-ticket: {"id":"T050","feature":"F25","status":"done","depends_on":["T040"],"evidence":"../evidence/T050-acceptance.md"} -->
 
 ### Outcome and included work
 
@@ -37,7 +37,7 @@ Audit the repository and history for hostnames, addresses, keys and evidence tha
 - [x] The licence decision is recorded and applied.
 - [x] A secrets and private-data audit of the tree and history is recorded with its findings resolved.
 - [x] Contribution, security-reporting and API-compatibility documents exist.
-- [ ] The owner has approved publication explicitly.
+- [x] The owner has approved publication explicitly.
 
 ### Verification
 
@@ -45,7 +45,7 @@ Audit report; a clean clone builds from the public documents alone.
 
 ### Evidence and closure
 
-In progress: [T050 acceptance](../evidence/T050-acceptance.md). Owner decision [D062](../discovery/D062-licence-and-public-repository.md): MIT OR Apache-2.0, all history rewritten into a separate public copy, `agent/` published with lab details replaced, security reports through GitHub private vulnerability reporting. Three criteria are met; the dry-run public copy has 0 problems and a clean clone of it builds. The ticket closes when the owner approves publication explicitly. Publishing itself, from `master` once S12 is complete, is the owner's action ([PUBLISHING.md](../PUBLISHING.md)).
+Accepted on `020f687`: [T050 acceptance](../evidence/T050-acceptance.md). Owner decision [D062](../discovery/D062-licence-and-public-repository.md): MIT OR Apache-2.0, all history rewritten into a separate public copy, `agent/` published with lab details replaced, security reports through GitHub private vulnerability reporting. The dry-run public copy has 0 problems and a clean clone of it builds. The owner approved publication on 2026-11-18 ("Yes, approve"). Publishing, from `master` once S12 is complete, is the owner's action by [PUBLISHING.md](../PUBLISHING.md); nothing was pushed. No separate review pass was run.
 
 ### Stop conditions
 

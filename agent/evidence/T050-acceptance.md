@@ -2,7 +2,7 @@
 
 Date: 2026-11-18. Feature: F25 / S12. Ticket: T050.
 Revision: 71cbcae
-Result: three of four criteria met; publication awaits the owner's explicit approval
+Result: pass. The owner approved publication on 2026-11-18; publishing itself, from `master` once S12 is complete, is the owner's action
 
 Branch `feature/s12-extensibility`. Nothing was pushed anywhere. The public copy described below exists only on the owner's PC.
 
@@ -78,7 +78,7 @@ The clean clone was built on this PC, whose tool installs and package caches alr
 | The licence decision is recorded and applied | D062; licence files; licence fields in both crates and `package.json`; README, CONTRIBUTING and COMPATIBILITY state it. |
 | A secrets and private-data audit of the tree and history is recorded with its findings resolved | The audit above. Every finding was replaced, reworded or judged not private. The rewritten public copy has 0 problems by two independent scans and a raw search. |
 | Contribution, security-reporting and API-compatibility documents exist | CONTRIBUTING.md, SECURITY.md, docs/COMPATIBILITY.md, linked from the README. |
-| The owner has approved publication explicitly | **Not yet.** Asked on 2026-11-18. |
+| The owner has approved publication explicitly | Approved on 2026-11-18. Asked whether InfraWerf may be published once S12 is merged to `master`, the owner answered "Yes, approve". The approval covers publishing by the steps in [PUBLISHING.md](../PUBLISHING.md); the push itself remains the owner's. |
 
 ## Notes
 
