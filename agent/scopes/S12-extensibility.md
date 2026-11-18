@@ -1,6 +1,6 @@
 # S12 — Extensibility: plugins and add-ons
 
-<!-- atlas-scope: {"id":"S12","features":["F18","F19","F20","F21","F22","F23","F24","F25"],"depends_on":["S06"],"window":2,"deferred":false} -->
+<!-- atlas-scope: {"id":"S12","features":["F18","F19","F20","F21","F22","F23","F24","F25"],"depends_on":["S06"],"window":2,"deferred":false,"evidence":"../evidence/S12-acceptance.md"} -->
 
 ## Outcome
 
@@ -33,12 +33,12 @@ Ticket status is canonical in the feature packets; scope progress is derived. Do
 
 ## Acceptance gate
 
-- [ ] Built-in features are delivered through the same extension points plugins use.
-- [ ] A plugin can do nothing its manifest did not request and the owner did not grant; enforcement is in the Rust core.
-- [ ] No plugin can obtain private keys, sudo passwords, a raw SSH session or unrestricted local file access.
-- [ ] The owner can see what each plugin did and disable any plugin immediately.
-- [ ] The plugin API is versioned and documented, and a reference plugin built only on it runs on the owner's lab.
-- [ ] Publication as open source is an explicit, recorded owner decision after a private-data audit.
+- [x] Built-in features are delivered through the same extension points plugins use.
+- [x] A plugin can do nothing its manifest did not request and the owner did not grant; enforcement is in the Rust core.
+- [x] No plugin can obtain private keys, sudo passwords, a raw SSH session or unrestricted local file access.
+- [x] The owner can see what each plugin did and disable any plugin immediately.
+- [x] The plugin API is versioned and documented, and a reference plugin built only on it runs on the owner's lab.
+- [x] Publication as open source is an explicit, recorded owner decision after a private-data audit.
 
 ## Verification and refinement
 
