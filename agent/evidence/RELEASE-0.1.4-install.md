@@ -9,3 +9,5 @@ Date: 2026-11-08. Revision: `608c572` plus the 0.1.4 version bump committed with
 - The old 0.1.3 program in the Codex package cache (D050) was left in place, unused; removing it is an owner decision.
 
 Result: installed and launched. Visual confirmation of the owner's map and the Apps tab is left to the owner.
+
+**Correction 2026-11-18:** "an unpackaged shell" and "ordinary `%LOCALAPPDATA%\InfraWerf`" are wrong. The install ran from the Claude desktop shell and was redirected into `%LOCALAPPDATA%\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Local\InfraWerf`; the same applies to the 0.1.5 install recorded in T035 progress. The owner's real install is now 0.1.6 from Explorer. See [D063](../discovery/D063-claude-desktop-shell-is-also-packaged.md).
