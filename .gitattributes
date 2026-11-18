@@ -1,6 +1,7 @@
-scripts/fixtures/linux/*.sh text eol=lf
+scripts/fixtures/linux/* text eol=lf
 scripts/fixtures/linux/Containerfile text eol=lf
 scripts/fixtures/linux/sshd_config text eol=lf
 crates/atlas-core/tests/fixtures/plugin-archives/** -text
 crates/atlas-core/tests/fixtures/plugin-updates/** -text
 crates/atlas-core/tests/fixtures/plugin-sandbox/** -text
+*.wasm binary
