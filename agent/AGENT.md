@@ -14,7 +14,7 @@
 - **Core target:** Windows desktop 100% by the owner’s explicit 2026-10-26 decision. Mobile/coordinator is future S09; agents/rsync stay deferred. Run all remaining desktop batches sequentially without asking between batches; retain proportional proof/review and actual permission boundaries.
 - **Budget target:** two five-hour usage windows; a prioritisation target, not a quota or elapsed-time guarantee.
 - **Baseline:** A01 Python/SQLite/browser work is historical, with evidence in [IMPLEMENTATION.md](../IMPLEMENTATION.md). It does not complete new Rust/React/native tickets.
-- **Tracker:** 58 tickets / 26 features / 13 scopes: 45 core and 13 deferred tickets. Done=41, in progress=3, todo=1, deferred=13. Feature-packet ticket metadata is the sole status authority. S10/F16/T034 is the authorised dynamic desktop extension; mobile and server-agent deployment remain deferred.
+- **Tracker:** 58 tickets / 26 features / 13 scopes: 45 core and 13 deferred tickets. Done=42, in progress=3, todo=0, deferred=13. Feature-packet ticket metadata is the sole status authority. S10/F16/T034 is the authorised dynamic desktop extension; mobile and server-agent deployment remain deferred.
 
 ## Read protocol
 

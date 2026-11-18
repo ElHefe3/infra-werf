@@ -53,7 +53,7 @@ Stop before any push to a public remote without explicit owner approval.
 
 ## T051 — Reference plugin for a real homelab need
 
-<!-- atlas-ticket: {"id":"T051","feature":"F25","status":"todo","depends_on":["T043","T040"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T051","feature":"F25","status":"done","depends_on":["T043","T040"],"evidence":"../evidence/T051-acceptance.md"} -->
 
 ### Outcome and included work
 
@@ -71,9 +71,9 @@ Build it as a declarative pack first and add a view or logic only if those tiers
 
 ### Acceptance criteria
 
-- [ ] The plugin installs through the normal flow and shows real data from the owner's servers.
-- [ ] It uses only documented API v1 features.
-- [ ] API gaps found while building it are recorded as tickets.
+- [x] The plugin installs through the normal flow and shows real data from the owner's servers.
+- [x] It uses only documented API v1 features.
+- [x] API gaps found while building it are recorded as tickets.
 
 ### Verification
 
@@ -81,7 +81,7 @@ Owner acceptance on the installed desktop application.
 
 ### Evidence and closure
 
-None yet.
+Accepted on `7ae8b6d`: [T051 acceptance](../evidence/T051-acceptance.md). The reference plugin is [`examples/systemd-backups`](../../examples/systemd-backups/README.md): read-only systemctl pack commands, a badge and a scheduled Rust job, built only with the public API (plugin API v2, a superset of v1). On a copy of the owner's data, against three of the owner's servers, it showed current backup results, including two failing backups. The owner watched and accepted it on 2026-11-18 ("Yes, accept"). API gaps are deferred tickets T054–T058 (S13/F26). No separate review pass was run.
 
 ### Stop conditions
 
