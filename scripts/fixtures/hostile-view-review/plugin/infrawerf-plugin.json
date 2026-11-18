@@ -1,0 +1,24 @@
+{
+  "id": "org.example.hostile-view-review",
+  "name": "Hostile view (review)",
+  "version": "1.0.0",
+  "api_version": 2,
+  "description": "Test fixture for the T047 isolation review: side channels, log flooding and timing. Never install it for real use.",
+  "capabilities": ["read_saved_state", "ssh_session", "run_approved_command"],
+  "contributions": [
+    {
+      "id": "kernel",
+      "point": "collector",
+      "title": "Kernel version",
+      "capabilities": ["ssh_session", "run_approved_command"],
+      "command": { "argv": ["uname", "-r"], "extract": { "kind": "line" } }
+    },
+    {
+      "id": "escape2",
+      "point": "workspace_tab",
+      "title": "Review attempts",
+      "capabilities": ["read_saved_state"],
+      "view": { "entry": "view/index.html" }
+    }
+  ]
+}

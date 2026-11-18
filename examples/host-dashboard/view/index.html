@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Host dashboard</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <h1 id="server">Host dashboard</h1>
+  <p class="muted">A plugin page. It sees only what you allowed this plugin on this server.</p>
+  <section>
+    <h2>Readings</h2>
+    <ul id="readings"><li>Loading…</li></ul>
+  </section>
+  <section>
+    <h2>Kernel version</h2>
+    <p>InfraWerf asks you before anything runs.</p>
+    <button id="read-kernel">Read kernel version</button>
+    <p id="action" role="status"></p>
+  </section>
+  <section>
+    <h2>Saved inventory</h2>
+    <p id="inventory">Loading…</p>
+  </section>
+</body>
+</html>

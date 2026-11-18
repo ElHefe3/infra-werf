@@ -3,18 +3,26 @@ name = "atlas-core"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.99.1"
+license = "MIT OR Apache-2.0"
 
 [dependencies]
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.154"
 chrono = { version = "=0.4.45", default-features = false, features = ["clock", "std"] }
 uuid = { version = "=1.29.0", features = ["v4"] }
-ts-rs = "=12.0.1"
+ts-rs = { version = "=12.0.1", features = ["no-serde-warnings"] }
 rusqlite = { version = "=0.41.0", features = ["bundled", "backup"] }
 tempfile = "=3.27.0"
 sha2 = "=0.10.9"
 base64 = "=0.23.1"
 zeroize = "=1.9.1"
+schemars = "=1.2.3"
+zip = { version = "=9.6.1", default-features = false, features = ["deflate"] }
+tar = { version = "=0.4.46", default-features = false }
+flate2 = "=1.1.11"
+minisign-verify = "=0.3.0"
+ureq = { version = "=3.5.2", default-features = false, features = ["rustls"] }
+wasmi = { version = "=2.0.0", default-features = false, features = ["std", "validate", "auto-dispatch"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "=0.61.2", features = ["Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_Console", "Win32_System_JobObjects", "Win32_System_Pipes", "Win32_System_Threading"] }
@@ -28,5 +36,12 @@ name = "export-contracts"
 path = "src/bin/export-contracts.rs"
 
 [[bin]]
+name = "infrawerf-plugin"
+path = "src/bin/infrawerf-plugin.rs"
+
+[[bin]]
 name = "atlas-ssh"
 path = "src/bin/atlas-ssh.rs"
+
+[dev-dependencies]
+wat = "=1.263.0"

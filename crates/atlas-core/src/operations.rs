@@ -32,6 +32,7 @@ fn lock<T>(value: &Mutex<T>) -> Result<std::sync::MutexGuard<'_, T>, AtlasError>
 pub enum Inspection {
     SystemSummary {},
     ApplicationDiscovery {},
+    PackCommand {},
     FileMetadata { path: String },
     ServiceStatus { workload_id: String },
     WorkloadControl { workload_id: String },
@@ -156,6 +157,7 @@ pub enum InspectionPlan {
     TerminalOpen,
     SystemSummary,
     ApplicationDiscovery,
+    PackCommand,
     FileMetadata(ScopedPath),
     ServiceStatus { workload_id: String },
     WorkloadControl { workload_id: String },
@@ -216,6 +218,7 @@ impl SessionScope {
             }
             Inspection::SystemSummary {} => InspectionPlan::SystemSummary,
             Inspection::ApplicationDiscovery {} => InspectionPlan::ApplicationDiscovery,
+            Inspection::PackCommand {} => InspectionPlan::PackCommand,
             Inspection::FileMetadata { path } => {
                 let path = absolute_path(&path)?;
                 let root = self
@@ -284,6 +287,8 @@ struct Registry {
 struct Shared {
     registry: Mutex<Registry>,
     workers: AtomicUsize,
+    /// Shared by every clone of the broker, so a change reaches them all.
+    extensions: std::sync::RwLock<Arc<crate::extensions::ExtensionRegistry>>,
 }
 #[derive(Clone)]
 pub struct OperationBroker {
@@ -313,10 +318,31 @@ impl OperationBroker {
             shared: Arc::new(Shared {
                 registry: Mutex::new(Registry::default()),
                 workers: AtomicUsize::new(0),
+                extensions: std::sync::RwLock::new(Arc::new(crate::extensions::builtin())),
             }),
             duration,
             output_limit,
         })
+    }
+    /// Replaces the extension registry for this broker and all its clones;
+    /// used when contributions are disabled or, later, added. Operations
+    /// without a registered entry are refused from then on.
+    pub fn set_extensions(
+        &self,
+        registry: crate::extensions::ExtensionRegistry,
+    ) -> Result<(), AtlasError> {
+        *self
+            .shared
+            .extensions
+            .write()
+            .map_err(|_| error(ErrorCode::IoFailure))? = Arc::new(registry);
+        Ok(())
+    }
+    pub fn extensions(&self) -> Arc<crate::extensions::ExtensionRegistry> {
+        match self.shared.extensions.read() {
+            Ok(current) => current.clone(),
+            Err(poisoned) => poisoned.into_inner().clone(),
+        }
     }
     /// Native code calls this for its trusted local window. A future remote
     /// adapter may call it ONLY after validated pairing/session authentication.
@@ -503,6 +529,9 @@ impl OperationBroker {
         current_target: &ServerTarget,
         request: InspectionRequest,
     ) -> Result<OperationTicket, AtlasError> {
+        // Every operation prepared here is a registered contribution (S12/F18).
+        let (extension, capability) = crate::extensions::operation_entry(&request.inspection);
+        self.extensions().authorize(extension, capability)?;
         let mut registry = lock(&self.shared.registry)?;
         let actor = self.actor(&registry, authority)?;
         let session = registry
@@ -558,6 +587,14 @@ impl OperationBroker {
         target: &ServerTarget,
         plan: InspectionPlan,
     ) -> Result<OperationTicket, AtlasError> {
+        // The session bootstraps are registered contributions too.
+        let extension = match plan {
+            InspectionPlan::ConnectionCheck => crate::extensions::OPERATION_CONNECTION_CHECK,
+            InspectionPlan::SftpOpen => crate::extensions::OPERATION_SFTP_OPEN,
+            _ => return Err(error(ErrorCode::InvalidInput)),
+        };
+        self.extensions()
+            .authorize(extension, crate::extensions::Capability::SshSession)?;
         let mut registry = lock(&self.shared.registry)?;
         let actor = self.actor(&registry, authority)?;
         let expires = Instant::now() + self.duration;
@@ -986,6 +1023,87 @@ mod tests {
             .unwrap();
         let job = broker.job(Some(&caller), &ticket.operation_id).unwrap();
         (broker, caller, job, ticket.operation_id)
+    }
+
+    #[test]
+    fn unregistered_or_undeclared_operations_are_refused_before_preparation() {
+        use crate::extensions::{
+            BUILTIN_OWNER, Capability, Contribution, ExtensionPoint, ExtensionRegistry,
+        };
+        let request = |broker: &OperationBroker, caller: &Authority| {
+            let target =
+                ServerTarget::new(ServerId::parse("ext-host").unwrap(), "ext.invalid").unwrap();
+            let session = broker
+                .register_authenticated_session(
+                    caller,
+                    target.clone(),
+                    SessionScope::new(vec![], vec![]).unwrap(),
+                    Duration::from_secs(60),
+                )
+                .unwrap();
+            broker.prepare(
+                Some(caller),
+                &target,
+                InspectionRequest {
+                    server_id: target.server_id.clone(),
+                    session_id: session,
+                    inspection: Inspection::SystemSummary {},
+                },
+            )
+        };
+        // The built-in registry admits it.
+        let broker = OperationBroker::default();
+        let caller = broker.issue_backend_authority().unwrap();
+        assert!(request(&broker, &caller).is_ok());
+        // With the contribution absent, the same request is refused.
+        let broker = OperationBroker::default();
+        // A clone made before the change sees it too: the registry is shared.
+        let earlier_clone = broker.clone();
+        broker.set_extensions(ExtensionRegistry::new()).unwrap();
+        let caller = broker.issue_backend_authority().unwrap();
+        assert_eq!(
+            request(&earlier_clone, &caller).err().unwrap().code,
+            ErrorCode::NotFound
+        );
+        // The session bootstraps are refused as well.
+        let target =
+            ServerTarget::new(ServerId::parse("ext-host").unwrap(), "ext.invalid").unwrap();
+        assert_eq!(
+            earlier_clone
+                .prepare_connection_check(Some(&caller), &target)
+                .err()
+                .unwrap()
+                .code,
+            ErrorCode::NotFound
+        );
+        assert_eq!(
+            broker
+                .prepare_sftp(Some(&caller), &target)
+                .err()
+                .unwrap()
+                .code,
+            ErrorCode::NotFound
+        );
+        // Registered without the capability it needs: also refused.
+        let mut registry = ExtensionRegistry::new();
+        registry
+            .register(Contribution {
+                id: "builtin.operation.system-summary".into(),
+                point: ExtensionPoint::Operation,
+                title: "System summary".into(),
+                owner: BUILTIN_OWNER.into(),
+                order: 1,
+                capabilities: vec![Capability::ReadFiles],
+            })
+            .unwrap();
+        let broker = OperationBroker::default();
+        broker.set_extensions(registry).unwrap();
+        let caller = broker.issue_backend_authority().unwrap();
+        assert_eq!(
+            request(&broker, &caller).err().unwrap().code,
+            ErrorCode::Denied
+        );
+        assert_eq!(broker.active_workers(), 0);
     }
 
     #[test]

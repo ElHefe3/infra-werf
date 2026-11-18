@@ -39,6 +39,7 @@ fn newer_import_preserves_identity_owner_edits_edges_and_excludes_persisted_raw_
         .unwrap();
     let edge = store
         .add_relationship(AddRelationship {
+            kind: None,
             source: id.clone(),
             target: other,
             label: "Uses".into(),
@@ -226,6 +227,7 @@ fn authenticated_refresh_store_write_preserves_owner_map_fields_and_rejects_old_
         .unwrap();
     let edge = store
         .add_relationship(AddRelationship {
+            kind: None,
             source: id.clone(),
             target: other,
             label: "owner link".into(),

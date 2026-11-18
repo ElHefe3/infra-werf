@@ -2,6 +2,17 @@
 
 Your homelab, connected.
 
+InfraWerf is a desktop workspace for the servers you run yourself: a map of your machines and how they relate, and for each server its inventory, health, files, terminal, services and containers, all through your own OpenSSH access. Plugins add data, apps, views and automation, within the permissions you give them. Your instance is yours: InfraWerf has no account, no cloud service and no telemetry.
+
+## Start here
+
+- **Build it.** Windows 11 x64 is the release target. See [CONTRIBUTING.md](CONTRIBUTING.md#building) for the short path and [BUILDING.md](BUILDING.md) for the full one.
+- **Extend it.** The [plugin author guide](docs/plugin-api/guide.md) builds a plugin from an empty folder; the [manifest reference](docs/plugin-api/README.md), [packs](docs/plugin-api/packs.md), [views](docs/plugin-api/views.md), [plugin logic](docs/plugin-api/logic.md) and [sharing and installing](docs/plugin-api/install.md) cover the rest, and `examples/` holds working plugins, starting with [backup-overview](examples/backup-overview/README.md). [What InfraWerf keeps stable](docs/COMPATIBILITY.md) says what you can rely on.
+- **Contribute.** Read [CONTRIBUTING.md](CONTRIBUTING.md). Report security problems privately as [SECURITY.md](SECURITY.md) describes.
+- **Licence.** InfraWerf is licensed under either of [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option. Plugins are their authors' own works under the licences their authors choose.
+
+The rest of this file, and everything under `agent/`, is the project's working record: its plan, decisions and evidence, written while it was built for one homelab. Names, addresses and paths in it are placeholders.
+
 A native infrastructure map and server workspace, with a Windows desktop as the release target. A separate compact Android interface and phone pairing are future S09 work.
 
 **Stack:** **React + TypeScript + React Flow, Tauri on Windows and native Android, Rust, SQLite and system OpenSSH/SSH agent**, with SFTP first and rsync later. The desktop map now uses React Flow and real Rust persistence. See [STACK.md](STACK.md) for the original source and requirements.

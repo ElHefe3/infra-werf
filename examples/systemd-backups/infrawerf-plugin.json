@@ -1,0 +1,249 @@
+{
+  "id": "org.example.systemd-backups",
+  "name": "Systemd backups",
+  "version": "1.0.0",
+  "api_version": 2,
+  "description": "Shows which backup services failed or are stuck restarting, and when each last finished, read with systemctl and no root.",
+  "author": "The InfraWerf contributors",
+  "license": "MIT OR Apache-2.0",
+  "capabilities": [
+    "read_saved_state",
+    "ssh_session",
+    "run_approved_command"
+  ],
+  "contributions": [
+    {
+      "id": "failing-services",
+      "point": "collector",
+      "title": "Failing services",
+      "capabilities": [
+        "ssh_session",
+        "run_approved_command"
+      ],
+      "command": {
+        "argv": [
+          "systemctl",
+          "list-units",
+          "--all",
+          "--type=service",
+          "--state=failed,auto-restart",
+          "--no-legend",
+          "--no-pager",
+          "--plain",
+          "--full"
+        ],
+        "extract": {
+          "kind": "table",
+          "columns": [
+            "unit",
+            "load",
+            "active",
+            "sub",
+            "description"
+          ]
+        }
+      },
+      "workload_kind": {
+        "name_column": "unit",
+        "state_column": "sub"
+      }
+    },
+    {
+      "id": "failing-user-services",
+      "point": "collector",
+      "title": "Failing user services",
+      "capabilities": [
+        "ssh_session",
+        "run_approved_command"
+      ],
+      "command": {
+        "argv": [
+          "systemctl",
+          "--user",
+          "list-units",
+          "--all",
+          "--type=service",
+          "--state=failed,auto-restart",
+          "--no-legend",
+          "--no-pager",
+          "--plain",
+          "--full"
+        ],
+        "extract": {
+          "kind": "table",
+          "columns": [
+            "unit",
+            "load",
+            "active",
+            "sub",
+            "description"
+          ]
+        }
+      },
+      "workload_kind": {
+        "name_column": "unit",
+        "state_column": "sub"
+      }
+    },
+    {
+      "id": "system-state",
+      "point": "health_check",
+      "title": "System state",
+      "capabilities": [
+        "ssh_session",
+        "run_approved_command"
+      ],
+      "command": {
+        "argv": [
+          "systemctl",
+          "is-system-running"
+        ],
+        "extract": {
+          "kind": "line"
+        },
+        "healthy": [
+          "running"
+        ]
+      }
+    },
+    {
+      "id": "state-badge",
+      "point": "server_badge",
+      "title": "Systemd state",
+      "capabilities": [
+        "read_saved_state"
+      ],
+      "badge": {
+        "observation": "system-state"
+      }
+    },
+    {
+      "id": "last-result",
+      "point": "health_check",
+      "title": "Last result",
+      "capabilities": [
+        "ssh_session",
+        "run_approved_command"
+      ],
+      "command": {
+        "argv": [
+          "systemctl",
+          "show",
+          "--no-pager",
+          "--value",
+          "--property=Result",
+          "{unit}"
+        ],
+        "parameters": [
+          {
+            "name": "unit",
+            "source": "service"
+          }
+        ],
+        "extract": {
+          "kind": "line"
+        },
+        "healthy": [
+          "success"
+        ]
+      }
+    },
+    {
+      "id": "last-finished",
+      "point": "collector",
+      "title": "Last finished",
+      "capabilities": [
+        "ssh_session",
+        "run_approved_command"
+      ],
+      "command": {
+        "argv": [
+          "systemctl",
+          "show",
+          "--no-pager",
+          "--value",
+          "--property=ExecMainExitTimestamp",
+          "{unit}"
+        ],
+        "parameters": [
+          {
+            "name": "unit",
+            "source": "service"
+          }
+        ],
+        "extract": {
+          "kind": "line"
+        }
+      }
+    },
+    {
+      "id": "restarts",
+      "point": "collector",
+      "title": "Restarts since started",
+      "capabilities": [
+        "ssh_session",
+        "run_approved_command"
+      ],
+      "command": {
+        "argv": [
+          "systemctl",
+          "show",
+          "--no-pager",
+          "--value",
+          "--property=NRestarts",
+          "{unit}"
+        ],
+        "parameters": [
+          {
+            "name": "unit",
+            "source": "service"
+          }
+        ],
+        "extract": {
+          "kind": "line"
+        }
+      }
+    },
+    {
+      "id": "timer",
+      "point": "collector",
+      "title": "Started by",
+      "capabilities": [
+        "ssh_session",
+        "run_approved_command"
+      ],
+      "command": {
+        "argv": [
+          "systemctl",
+          "show",
+          "--no-pager",
+          "--value",
+          "--property=TriggeredBy",
+          "{unit}"
+        ],
+        "parameters": [
+          {
+            "name": "unit",
+            "source": "service"
+          }
+        ],
+        "extract": {
+          "kind": "line"
+        }
+      }
+    },
+    {
+      "id": "check-backups",
+      "point": "job",
+      "title": "Check backups",
+      "capabilities": [
+        "read_saved_state",
+        "ssh_session",
+        "run_approved_command"
+      ],
+      "job": {
+        "module": "job.wasm"
+      }
+    }
+  ]
+}

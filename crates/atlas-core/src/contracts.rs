@@ -268,6 +268,27 @@ pub struct Relationship {
     pub source: ServerId,
     pub target: ServerId,
     pub label: String,
+    /// The plugin relationship kind chosen when it was documented, if any.
+    #[serde(default)]
+    pub kind: Option<RelationshipKindRef>,
+}
+
+/// The relationship kind a map relationship was documented with. The title
+/// is kept with the relationship, so it still reads the same if the plugin
+/// is later disabled or removed; only the line style then falls back.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct RelationshipKindRef {
+    pub plugin_id: String,
+    pub kind_id: String,
+    pub title: String,
+}
+
+/// Which plugin relationship kind to document a relationship with.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct RelationshipKindChoice {
+    pub plugin_id: String,
+    pub contribution_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -358,6 +379,10 @@ pub struct AddRelationship {
     pub source: ServerId,
     pub target: ServerId,
     pub label: String,
+    /// A relationship kind from an enabled plugin; absent for a plain one.
+    #[serde(default)]
+    #[ts(optional)]
+    pub kind: Option<RelationshipKindChoice>,
 }
 
 /// Ephemeral authenticated data: intentionally not part of BaselineInventory.
@@ -455,11 +480,13 @@ pub fn typescript_contracts() -> String {
         ServiceSummary,
         ContainerSummary,
         MapServer,
+        RelationshipKindRef,
         Relationship,
         Activity,
         MapState,
         AddServer,
         UpdateServer,
+        RelationshipKindChoice,
         AddRelationship,
         ProtectedText,
         LiveMetrics,
@@ -472,6 +499,14 @@ pub fn typescript_contracts() -> String {
     output.push_str(&crate::tunnel::typescript_contracts(&cfg));
     output.push_str(&crate::files::typescript_contracts());
     output.push_str(&crate::workloads::typescript_contracts());
+    output.push_str(&crate::extensions::typescript_contracts(&cfg));
+    output.push_str(&crate::pack::typescript_contracts(&cfg));
+    output.push_str(&crate::plugin_install::typescript_contracts(&cfg));
+    output.push_str(&crate::plugin_install::update_contracts(&cfg));
+    output.push_str(&crate::plugin_view::typescript_contracts(&cfg));
+    output.push_str(&crate::plugin_sandbox::typescript_contracts(&cfg));
+    output.push_str(&crate::plugin_jobs::typescript_contracts(&cfg));
+    output.push_str(&crate::plugin_host::typescript_contracts(&cfg));
     let mut output = output
         .lines()
         .map(str::trim_end)

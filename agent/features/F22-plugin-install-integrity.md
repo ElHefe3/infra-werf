@@ -1,6 +1,6 @@
 # F22 — Plugin install, integrity and updates
 
-<!-- atlas-feature: {"id":"F22","scope":"S12","depends_on":["F20"],"deferred":true} -->
+<!-- atlas-feature: {"id":"F22","scope":"S12","depends_on":["F20"],"deferred":false} -->
 
 ## Work packet
 
@@ -12,11 +12,11 @@
 
 Read [SCOPE.md](../SCOPE.md) for access boundaries; use [AGENT.md](../AGENT.md) for execution/proof rules. Ticket dependencies, not numeric ordering, control implementation.
 
-Context: There is no central store in the first release. Plugins come from files, folders or addresses the owner chooses. Direction and working assumptions are recorded in [D052](../discovery/D052-plugin-platform-direction.md). Deferred until the owner activates S12.
+Context: There is no central store in the first release. Plugins come from files, folders or addresses the owner chooses. Direction and working assumptions are recorded in [D052](../discovery/D052-plugin-platform-direction.md). Activated 2026-11-12 ([D053](../discovery/D053-owner-activates-extensibility.md)).
 
 ## T045 — Install, remove and verify plugins
 
-<!-- atlas-ticket: {"id":"T045","feature":"F22","status":"deferred","depends_on":["T042"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T045","feature":"F22","status":"done","depends_on":["T042"],"evidence":"../evidence/T045-acceptance.md"} -->
 
 ### Outcome and included work
 
@@ -34,10 +34,10 @@ Unpack with path and size limits into a staging directory, validate the manifest
 
 ### Acceptance criteria
 
-- [ ] A plugin installs from each of the three sources and appears disabled until reviewed.
-- [ ] An archive with path traversal, oversize content or a hash mismatch is refused with nothing left behind.
-- [ ] Removal clears files, grants and schedules.
-- [ ] The installed hash is shown and re-checked at start-up.
+- [x] A plugin installs from each of the three sources and appears disabled until reviewed.
+- [x] An archive with path traversal, oversize content or a hash mismatch is refused with nothing left behind.
+- [x] Removal clears files, grants and schedules.
+- [x] The installed hash is shown and re-checked at start-up.
 
 ### Verification
 
@@ -45,7 +45,7 @@ Malicious-archive fixtures; native install, restart and remove journey.
 
 ### Evidence and closure
 
-None yet. The ticket is deferred until the owner activates S12.
+Accepted on `6777941`: [T045 acceptance](../evidence/T045-acceptance.md). Owner decision [D058](../discovery/D058-plugin-install-sources-and-signatures.md) first. All four criteria are met and proven by the new `plugin-install` native suite with a loopback HTTPS server; schedules do not exist yet, so their removal moves to T049. No separate review pass was run.
 
 ### Stop conditions
 
@@ -53,11 +53,16 @@ Stop if installation would need to run plugin-supplied code.
 
 ## T046 — Updates that re-ask when capabilities grow
 
-<!-- atlas-ticket: {"id":"T046","feature":"F22","status":"deferred","depends_on":["T045"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T046","feature":"F22","status":"done","depends_on":["T045"],"evidence":"../evidence/T046-acceptance.md"} -->
 
 ### Outcome and included work
 
 Updating a plugin compares its requested capabilities with the granted ones; additions require a new review and are never granted silently.
+
+### Carried in from T045
+
+- An update arrives through the same checks as an install (`plugin_install::prepare`) and must keep the previous folder until the new one validates; today installing an existing ID is refused with `already_installed`.
+- When the previous install recorded a verified signer key ID, an update signed by another key, or unsigned, should at least be shown as such before it applies.
 
 ### Exclusions
 
@@ -71,9 +76,9 @@ Keep the previous version until the new one validates. Show a capability differe
 
 ### Acceptance criteria
 
-- [ ] An update requesting a new capability stays inactive until reviewed.
-- [ ] An update with the same or fewer capabilities applies and is logged.
-- [ ] A failed update leaves the previous version working.
+- [x] An update requesting a new capability stays inactive until reviewed.
+- [x] An update with the same or fewer capabilities applies and is logged.
+- [x] A failed update leaves the previous version working.
 
 ### Verification
 
@@ -81,7 +86,7 @@ Fixture plugins at two versions for each case.
 
 ### Evidence and closure
 
-None yet. The ticket is deferred until the owner activates S12.
+Accepted on `379bb0e`: [T046 acceptance](../evidence/T046-acceptance.md). All three criteria are met with fixture plugins at two versions for each case, in core tests and the new `plugin-update` native suite. A new review is also required for any new or changed command, application or access, not only new capabilities. No separate review pass was run.
 
 ### Stop conditions
 

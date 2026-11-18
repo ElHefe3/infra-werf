@@ -1,0 +1,35 @@
+;; Service keeper (native fixture): restarts a user service, then starts a
+;; system service, which needs sudo, logging InfraWerf's answer to each.
+;; Build: the test `job_modules_match_their_sources` writes job.wasm.
+(module
+  (import "infrawerf" "call" (func $call (param i32 i32) (result i64)))
+  (import "infrawerf" "log" (func $log (param i32 i32)))
+  (import "infrawerf" "result" (func $result (param i32 i32)))
+  (memory (export "memory") 2)
+  (global $heap (mut i32) (i32.const 16384))
+  ;; A bump allocator: the host asks for room for each answer.
+  (func (export "alloc") (param $len i32) (result i32)
+    (local $p i32)
+    (local.set $p (global.get $heap))
+    (global.set $heap (i32.add (global.get $heap) (local.get $len)))
+    (local.get $p))
+  ;; An answer comes back as (ptr << 32) | len.
+  (func $ptr (param $a i64) (result i32) (i32.wrap_i64 (i64.shr_u (local.get $a) (i64.const 32))))
+  (func $len (param $a i64) (result i32) (i32.wrap_i64 (local.get $a)))
+  (data (i32.const 0) "service keeper: checking workloads")
+  (data (i32.const 512) "{\22function\22:\22workloads\22,\22args\22:{}}")
+  (data (i32.const 1024) "{\22function\22:\22control\22,\22args\22:{\22action\22:\22restart-worker\22,\22workload\22:\22fixture-worker.service\22}}")
+  (data (i32.const 1536) "{\22function\22:\22control\22,\22args\22:{\22action\22:\22start-stopped\22,\22workload\22:\22fixture-stopped.service\22}}")
+  (data (i32.const 2048) "service keeper: done")
+  (func $say (param $a i64)
+    (call $log (call $ptr (local.get $a)) (call $len (local.get $a))))
+  (func (export "run") (result i32)
+    (local $answer i64)
+    (call $log (i32.const 0) (i32.const 34))
+    (drop (call $call (i32.const 512) (i32.const 34)))
+    (call $say (call $call (i32.const 1024) (i32.const 93)))
+    (local.set $answer (call $call (i32.const 1536) (i32.const 93)))
+    (call $say (local.get $answer))
+    (call $log (i32.const 2048) (i32.const 20))
+    (call $result (call $ptr (local.get $answer)) (call $len (local.get $answer)))
+    (i32.const 0)))

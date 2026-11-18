@@ -42,7 +42,7 @@ Owner decision, 2026-10-26: **get desktop 100%; mobile is future development**. 
 3. Keys remain outside frontend/database/evidence/logs; retain identity references only. No incidental key creation/copying.
 4. Each privileged operation explicitly requests sudo and identifies server/action/path. Never save/log passwords, reuse them for unrelated work, alter global sudo policy or grant a permanent bypass.
 5. Lock/expiry/revocation closes protected sessions, invalidates handles and clears results. Interrupted work cannot silently resume under expired credentials.
-6. Use allowlisted operations and safe argument boundaries; service/container identities come from authenticated discovery. Arbitrary terminal input is confined to the user's explicitly authenticated interactive session.
+6. Use allowlisted operations and safe argument boundaries; service/container identities come from authenticated discovery. Arbitrary terminal input is confined to the user's explicitly authenticated interactive session. Exception (D057, 2026-11-16): a read-only command declared by a plugin pack may run once the owner has reviewed its exact arguments, enabled the plugin and allowed it on that server; it is an argument list with no shell and no sudo, takes values only from authenticated discovery, and runs under the built-in output and time limits.
 7. Protected uploads stage under the SSH user, preview destination/ownership changes, then elevate only application. Retain safe recovery information for partial transfers without credentials.
 8. Existing infrastructure reports are read-only. Tests must not incidentally change real files, workloads, trust, grants, firewall/router settings or production services.
 
@@ -51,9 +51,9 @@ Owner decision, 2026-10-26: **get desktop 100%; mobile is future development**. 
 - S07: custom agents, enrolment/modules, always-on server deployment and privileged-collection exceptions.
 - S08: rsync and its Windows runtime; later copy/update default, dry-run and explicit destination deletion.
 - S11 (activated 2026-11-08, D051): remote applications — loopback-only SSH local forwards to a server's `localhost` web interfaces in an isolated in-app browser window, then optionally reviewed graphical applications. Narrowly widens the no-forwarding SSH boundary for owner-started loopback forwards only.
-- S12 (drafted 2026-11-11, D052; not activated): extensibility — plugins and add-ons on a small core, with capability grants enforced in the Rust core, owner consent, an activity log and sandboxed code tiers. Activation widens rule 6 to operations declared by plugins the owner has reviewed and enabled; no plugin may obtain keys, sudo passwords or a raw SSH session.
+- S12 (activated 2026-11-12, D053; direction in D052): extensibility — plugins and add-ons on a small core, with capability grants enforced in the Rust core, owner consent, an activity log and sandboxed code tiers. From F21 it widens rule 6 to read-only commands declared by plugins the owner has reviewed and enabled (owner decision D057, 2026-11-16); commands that change a server, sudo and scheduled runs are not covered by that decision. No plugin may obtain keys, sudo passwords or a raw SSH session. Plugins are installed only from a folder, file or `https://` address the owner chooses, fetched only when the owner presses Install (D058).
 - No iOS/macOS/Linux packages, public endpoint, new VPN, multi-user roles, app-store publication or cloud sync.
-- No automatic network/proxy/deployment rewiring from diagram edges, infrastructure migrations, broad root/container grants, floating-window desktop, remote-desktop streaming or visual redesign.
+- No automatic network/proxy/deployment rewiring from diagram edges, infrastructure migrations, broad root/container grants, floating-window desktop, remote-desktop streaming or visual redesign. Exception (D056, 2026-11-14): detachable copies of main-menu categories that float inside the single application window.
 
 ## Desktop release acceptance
 

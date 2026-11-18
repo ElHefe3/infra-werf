@@ -1,6 +1,6 @@
 # F18 — Extension points inside the core
 
-<!-- atlas-feature: {"id":"F18","scope":"S12","depends_on":["F12","F17"],"deferred":true} -->
+<!-- atlas-feature: {"id":"F18","scope":"S12","depends_on":["F12"],"deferred":false} -->
 
 ## Work packet
 
@@ -8,15 +8,15 @@
 
 **User journey:** Open InfraWerf → every workspace tab, server-card badge, collector and operation is listed in a registry → remote applications still works, now registered as a built-in extension.
 
-**Scope:** [S12](../scopes/S12-extensibility.md). **Feature prerequisites:** [F12](F12-release-acceptance.md), [F17](F17-remote-applications.md).
+**Scope:** [S12](../scopes/S12-extensibility.md). **Feature prerequisites:** [F12](F12-release-acceptance.md). It also builds on [F17](F17-remote-applications.md) as shipped in 0.1.5; that is not a tracked dependency because T035 is still awaiting closure.
 
 Read [SCOPE.md](../SCOPE.md) for access boundaries; use [AGENT.md](../AGENT.md) for execution/proof rules. Ticket dependencies, not numeric ordering, control implementation.
 
-Context: Today the 56 desktop commands and the workspace tabs in `ui/main.tsx` are wired directly. Nothing can be added without editing the core. Direction and working assumptions are recorded in [D052](../discovery/D052-plugin-platform-direction.md). Deferred until the owner activates S12.
+Context: Today the 56 desktop commands and the workspace tabs in `ui/main.tsx` are wired directly. Nothing can be added without editing the core. Direction and working assumptions are recorded in [D052](../discovery/D052-plugin-platform-direction.md). Activated 2026-11-12 ([D053](../discovery/D053-owner-activates-extensibility.md)).
 
 ## T037 — Introduce registries for tabs, badges, collectors and operations
 
-<!-- atlas-ticket: {"id":"T037","feature":"F18","status":"deferred","depends_on":["T026"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T037","feature":"F18","status":"done","depends_on":["T026"],"evidence":"../evidence/T037-acceptance.md"} -->
 
 ### Outcome and included work
 
@@ -34,10 +34,10 @@ Define one registration contract per extension point in `crates/atlas-core` and 
 
 ### Acceptance criteria
 
-- [ ] Every workspace tab and server-card badge is rendered from a registry entry, not a hard-coded list.
-- [ ] Inventory collectors and health checks are enumerated from a registry in the core.
-- [ ] All existing native suites pass unchanged, proving no behaviour change.
-- [ ] Each registry entry declares the capabilities it uses.
+- [x] Every workspace tab and server-card badge is rendered from a registry entry, not a hard-coded list.
+- [x] Inventory collectors and health checks are enumerated from a registry in the core.
+- [x] All existing native suites pass unchanged, proving no behaviour change.
+- [x] Each registry entry declares the capabilities it uses.
 
 ### Verification
 
@@ -45,7 +45,7 @@ Existing native verification suites and UI tests, plus a unit test per registry 
 
 ### Evidence and closure
 
-None yet. The ticket is deferred until the owner activates S12.
+Accepted on `33474bc`: [T037 acceptance](../evidence/T037-acceptance.md). All four criteria are met and all twelve native suites pass. The record discloses one updated inventory-suite assertion, the review findings and the one limit left for F20.
 
 ### Stop conditions
 
@@ -53,7 +53,7 @@ Stop if a registry cannot be introduced without changing an approved security bo
 
 ## T038 — Deliver remote applications as a built-in extension
 
-<!-- atlas-ticket: {"id":"T038","feature":"F18","status":"deferred","depends_on":["T037","T035"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T038","feature":"F18","status":"done","depends_on":["T037"],"evidence":"../evidence/T038-acceptance.md"} -->
 
 ### Outcome and included work
 
@@ -67,13 +67,13 @@ New remote-application behaviour; moving the feature out of the repository; any 
 
 Remove the direct wiring of remote applications from `ui/main.tsx` and the command list, and register the same pieces through T037's contracts. Record every place where the extension points were too narrow and widen the contract rather than bypassing it.
 
-**Ticket dependencies:** [T037](F18-extension-points.md), [T035](F17-remote-applications.md).
+**Ticket dependencies:** [T037](F18-extension-points.md). Converts the remote-applications feature of [T035](F17-remote-applications.md) as shipped.
 
 ### Acceptance criteria
 
-- [ ] Disabling the built-in extension removes the Apps tab and its commands with no other effect.
-- [ ] The remote-applications native suite passes unchanged.
-- [ ] Gaps found in the extension contracts are fixed in the contracts and listed in the evidence.
+- [x] Disabling the built-in extension removes the Apps tab and its commands with no other effect.
+- [x] The remote-applications native suite passes unchanged.
+- [x] Gaps found in the extension contracts are fixed in the contracts and listed in the evidence.
 
 ### Verification
 
@@ -81,8 +81,84 @@ Remove the direct wiring of remote applications from `ui/main.tsx` and the comma
 
 ### Evidence and closure
 
-None yet. The ticket is deferred until the owner activates S12.
+Accepted on `dd69f9c`: [T038 acceptance](../evidence/T038-acceptance.md). All three criteria are met and all twelve native suites pass in one run. Four contract gaps were found and fixed; they are listed in the evidence. No separate review pass was run; the record says so.
 
 ### Stop conditions
 
 Stop if the conversion needs a private back door into the core; that means the extension points are wrong.
+
+## T052 — Application Settings screen as an extension point
+
+<!-- atlas-ticket: {"id":"T052","feature":"F18","status":"done","depends_on":["T037"],"evidence":"../evidence/T052-acceptance.md"} -->
+
+### Outcome and included work
+
+One application-wide Settings screen, reached from the main navigation, that holds every setting not tied to a single server ([D055](../discovery/D055-plugin-choices-belong-to-the-owner-in-settings.md)). Its sections are registered contributions at a new `app_settings_section` extension point. The existing application-wide options move into it: history retention and SSH alias discovery, which are on the Servers & monitoring view today.
+
+### Exclusions
+
+Plugin management itself (F20, F22); any per-server setting, which stays in the server's Settings tab; new settings beyond the ones that exist today.
+
+### Implementation and contracts
+
+Add `app_settings_section` to `ExtensionPoint` with the capabilities its sections may declare, register the built-in sections in `builtin()` and bind them in the interface exactly as workspace tabs are bound. Moving an option changes where it is shown, not its command or its stored value. Keep the Servers & monitoring view for per-server lifecycle and monitoring policy.
+
+**Ticket dependencies:** [T037](F18-extension-points.md).
+
+### Acceptance criteria
+
+- [x] A Settings entry in the main navigation opens one screen whose sections all come from registry entries.
+- [x] History retention and alias discovery are on that screen and behave as before.
+- [x] No per-server setting appears on it, and no application-wide setting remains only on another screen.
+- [x] The native suites that use the moved options pass, updated only for the new location.
+
+### Verification
+
+Unit tests for the new extension point and binding; the monitoring native suite for the moved options; a native journey that opens Settings and changes history retention.
+
+### Evidence and closure
+
+Accepted on `19d1672`: [T052 acceptance](../evidence/T052-acceptance.md). All four criteria are met and all twelve native suites pass in one run. No separate review pass was run; the record says so.
+
+### Stop conditions
+
+Stop if moving an option would change its stored value or its command contract.
+
+
+## T053 — Categorised main menu with detachable category copies
+
+<!-- atlas-ticket: {"id":"T053","feature":"F18","status":"done","depends_on":["T052"],"evidence":"../evidence/T053-acceptance.md"} -->
+
+### Outcome and included work
+
+The main navigation becomes a labelled menu whose items sit in categories exactly one level deep ([D056](../discovery/D056-categorised-detachable-main-menu.md)). Each category can be detached as a floating copy that is dragged anywhere inside the application window. The main menu can be hidden, and one button that is always present brings it back. Menu items are registered contributions at a new `menu_item` extension point.
+
+### Exclusions
+
+Separate operating-system windows; floating anything other than menu categories; nested menus; plugin-defined categories (a plugin item is placed in an existing category when F19 defines how); restyling the rest of the application.
+
+### Implementation and contracts
+
+Add `menu_item` to `ExtensionPoint` (only `read_saved_state` permitted) and register the six built-in items. The interface binds them like other points and assigns each a category, icon and view; an unknown category is a binding error. Layout state (menu shown or hidden, collapsed categories, detached panels with position, roll-up state and stacking order) is validated when read from local storage. Existing item names stay stable so the native suites keep finding them.
+
+**Ticket dependencies:** [T052](F18-extension-points.md).
+
+### Acceptance criteria
+
+- [x] Every main-menu item is a registry entry and appears under exactly one category; no menu is more than one level deep.
+- [x] A category detaches as a copy while the main menu keeps it; the copy can be dragged anywhere inside the window and never leaves it.
+- [x] The main menu hides and one always-present button brings it back; detached copies keep working while it is hidden.
+- [x] Detached copies come to the front when used, roll up, close, move with the keyboard and are remembered across a restart of the interface; Settings resets the layout.
+- [x] All native suites pass with the new menu.
+
+### Verification
+
+Unit tests for the extension point, grouping, layout validation, placement and stacking; a native journey in the desktop suite that detaches, drags, hides, reloads, rolls up, tears off, closes and resets.
+
+### Evidence and closure
+
+Accepted on `81192ef`: [T053 acceptance](../evidence/T053-acceptance.md). All five criteria are met and all twelve native suites pass in one run. No separate review pass was run; the record says so.
+
+### Stop conditions
+
+Stop if the menu would need a second level, or if a detached copy would have to become a separate operating-system window.

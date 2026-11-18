@@ -1,0 +1,51 @@
+{
+  "id": "org.example.hostile-view",
+  "name": "Hostile view",
+  "version": "1.0.0",
+  "api_version": 2,
+  "description": "Test fixture: a view that tries every way out of its isolation. Never install it for real use.",
+  "capabilities": [
+    "read_saved_state",
+    "ssh_session",
+    "run_approved_command"
+  ],
+  "contributions": [
+    {
+      "id": "kernel",
+      "point": "collector",
+      "title": "Kernel version",
+      "capabilities": [
+        "ssh_session",
+        "run_approved_command"
+      ],
+      "command": {
+        "argv": [
+          "uname",
+          "-r"
+        ],
+        "extract": {
+          "kind": "line"
+        }
+      }
+    },
+    {
+      "id": "badge",
+      "point": "server_badge",
+      "title": "Badge",
+      "capabilities": [
+        "read_saved_state"
+      ]
+    },
+    {
+      "id": "escape",
+      "point": "workspace_tab",
+      "title": "Escape attempts",
+      "capabilities": [
+        "ssh_session"
+      ],
+      "view": {
+        "entry": "view/index.html"
+      }
+    }
+  ]
+}

@@ -13,6 +13,51 @@ show_properties() {
   if [ "$state" = active ]; then sub=running; else sub=dead; fi
   printf 'LoadState=loaded\nActiveState=%s\nSubState=%s\nUnitFileState=enabled\n' "$state" "$sub"
 }
+# Synthetic backups (T051), present only when the backups suite creates the
+# marker, so other suites see the services they always have.
+backups_on() { [ -e /tmp/atlas-backup-fixture ]; }
+backup_units() {
+  if backups_on; then
+    printf '%s\n' 'fixture-backup.service loaded failed failed Synthetic failed backup'
+    printf '%s\n' 'fixture-loop-backup.service loaded activating auto-restart Synthetic restarting backup'
+    printf '%s\n' 'fixture-nightly-backup.service loaded inactive dead Synthetic healthy backup'
+  fi
+}
+backup_property() {
+  case "$1:$2" in
+    Result:fixture-nightly-backup.service) printf 'success\n' ;;
+    Result:fixture-backup.service|Result:fixture-loop-backup.service) printf 'exit-code\n' ;;
+    NRestarts:fixture-loop-backup.service) printf '12\n' ;;
+    NRestarts:*) printf '0\n' ;;
+    ExecMainExitTimestamp:fixture-loop-backup.service) printf 'Wed 2026-11-18 09:41:07 UTC\n' ;;
+    ExecMainExitTimestamp:*) printf 'Wed 2026-11-18 03:00:12 UTC\n' ;;
+    TriggeredBy:fixture-loop-backup.service) printf '\n' ;;
+    TriggeredBy:*) printf '%s\n' "${2%.service}.timer" ;;
+    *) return 1 ;;
+  esac
+}
+# Without the marker these commands are unanswered, exactly as before.
+if backups_on; then
+case "$*" in
+  "list-units --all --type=service --state=failed,auto-restart --no-legend --no-pager --plain --full")
+    printf '%s\n' 'fixture-backup.service loaded failed failed Synthetic failed backup'
+    printf '%s\n' 'fixture-loop-backup.service loaded activating auto-restart Synthetic restarting backup'
+    exit 0 ;;
+  "--user list-units --all --type=service --state=failed,auto-restart --no-legend --no-pager --plain --full")
+    exit 0 ;;
+  "is-system-running")
+    printf 'degraded\n'; exit 1 ;;
+  "show --no-pager --value --property="*)
+    set -- $*
+    property="${4#--property=}"; unit="$5"
+    if [ $# -eq 5 ]; then
+      case "$unit" in fixture-backup.service|fixture-loop-backup.service|fixture-nightly-backup.service)
+        backup_property "$property" "$unit"; exit $? ;;
+      esac
+    fi
+    printf 'Unit %s could not be found.\n' "$unit" >&2; exit 4 ;;
+esac
+fi
 case "$*" in
   "--system list-units --all --type=service --no-legend --no-pager --plain --full")
     printf '%s\n' 'atlas-fixture.service loaded active running Synthetic Atlas fixture service'
@@ -23,6 +68,7 @@ case "$*" in
     printf '%s\n' 'fixture-log-denied.service loaded active running Synthetic log denial fixture service'
     printf '%s\n' 'fixture-large.service loaded active running Synthetic bounded log fixture service'
     printf '%s\n' 'fixture-missing.service loaded inactive dead Synthetic unavailable fixture service'
+    backup_units
     ;;
   "--user list-units --all --type=service --no-legend --no-pager --plain --full")
     printf '%s\n' 'fixture-worker.service loaded inactive dead Synthetic fixture user service'

@@ -1,6 +1,6 @@
 # F25 — Open-source readiness and reference plugin
 
-<!-- atlas-feature: {"id":"F25","scope":"S12","depends_on":["F19","F21"],"deferred":true} -->
+<!-- atlas-feature: {"id":"F25","scope":"S12","depends_on":["F19","F21"],"deferred":false} -->
 
 ## Work packet
 
@@ -12,11 +12,11 @@
 
 Read [SCOPE.md](../SCOPE.md) for access boundaries; use [AGENT.md](../AGENT.md) for execution/proof rules. Ticket dependencies, not numeric ordering, control implementation.
 
-Context: The owner's instance remains theirs alone; openness is about the software and its plugin ecosystem. Direction and working assumptions are recorded in [D052](../discovery/D052-plugin-platform-direction.md). Deferred until the owner activates S12.
+Context: The owner's instance remains theirs alone; openness is about the software and its plugin ecosystem. Direction and working assumptions are recorded in [D052](../discovery/D052-plugin-platform-direction.md). Activated 2026-11-12 ([D053](../discovery/D053-owner-activates-extensibility.md)).
 
 ## T050 — Licence, public repository and contribution rules
 
-<!-- atlas-ticket: {"id":"T050","feature":"F25","status":"deferred","depends_on":["T040"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T050","feature":"F25","status":"done","depends_on":["T040"],"evidence":"../evidence/T050-acceptance.md"} -->
 
 ### Outcome and included work
 
@@ -34,10 +34,10 @@ Audit the repository and history for hostnames, addresses, keys and evidence tha
 
 ### Acceptance criteria
 
-- [ ] The licence decision is recorded and applied.
-- [ ] A secrets and private-data audit of the tree and history is recorded with its findings resolved.
-- [ ] Contribution, security-reporting and API-compatibility documents exist.
-- [ ] The owner has approved publication explicitly.
+- [x] The licence decision is recorded and applied.
+- [x] A secrets and private-data audit of the tree and history is recorded with its findings resolved.
+- [x] Contribution, security-reporting and API-compatibility documents exist.
+- [x] The owner has approved publication explicitly.
 
 ### Verification
 
@@ -45,7 +45,7 @@ Audit report; a clean clone builds from the public documents alone.
 
 ### Evidence and closure
 
-None yet. The ticket is deferred until the owner activates S12.
+Accepted on `71cbcae`: [T050 acceptance](../evidence/T050-acceptance.md). Owner decision [D062](../discovery/D062-licence-and-public-repository.md): MIT OR Apache-2.0, all history rewritten into a separate public copy, `agent/` published with lab details replaced, security reports through GitHub private vulnerability reporting. The dry-run public copy has 0 problems and a clean clone of it builds. The owner approved publication on 2026-11-18 ("Yes, approve"). Publishing, from `master` once S12 is complete, is the owner's action by [PUBLISHING.md](../PUBLISHING.md); nothing was pushed. No separate review pass was run.
 
 ### Stop conditions
 
@@ -53,7 +53,7 @@ Stop before any push to a public remote without explicit owner approval.
 
 ## T051 — Reference plugin for a real homelab need
 
-<!-- atlas-ticket: {"id":"T051","feature":"F25","status":"deferred","depends_on":["T043","T040"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T051","feature":"F25","status":"done","depends_on":["T043","T040"],"evidence":"../evidence/T051-acceptance.md"} -->
 
 ### Outcome and included work
 
@@ -71,9 +71,9 @@ Build it as a declarative pack first and add a view or logic only if those tiers
 
 ### Acceptance criteria
 
-- [ ] The plugin installs through the normal flow and shows real data from the owner's servers.
-- [ ] It uses only documented API v1 features.
-- [ ] API gaps found while building it are recorded as tickets.
+- [x] The plugin installs through the normal flow and shows real data from the owner's servers.
+- [x] It uses only documented API v1 features.
+- [x] API gaps found while building it are recorded as tickets.
 
 ### Verification
 
@@ -81,7 +81,7 @@ Owner acceptance on the installed desktop application.
 
 ### Evidence and closure
 
-None yet. The ticket is deferred until the owner activates S12.
+Accepted on `7ae8b6d`: [T051 acceptance](../evidence/T051-acceptance.md). The reference plugin is [`examples/systemd-backups`](../../examples/systemd-backups/README.md): read-only systemctl pack commands, a badge and a scheduled Rust job, built only with the public API (plugin API v2, a superset of v1). On a copy of the owner's data, against three of the owner's servers, it showed current backup results, including two failing backups. The owner watched and accepted it on 2026-11-18 ("Yes, accept"). API gaps are deferred tickets T054–T058 (S13/F26). No separate review pass was run.
 
 ### Stop conditions
 

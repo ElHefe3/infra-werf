@@ -3,34 +3,35 @@ import { listen } from "@tauri-apps/api/event";
 import type { FileAction, FileEntry, FilePage, FileSession, FileResource, FileChange, FileMutationPreview, MapServer, LocalSelection, ProtectedPlacementStage, ProtectedPlacementReceipt, ElevationPreview, ProtectedPlacementRequest } from "./contracts.gen";
 import { createWorkspaceClient } from "./workspace-client";
 import { errorMessage } from "./map-model";
+import { fileErrors, lateFailure } from "./file-session-model";
 import { TransferQueue, transferActive, useTransfers } from "./transfer-queue";
 
 const client = createWorkspaceClient();
-const fileErrors: Record<string, string> = {
-  host_trust_failure: "The SSH host identity needs review. Verify it independently through your existing SSH client before retrying.",
-  unauthenticated: "SSH authentication failed. Check your configured identity or unlock your existing SSH agent.",
-  io_failure: "The SSH/SFTP connection failed or disconnected. Check the server and LAN/VPN connection.",
-  denied: "Your SSH account cannot access this target, or its handle is no longer valid.",
-  not_found: "The remote target no longer exists.",
-  expired_session: "The file session has expired. Open a new session to continue.",
-  output_limit: "The server response exceeded the safety limit. The session was closed without keeping partial data.",
-  timed_out: "The file operation timed out. The session was closed.",
-  conflict: "Another file operation is still running. Wait for it to finish.",
-  remote_rejected: "The server rejected the change. Check permissions, collisions or whether the folder is empty, then inspect the refreshed result.",
-  outcome_unknown: "The server may have applied this change. Open a new session and inspect the target before retrying.",
-};
 type ChangeForm = { kind: "mkdir" | "rename" | "move" | "delete"; resourceId: string; name: string; preview: FileMutationPreview | null };
 type PlacementForm = { resource: FileResource; local: LocalSelection | null; stage: ProtectedPlacementStage | null; destination: string; owner: string; group: string; mode: string; preview: ElevationPreview | null; receipt: ProtectedPlacementReceipt | null };
 type PendingPlacementCleanup = { serverId: string; sessionId: string; resourceId: string; location: string };
 const pendingPlacementCleanups = new Map<string, PendingPlacementCleanup>();
 const expiredPlacementWarnings = new Map<string, string>();
 const actionLabels = { create_directory: "Create folder", rename: "Rename", move: "Move", delete: "Delete" };
+// The backend closes a session when its server's host is edited, and the map
+// refresh that follows remounts this view for the new host. The explanation
+// must survive that remount, so it is carried briefly per server.
+const carried = new Map<string, { message: string; at: number }>();
+/** Reads without consuming: React may run a state initialiser more than once. Entries simply expire. */
+function takeCarried(serverId: string): string {
+  const entry = carried.get(serverId);
+  return entry && Date.now() - entry.at < 15_000 ? entry.message : "";
+}
+
 export function FileBrowser({ server, onBusy }: { server: MapServer; onBusy: (value: boolean) => void }) {
   const [session, setSession] = useState<FileSession | null>(null);
   const [page, setPage] = useState<FilePage | null>(null);
   const [selected, setSelected] = useState<FileEntry | null>(null);
   const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState("");
+  const [notice, setNotice] = useState(() => takeCarried(server.id));
+  // When a host edit remounts this view, React renders the new instance before the old one's
+  // cleanup has recorded the notice, so look once more after mounting.
+  useEffect(() => { const carriedNotice = takeCarried(server.id); if (carriedNotice) setNotice(current => current || carriedNotice); }, [server.id]);
   const [failure, setFailure] = useState("");
   const [pinned, setPinned] = useState<FileResource | null>(null);
   const [form, setForm] = useState<ChangeForm | null>(null);
@@ -53,6 +54,8 @@ export function FileBrowser({ server, onBusy }: { server: MapServer; onBusy: (va
   const active = useRef<FileSession | null>(null);
   const operation = useRef<string | null>(null);
   const generation = useRef(0);
+  /** The generation a closing notice left while a request was in flight; see lateFailure. */
+  const closedAt = useRef<number | null>(null);
   const working = useRef(false);
   const staging = useRef(false);
   const mutating = useRef(false);
@@ -64,7 +67,7 @@ export function FileBrowser({ server, onBusy }: { server: MapServer; onBusy: (va
     setPlacement(next);
   }
 
-  function clear(message: string) {
+  function clear(message: string, carry = false) {
     if (mutating.current) message += " The server may have applied the pending change. Reconnect and inspect before retrying.";
     if (stagingTask.current) message = "Stopping private staging and cleaning up before the session is locked.";
     mutating.current = false;
@@ -75,6 +78,7 @@ export function FileBrowser({ server, onBusy }: { server: MapServer; onBusy: (va
     const cleanupResourceId = staged?.resource.id ?? placementResource.current?.id;
     active.current = null; operation.current = null;
     setSession(null); setPage(null); setSelected(null); setBusy(false); onBusy(false); setFailure(""); setNotice(message);
+    if (carry) carried.set(server.id, { message, at: Date.now() });
     setPinned(null); setForm(null); setReloadTarget(null); updatePlacement(() => null); placementResource.current = null;
     if (placementPassword.current) placementPassword.current.value = "";
     if (selectedGrant.current) void client.discardSelection(selectedGrant.current).catch(() => {});
@@ -131,7 +135,11 @@ export function FileBrowser({ server, onBusy }: { server: MapServer; onBusy: (va
     let disposed = false; const listeners: (() => void)[] = [];
     const keep = (fn: () => void) => { if (disposed) fn(); else listeners.push(fn); };
     void listen<string | null>("atlas-session-closed", event => {
-      if (active.current && (event.payload === null || event.payload === active.current.session_id)) clear("Session closed or expired. Protected file data has been cleared.");
+      if (active.current && (event.payload === null || event.payload === active.current.session_id)) {
+        const inFlight = working.current;
+        clear("Session closed or expired. Protected file data has been cleared.", true);
+        closedAt.current = inFlight ? generation.current : null;
+      }
     }).then(keep).catch(() => {});
     void listen<string>("atlas-close-blocked", event => setFailure(event.payload)).then(keep).catch(() => {});
     const hide = () => { if (document.visibilityState === "hidden") clear("Session locked while InfraWerf was hidden."); };
@@ -140,6 +148,8 @@ export function FileBrowser({ server, onBusy }: { server: MapServer; onBusy: (va
       const id = active.current?.session_id, pending = operation.current, staged = placementRef.current, pendingStage = stagingTask.current;
       const cleanupResourceId = staged?.resource.id ?? placementResource.current?.id;
       generation.current++; clearTimeout(timer.current);
+      // An open session ends with this view. If the view comes straight back (a host edit remounts it), say so there.
+      if (id && !(Date.now() - (carried.get(server.id)?.at ?? 0) < 15_000)) carried.set(server.id, { message: "Session closed or expired. Protected file data has been cleared.", at: Date.now() });
       active.current = null; operation.current = null;
       // Protected cleanup must precede optional event/state teardown.
       if (id) void (async () => {
@@ -250,8 +260,12 @@ export function FileBrowser({ server, onBusy }: { server: MapServer; onBusy: (va
     } finally { setBusy(false); }
   }
   function handleFailure(error: unknown, epoch: number) {
-    if (epoch !== generation.current) return;
     const code = (error as { code?: string })?.code;
+    if (epoch !== generation.current) {
+      const reason = lateFailure(closedAt.current, epoch, generation.current, code);
+      if (reason) { closedAt.current = null; setFailure(reason); }
+      return;
+    }
     if (active.current && !["denied", "not_found", "invalid_input", "conflict", "remote_rejected"].includes(code ?? "")) clear("Session closed. Open a new session to retry.");
     setFailure(fileErrors[code ?? ""] ?? errorMessage(error));
   }

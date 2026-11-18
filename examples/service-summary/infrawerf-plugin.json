@@ -1,0 +1,25 @@
+{
+  "id": "org.example.service-summary",
+  "name": "Service summary",
+  "version": "1.0.0",
+  "api_version": 2,
+  "description": "A job that reads a server's workloads and returns them. It changes nothing.",
+  "author": "Example Author",
+  "license": "MIT",
+  "capabilities": [
+    "read_saved_state"
+  ],
+  "contributions": [
+    {
+      "id": "summary",
+      "point": "job",
+      "title": "Service summary",
+      "capabilities": [
+        "read_saved_state"
+      ],
+      "job": {
+        "module": "job.wasm"
+      }
+    }
+  ]
+}

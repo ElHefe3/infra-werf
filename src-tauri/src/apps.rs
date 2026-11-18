@@ -49,13 +49,14 @@ pub fn close_window(app: &AppHandle, tunnel_id: &str) {
 
 #[tauri::command]
 pub async fn tunnel_open(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     app: AppHandle,
     workspace: State<'_, Arc<Workspace>>,
     server_id: ServerId,
     request: TunnelRequest,
 ) -> Result<TunnelInfo, AtlasError> {
     local_desktop(&window)?;
+    workspace.require_extension(atlas_core::extensions::REMOTE_APPS_OWNER)?;
     let workspace = workspace.inner().clone();
     let opened = workspace.clone();
     let info =
@@ -66,17 +67,47 @@ pub async fn tunnel_open(
         let _ = workspace.close_tunnel(&info.tunnel_id);
         return Err(error);
     }
-    let _ = app.emit_to("main", CHANGED, ());
+    let _ = app.emit_to(crate::main_webview(), CHANGED, ());
+    Ok(info)
+}
+
+/// Opens an application a plugin pack names, in the same isolated window
+/// through the same loopback tunnel (F21/T044). The interface sends only
+/// which application; the port and path come from the reviewed manifest.
+#[tauri::command]
+pub async fn pack_app_open(
+    window: tauri::Webview,
+    app: AppHandle,
+    workspace: State<'_, Arc<Workspace>>,
+    server_id: ServerId,
+    plugin_id: String,
+    contribution_id: String,
+) -> Result<TunnelInfo, AtlasError> {
+    local_desktop(&window)?;
+    workspace.require_extension(atlas_core::extensions::REMOTE_APPS_OWNER)?;
+    let workspace = workspace.inner().clone();
+    let opened = workspace.clone();
+    let info = tauri::async_runtime::spawn_blocking(move || {
+        opened.open_pack_app(&server_id, &plugin_id, &contribution_id)
+    })
+    .await
+    .map_err(|_| AtlasError::new(ErrorCode::IoFailure))??;
+    if let Err(error) = open_window(&app, &info) {
+        let _ = workspace.close_tunnel(&info.tunnel_id);
+        return Err(error);
+    }
+    let _ = app.emit_to(crate::main_webview(), CHANGED, ());
     Ok(info)
 }
 
 #[tauri::command]
 pub async fn tunnel_discover(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
     server_id: ServerId,
 ) -> Result<AppDiscovery, AtlasError> {
     local_desktop(&window)?;
+    workspace.require_extension(atlas_core::extensions::REMOTE_APPS_OWNER)?;
     let workspace = workspace.inner().clone();
     tauri::async_runtime::spawn_blocking(move || workspace.discover_applications(&server_id))
         .await
@@ -85,48 +116,53 @@ pub async fn tunnel_discover(
 
 #[tauri::command]
 pub fn tunnel_close(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     app: AppHandle,
     workspace: State<'_, Arc<Workspace>>,
     tunnel_id: String,
 ) -> Result<(), AtlasError> {
     local_desktop(&window)?;
+    workspace.require_extension(atlas_core::extensions::REMOTE_APPS_OWNER)?;
     workspace.close_tunnel(&tunnel_id)?;
     close_window(&app, &tunnel_id);
-    let _ = app.emit_to("main", CHANGED, ());
+    let _ = app.emit_to(crate::main_webview(), CHANGED, ());
     Ok(())
 }
 
 #[tauri::command]
 pub fn tunnel_close_all(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     app: AppHandle,
     workspace: State<'_, Arc<Workspace>>,
 ) -> Result<(), AtlasError> {
     local_desktop(&window)?;
+    workspace.require_extension(atlas_core::extensions::REMOTE_APPS_OWNER)?;
     for id in workspace.close_all_tunnels() {
         close_window(&app, &id);
     }
-    let _ = app.emit_to("main", CHANGED, ());
+    let _ = app.emit_to(crate::main_webview(), CHANGED, ());
     Ok(())
 }
 
 #[tauri::command]
 pub fn tunnel_list(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     workspace: State<'_, Arc<Workspace>>,
 ) -> Result<Vec<TunnelInfo>, AtlasError> {
     local_desktop(&window)?;
+    workspace.require_extension(atlas_core::extensions::REMOTE_APPS_OWNER)?;
     workspace.tunnels()
 }
 
 #[tauri::command]
 pub fn tunnel_focus(
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     app: AppHandle,
+    workspace: State<'_, Arc<Workspace>>,
     tunnel_id: String,
 ) -> Result<(), AtlasError> {
     local_desktop(&window)?;
+    workspace.require_extension(atlas_core::extensions::REMOTE_APPS_OWNER)?;
     let target = app
         .get_webview_window(&label(&tunnel_id))
         .ok_or_else(|| AtlasError::new(ErrorCode::NotFound))?;
@@ -148,7 +184,7 @@ pub fn window_destroyed(window: &tauri::Window) {
     };
     if let Some(id) = window.label().strip_prefix(PREFIX) {
         let _ = workspace.close_tunnel(id);
-        let _ = app.emit_to("main", CHANGED, ());
+        let _ = app.emit_to(crate::main_webview(), CHANGED, ());
     } else if window.label() == "main" {
         // Dropping the entries kills and reaps each OpenSSH child.
         let _ = workspace.close_all_tunnels();
@@ -163,6 +199,6 @@ pub fn reap(app: &AppHandle, workspace: &Workspace) {
         close_window(app, id);
     }
     if !ended.is_empty() {
-        let _ = app.emit_to("main", CHANGED, ());
+        let _ = app.emit_to(crate::main_webview(), CHANGED, ());
     }
 }

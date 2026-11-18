@@ -14,7 +14,7 @@ test("current status ages without successful IPC and owner offline overrides sav
   assert.match(liveStatus({...server,monitoring:{...record,detail:"SSH identity changed; review required"}},now).label,/SSH needs review/);
 });
 test("archive and ignore filter map and edges while retaining original records",()=>{
-  const state:MapState={contract_version:1,servers:[server,{...server,id:"two"}],edges:[{id:"edge",source:"one",target:"two",label:"deploy"}],events:[],served_at:new Date(now).toISOString()};
+  const state:MapState={contract_version:1,servers:[server,{...server,id:"two"}],edges:[{id:"edge",source:"one",target:"two",label:"deploy",kind:null}],events:[],served_at:new Date(now).toISOString()};
   for(const lifecycle of ["archived","ignored","candidate"] as const){const visible=activeMap(state,{contract_version:1,records:[{...record,policy:{...record.policy,lifecycle}}],history_limit:1000});assert.equal(visible.servers.length,1);assert.equal(visible.edges.length,0);assert.equal(state.servers.length,2);}
   assert.equal(activeMap(state,{contract_version:1,records:[record],history_limit:1000}).edges.length,1);
 });

@@ -42,17 +42,27 @@ refreshed_at: string, };
 export type ServiceSummary = { scope: string, name: string, state: string, substate: string, };
 export type ContainerSummary = { scope: string, engine: string, name: string, image: string, state: string, };
 export type MapServer = { id: ServerId, name: string, host: string, x: number, y: number, created_at: string, inventory: BaselineInventory | null, freshness: Freshness, reachability: HostReachability, };
-export type Relationship = { id: EdgeId, source: ServerId, target: ServerId, label: string, };
+export type RelationshipKindRef = { plugin_id: string, kind_id: string, title: string, };
+export type Relationship = { id: EdgeId, source: ServerId, target: ServerId, label: string,
+/**
+ * The plugin relationship kind chosen when it was documented, if any.
+ */
+kind: RelationshipKindRef | null, };
 export type Activity = { id: string, at: string, message: string, server_id: ServerId | null, };
 export type MapState = { contract_version: number, servers: Array<MapServer>, edges: Array<Relationship>, events: Array<Activity>, served_at: string, };
 export type AddServer = { name: string, host: string, };
 export type UpdateServer = { name?: string, host?: string, x?: number, y?: number, };
-export type AddRelationship = { source: ServerId, target: ServerId, label: string, };
+export type RelationshipKindChoice = { plugin_id: string, contribution_id: string, };
+export type AddRelationship = { source: ServerId, target: ServerId, label: string,
+/**
+ * A relationship kind from an enabled plugin; absent for a plain one.
+ */
+kind?: RelationshipKindChoice, };
 export type ProtectedText = { session_id: SessionId, operation_id: OperationId, expires_at: string, text: string, };
 export type LiveMetrics = { cpu_percent: number | null, memory_used_kib: number | null, disk_used_bytes: number | null, };
 export type OperationPhase = "queued" | "running" | "completed" | "failed" | "cancelled";
 export type OperationProgress = { operation_id: OperationId, session_id: SessionId, phase: OperationPhase, bytes_completed: number, bytes_total: number | null, };
-export type Inspection = { "kind": "system_summary", } | { "kind": "application_discovery", } | { "kind": "file_metadata", path: string, } | { "kind": "service_status", workload_id: string, } | { "kind": "workload_control", workload_id: string, } | { "kind": "sftp_read", resource_id: string, } | { "kind": "sftp_mutation", resource_id: string, } | { "kind": "sftp_transfer", resource_id: string, } | { "kind": "elevation_check", } | { "kind": "protected_placement", } | { "kind": "terminal_open", };
+export type Inspection = { "kind": "system_summary", } | { "kind": "application_discovery", } | { "kind": "pack_command", } | { "kind": "file_metadata", path: string, } | { "kind": "service_status", workload_id: string, } | { "kind": "workload_control", workload_id: string, } | { "kind": "sftp_read", resource_id: string, } | { "kind": "sftp_mutation", resource_id: string, } | { "kind": "sftp_transfer", resource_id: string, } | { "kind": "elevation_check", } | { "kind": "protected_placement", } | { "kind": "terminal_open", };
 export type InspectionRequest = { server_id: ServerId, session_id: SessionId, inspection: Inspection, };
 export type OperationTicket = { operation_id: OperationId, expires_at: string, };
 export type ServerLifecycle = "candidate" | "active" | "archived" | "ignored";
@@ -135,3 +145,432 @@ export type WorkloadControlPreview = { contract_version: number, operation_id: O
 export type WorkloadControlReceipt = { contract_version: number, operation_id: OperationId, workload_id: string, action: WorkloadAction, outcome: WorkloadActionOutcome, observed_state: WorkloadState, observed_at: string, message: string, };
 export type WorkloadDetail = { label: string, value: string, };
 export type WorkloadInspection = { contract_version: number, workload_id: string, inspected_at: string, state: WorkloadState, details: Array<WorkloadDetail>, logs_state: WorkloadLogState, logs: string, logs_truncated: boolean, };
+export type ExtensionPoint = "workspace_tab" | "server_badge" | "settings_section" | "app_settings_section" | "menu_item" | "collector" | "health_check" | "operation" | "remote_app" | "relationship_kind" | "job";
+export type Capability = "read_saved_state" | "edit_map" | "network_probe" | "ssh_session" | "run_approved_command" | "read_files" | "write_files" | "transfer_files" | "interactive_terminal" | "elevate" | "control_workloads" | "loopback_tunnel";
+export type ExtensionInfo = {
+/**
+ * The owner ID its contributions carry.
+ */
+id: string, title: string, enabled: boolean,
+/**
+ * Whether it can be disabled. The core cannot.
+ */
+optional: boolean, };
+export type Contribution = {
+/**
+ * Stable dotted identifier, for example `builtin.tab.files`.
+ */
+id: string, point: ExtensionPoint,
+/**
+ * Display name; for tabs this is the visible label.
+ */
+title: string, owner: string,
+/**
+ * Position among contributions at the same point.
+ */
+order: number, capabilities: Array<Capability>, };
+export type ExtensionCatalogue = { contract_version: number,
+/**
+ * Every known extension, including disabled ones.
+ */
+extensions: Array<ExtensionInfo>,
+/**
+ * Contributions of enabled extensions only.
+ */
+contributions: Array<Contribution>, };
+export type ParameterSource = "service" | "container";
+export type Separator = "whitespace" | "tab" | "comma";
+export type Extractor = { "kind": "line",
+/**
+ * Which line, counting from 1. Defaults to 1; 1000 at most.
+ */
+line?: number | null, } | { "kind": "table",
+/**
+ * 1 to 12 column names: lower-case letters, digits and
+ * underscores, starting with a letter. The last column takes the
+ * rest of the line.
+ */
+columns: Array<string>,
+/**
+ * Lines to skip before the first row, 100 at most. Defaults to 0.
+ */
+skip_lines?: number | null,
+/**
+ * What separates columns. Defaults to `whitespace`.
+ */
+separator?: Separator | null, } | { "kind": "json",
+/**
+ * Dotted names with optional `[index]`, for example
+ * `pool.disks[0].state`; 200 characters at most.
+ */
+path: string, };
+export type PackParameter = {
+/**
+ * Lower-case letters, digits and underscores, starting with a letter,
+ * 32 characters at most. Written in `argv` as `{name}`.
+ */
+name: string, source: ParameterSource, };
+export type PackCommand = {
+/**
+ * The program, then its arguments: 1 to 16 entries. An entry holds
+ * only letters, digits and `_ . , : / = + @ % -`, or is exactly
+ * `{name}` for a declared parameter. The program is a plain name or an
+ * absolute path and is never a shell, an interpreter or `sudo`.
+ */
+argv: Array<string>,
+/**
+ * Values filled in from what InfraWerf discovered on the server, at
+ * most 4. Each must be used by `argv`.
+ */
+parameters?: Array<PackParameter>,
+/**
+ * How the output is read.
+ */
+extract: Extractor,
+/**
+ * For a health check: the values that mean healthy, 1 to 8. Any other
+ * value means unhealthy; no readable value means unknown. Required at
+ * `health_check`, not allowed at `collector`.
+ */
+healthy?: Array<string> | null, };
+export type PackWorkloadKind = {
+/**
+ * The column that holds each workload's name.
+ */
+name_column: string,
+/**
+ * The column that holds its state, if the table has one.
+ */
+state_column?: string | null, };
+export type PackApp = {
+/**
+ * The port on the server's localhost, 1 to 65535.
+ */
+port: number,
+/**
+ * The page to open first, starting with `/`; 512 characters at most.
+ * Defaults to `/`. Never a scheme or a host.
+ */
+path?: string | null, };
+export type PackBadge = {
+/**
+ * The `id` of a contribution in this manifest whose command reads one
+ * value (a `line` or `json` extractor) and has no parameters.
+ */
+observation: string, };
+export type LineStyle = "solid" | "dashed" | "dotted";
+export type KindColor = "green" | "blue" | "amber" | "red" | "purple" | "grey";
+export type PackRelationship = {
+/**
+ * Defaults to `solid`.
+ */
+line?: LineStyle | null,
+/**
+ * Defaults to `green`, the colour of a plain relationship.
+ */
+color?: KindColor | null, };
+export type PluginViewSpec = {
+/**
+ * The page to open, relative to the plugin's folder, ending in `.html`,
+ * for example `view/index.html`.
+ */
+entry: string, };
+export type JobControl = "start" | "stop" | "restart";
+export type JobTarget = "service" | "container";
+export type JobAction = {
+/**
+ * Lower-case letters, digits and hyphens, starting with a letter, 32
+ * characters at most.
+ */
+id: string,
+/**
+ * What the owner reads, 40 characters at most.
+ */
+title: string, control: JobControl, target: JobTarget,
+/**
+ * What it does and why, in one sentence for the owner, 200 characters
+ * at most.
+ */
+effect: string, };
+export type JobSpec = {
+/**
+ * The module, relative to the plugin's folder, ending in `.wasm`.
+ */
+module: string,
+/**
+ * The actions the job may ask for, at most 16. Each needs the owner's
+ * permission to control workloads on the server, and a run asks the
+ * owner first unless the plugin is at trusted automation.
+ */
+actions?: Array<JobAction>, };
+export type PackOutcome = "ok" | "command_failed" | "unreadable" | "output_limit" | "timed_out";
+export type PackHealth = "healthy" | "unhealthy" | "unknown";
+export type PackResult = { outcome: PackOutcome,
+/**
+ * A single value, from a `line` or `json` extractor.
+ */
+value: string | null,
+/**
+ * Column names, from a `table` extractor.
+ */
+columns: Array<string>, rows: Array<Array<string>>,
+/**
+ * More rows existed than are kept.
+ */
+truncated: boolean,
+/**
+ * Set for a health check only.
+ */
+health: PackHealth | null, };
+export type PackObservation = {
+/**
+ * When InfraWerf read the result, on this PC's clock.
+ */
+observed_at: string,
+/**
+ * False once the observation is older than the staleness limit.
+ */
+fresh: boolean,
+/**
+ * Which plugin contribution produced it, as `plugin-id.contribution`.
+ */
+source: string,
+/**
+ * Binding of the authenticated SSH profile and host key it came through.
+ */
+source_binding: string,
+/**
+ * Parameter name to the discovered workload it was run for.
+ */
+parameters: { [key in string]: string }, result: PackResult, };
+export type PackChoice = {
+/**
+ * The workload's ID; this is what a run is given, never a name.
+ */
+id: string, name: string, };
+export type PackParameterView = { name: string, source: ParameterSource,
+/**
+ * Workloads from the server's saved inventory that may be chosen.
+ */
+choices: Array<PackChoice>, };
+export type PackCommandView = { plugin_id: string, plugin_name: string, contribution_id: string, title: string, health_check: boolean,
+/**
+ * The exact command, with `{name}` where a parameter goes.
+ */
+argv: Array<string>, parameters: Array<PackParameterView>,
+/**
+ * Set when the pack presents this table's rows as workloads of a kind
+ * named by `title`.
+ */
+workload_kind: PackWorkloadKind | null, observation: PackObservation | null, };
+export type PackServerState = { contract_version: number, server_id: ServerId, commands: Array<PackCommandView>, };
+export type PackBadgeState = "healthy" | "unhealthy" | "value" | "stale" | "unknown";
+export type PackBadgeView = { server_id: ServerId, plugin_id: string, plugin_name: string, contribution_id: string, title: string, state: PackBadgeState, value: string | null,
+/**
+ * When the observation was read; absent if there is none.
+ */
+observed_at: string | null, };
+export type PackRelationshipKindView = { plugin_id: string, plugin_name: string, contribution_id: string, title: string, line: LineStyle, color: KindColor,
+/**
+ * Servers the owner allowed this plugin on. The kind can be chosen for
+ * a relationship only when both of its servers are listed.
+ */
+server_ids: Array<ServerId>, };
+export type PackMapState = { contract_version: number, badges: Array<PackBadgeView>, relationship_kinds: Array<PackRelationshipKindView>, };
+export type PackAppView = { plugin_id: string, plugin_name: string, contribution_id: string, title: string, port: number, path: string, };
+export type PackAppsState = { contract_version: number, server_id: ServerId, apps: Array<PackAppView>, };
+export type InstallSource = { "kind": "folder", path: string, } | { "kind": "archive", path: string, } | { "kind": "address", url: string, };
+export type InstallRequest = { source: InstallSource,
+/**
+ * The SHA-256 the owner expects: of the archive for an archive or an
+ * address, of the plugin's files for a folder. 64 hexadecimal digits.
+ */
+expected_sha256?: string,
+/**
+ * The author's minisign public key. When given, the archive must carry
+ * a valid signature by that key.
+ */
+public_key?: string, };
+export type InstallProblemCode = "unreadable" | "not_https" | "unsupported_archive" | "path_traversal" | "unsafe_entry" | "too_large" | "no_manifest" | "invalid_manifest" | "hash_mismatch" | "signature_missing" | "signature_invalid" | "invalid_public_key" | "signature_not_possible" | "already_installed" | "different_plugin" | "downgrade" | "changed_since_preview" | "preview_expired";
+export type InstallProblem = { code: InstallProblemCode, message: string, };
+export type InstallReport = { contract_version: number,
+/**
+ * Set when the plugin was installed. It is disabled until reviewed.
+ */
+plugin_id: string | null, plugin_name: string | null, content_sha256: string | null, problem: InstallProblem | null, };
+export type Integrity = "verified" | "changed" | "not_checked";
+export type SourceKind = "folder" | "archive" | "address";
+export type InstallRecordView = { source_kind: SourceKind,
+/**
+ * The folder, file or address it came from.
+ */
+source: string,
+/**
+ * SHA-256 of its files, checked at every start-up.
+ */
+content_sha256: string,
+/**
+ * SHA-256 of the archive or download, if it came from one.
+ */
+archive_sha256: string | null,
+/**
+ * The minisign key ID whose signature was verified, if any.
+ */
+signer_key_id: string | null, installed_at: string, integrity: Integrity, checked_at: string | null, };
+export type ContributionChangeKind = "added" | "removed" | "command_changed" | "app_changed" | "access_changed" | "presentation";
+export type ContributionChange = { id: string, title: string, change: ContributionChangeKind,
+/**
+ * The new command as the owner reads it, when it is new or changed.
+ */
+command: string | null, };
+export type UpdateDiff = { from_version: string, to_version: string,
+/**
+ * The new version is older than the installed one.
+ */
+downgrade: boolean, added_capabilities: Array<Capability>, removed_capabilities: Array<Capability>, contributions: Array<ContributionChange>,
+/**
+ * The update asks for something new, so the plugin is switched off
+ * until the owner reviews and enables it again.
+ */
+needs_review: boolean,
+/**
+ * Key ID verified at the previous install or update, if any.
+ */
+previous_signer: string | null,
+/**
+ * Key ID verified for this update, if a public key was given.
+ */
+signer: string | null, content_sha256: string, archive_sha256: string | null, };
+export type UpdatePreview = { contract_version: number,
+/**
+ * Pass this to apply exactly what was checked and shown.
+ */
+token: string | null, plugin_id: string, plugin_name: string, diff: UpdateDiff | null, problem: InstallProblem | null, };
+export type ViewActionState = "waiting" | "running" | "declined" | "done" | "failed" | "cancelled";
+export type ViewActionRequest = { id: string, view: string, plugin_id: string, plugin_name: string, server_id: ServerId, server_name: string, contribution_id: string, title: string,
+/**
+ * The exact command, with `{name}` where a parameter goes.
+ */
+argv: Array<string>,
+/**
+ * Parameter name to the discovered workload's name, as chosen by the view.
+ */
+parameters: { [key in string]: string }, };
+export type SandboxStop = "invalid_module" | "forbidden_import" | "out_of_fuel" | "memory_limit" | "stack_limit" | "call_limit" | "contract_violation" | "cancelled" | "trapped";
+export type SandboxOutcome = {
+/**
+ * `run`'s return value, when it completed.
+ */
+exit_code: number | null, stopped: SandboxStop | null,
+/**
+ * A sentence about why it stopped; never module output.
+ */
+reason: string | null, logs: Array<string>, result: unknown, fuel_used: number, host_calls: number,
+/**
+ * Host functions refused because the owner did not allow them.
+ */
+refused: Array<string>, };
+export type JobRunState = "running" | "done" | "failed" | "cancelled";
+export type JobActionRecord = { action_id: string, workload: string,
+/**
+ * `done`, `failed`, `declined`, `refused` or `unknown`.
+ */
+outcome: string, message: string, };
+export type JobRunView = { run_id: string, plugin_id: string, contribution_id: string, server_id: ServerId,
+/**
+ * Started by the owner (true) or by a schedule.
+ */
+attended: boolean, started_at: string, finished_at: string | null, state: JobRunState, outcome: SandboxOutcome | null, actions: Array<JobActionRecord>, };
+export type JobAsk = { id: string, run_id: string, plugin_name: string, server_name: string, job_title: string, action_title: string, effect: string, control: JobControl, target: JobTarget, workload: string,
+/**
+ * The workload needs sudo: the owner types the password, which is used
+ * for this action only and never kept.
+ */
+requires_sudo: boolean, };
+export type JobsState = { contract_version: number, server_id: ServerId, jobs: Array<JobEntry>, runs: Array<JobRunView>, };
+export type TrustLevel = "read_only" | "confirm_changes" | "trusted_automation";
+export type CapabilityKind = "read" | "change" | "elevation";
+export type PluginStatus = "disabled" | "enabled" | "changed_since_review" | "files_changed";
+export type Refusal = "unknown_plugin" | "plugin_disabled" | "changed_since_review" | "unknown_server" | "not_requested" | "not_granted" | "trust_too_low" | "no_elevation_exception" | "all_plugins_off" | "files_changed";
+export type PluginDecision = { contract_version: number, allowed: boolean,
+/**
+ * Allowed only after the owner confirms this one change.
+ */
+needs_confirmation: boolean, refusal: Refusal | null, };
+export type RequestedCapability = { capability: Capability, kind: CapabilityKind, summary: string,
+/**
+ * Titles of the contributions that use it.
+ */
+used_by: Array<string>, };
+export type PluginContributionView = { id: string, title: string, point: ExtensionPoint, capabilities: Array<Capability>,
+/**
+ * The exact read-only command a pack contribution runs, if any.
+ */
+command: PackCommand | null, workload_kind: PackWorkloadKind | null, app: PackApp | null, badge: PackBadge | null, relationship: PackRelationship | null, view: PluginViewSpec | null, job: JobSpec | null, };
+export type ServerGrant = { server_id: ServerId, capabilities: Array<Capability>, };
+export type PluginView = { id: string, name: string, version: string, api_version: number, description: string | null, author: string | null, license: string | null, homepage: string | null,
+/**
+ * The folder it was found in, inside the plugins directory.
+ */
+folder: string, status: PluginStatus,
+/**
+ * Set only while the plugin is enabled.
+ */
+trust: TrustLevel | null, capabilities: Array<RequestedCapability>, contributions: Array<PluginContributionView>,
+/**
+ * Servers with at least one granted capability.
+ */
+grants: Array<ServerGrant>,
+/**
+ * How it was installed; absent for a folder placed by hand.
+ */
+install: InstallRecordView | null, };
+export type InvalidPlugin = { folder: string, problems: Array<string>, };
+export type PluginsState = { contract_version: number, directory: string,
+/**
+ * The owner has turned every plugin off; nothing is admitted.
+ */
+all_off: boolean, plugins: Array<PluginView>, invalid: Array<InvalidPlugin>, };
+export type ActivityOutcome = "allowed" | "needs_confirmation" | "refused" | "done" | "cancelled" | "failed";
+export type PluginActivity = { id: number, at: string,
+/**
+ * Empty for an action on all plugins.
+ */
+plugin_id: string, plugin_name: string, server_id: ServerId | null,
+/**
+ * A capability name, or one of the owner actions such as `enable`.
+ */
+action: string, outcome: ActivityOutcome,
+/**
+ * The refusal, the trust level or the permissions set; never output.
+ */
+detail: string, };
+export type PluginActivityLog = { contract_version: number,
+/**
+ * How many entries are kept: the history retention setting.
+ */
+kept: number,
+/**
+ * Newest first.
+ */
+entries: Array<PluginActivity>, };
+export type PluginViewTab = { plugin_id: string, plugin_name: string, contribution_id: string, title: string, };
+export type PluginViewsState = { contract_version: number, server_id: ServerId, views: Array<PluginViewTab>, };
+export type JobSchedule = { every_minutes: number, next_run_at: string, last_run_at: string | null,
+/**
+ * `done`, `failed`, `cancelled` or `refused`.
+ */
+last_outcome: string | null,
+/**
+ * Failed runs in a row.
+ */
+failures: number,
+/**
+ * Paused after too many failures; set it again to resume.
+ */
+paused: boolean, };
+export type JobEntry = { plugin_id: string, plugin_name: string, contribution_id: string, title: string, job: JobSpec, trust: TrustLevel, schedule: JobSchedule | null,
+/**
+ * Declared actions the owner granted a sudo exception for here.
+ */
+elevation_exceptions: Array<string>, };

@@ -1,6 +1,6 @@
 # F23 — Sandboxed plugin views
 
-<!-- atlas-feature: {"id":"F23","scope":"S12","depends_on":["F20","F22"],"deferred":true} -->
+<!-- atlas-feature: {"id":"F23","scope":"S12","depends_on":["F20","F22"],"deferred":false} -->
 
 ## Work packet
 
@@ -12,11 +12,11 @@
 
 Read [SCOPE.md](../SCOPE.md) for access boundaries; use [AGENT.md](../AGENT.md) for execution/proof rules. Ticket dependencies, not numeric ordering, control implementation.
 
-Context: Builds on the isolated window proven for remote applications, where content cannot invoke InfraWerf commands. Direction and working assumptions are recorded in [D052](../discovery/D052-plugin-platform-direction.md). Deferred until the owner activates S12.
+Context: Builds on the isolated window proven for remote applications, where content cannot invoke InfraWerf commands. Direction and working assumptions are recorded in [D052](../discovery/D052-plugin-platform-direction.md). Activated 2026-11-12 ([D053](../discovery/D053-owner-activates-extensibility.md)).
 
 ## T047 — Isolated plugin view with a message API
 
-<!-- atlas-ticket: {"id":"T047","feature":"F23","status":"deferred","depends_on":["T045"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T047","feature":"F23","status":"done","depends_on":["T045"],"evidence":"../evidence/T047-acceptance.md"} -->
 
 ### Outcome and included work
 
@@ -34,10 +34,10 @@ Serve plugin assets from a per-plugin origin with a strict content security poli
 
 ### Acceptance criteria
 
-- [ ] A fixture view renders and reads only the observations its grants allow.
-- [ ] Attempts to reach IPC, other origins or ungranted data fail and are logged.
-- [ ] Closing, Lock and the kill switch tear the view down.
-- [ ] The message API is documented and versioned.
+- [x] A fixture view renders and reads only the observations its grants allow.
+- [x] Attempts to reach IPC, other origins or ungranted data fail and are logged.
+- [x] Closing, Lock and the kill switch tear the view down.
+- [x] The message API is documented and versioned.
 
 ### Verification
 
@@ -45,7 +45,7 @@ Hostile fixture view attempting each escape; native journey; independent review 
 
 ### Evidence and closure
 
-None yet. The ticket is deferred until the owner activates S12.
+Accepted on `bec7d39`: [T047 acceptance](../evidence/T047-acceptance.md). Owner decision [D059](../discovery/D059-plugin-views-tab-confirm-and-review.md) first. All four criteria are met in the new `plugin-views` native suite with a hostile view. An independent review found one high (WebRTC), three medium and other findings; all but two informational ones were fixed and re-tested. Remaining: WebRTC is held by the guard script only, and a local program can still deny a view service.
 
 ### Stop conditions
 

@@ -75,6 +75,8 @@ fn initialise(db: &Connection) -> Result<(), AtlasError> {
     db.execute_batch(SCHEMA).map_err(sql_error)?;
     db.execute_batch(crate::monitoring::SCHEMA)
         .map_err(sql_error)?;
+    db.execute_batch(crate::plugin_host::SCHEMA)
+        .map_err(sql_error)?;
     db.pragma_update(None, "application_id", APPLICATION_ID)
         .map_err(sql_error)?;
     db.pragma_update(None, "user_version", SCHEMA_VERSION)
@@ -87,6 +89,22 @@ fn marker(db: &Connection) -> Result<(i32, i32), AtlasError> {
         db.pragma_query_value(None, "user_version", |r| r.get(0))
             .map_err(sql_error)?,
     ))
+}
+/// Deletes a server and every row keyed to it. Returns false when it did not
+/// exist. The one place that knows which tables hold per-server rows.
+pub(crate) fn delete_server_rows(db: &Connection, id: &ServerId) -> Result<bool, AtlasError> {
+    for statement in [
+        "DELETE FROM events WHERE server_id=?1",
+        "DELETE FROM edges WHERE source=?1 OR target=?1",
+        "DELETE FROM monitoring WHERE server_id=?1",
+        "DELETE FROM plugin_grant WHERE server_id=?1",
+    ] {
+        db.execute(statement, [id.as_str()]).map_err(sql_error)?;
+    }
+    Ok(db
+        .execute("DELETE FROM servers WHERE id=?1", [id.as_str()])
+        .map_err(sql_error)?
+        > 0)
 }
 pub(crate) fn event(db: &Connection, message: &str, sid: Option<&str>) -> Result<(), AtlasError> {
     db.execute(
@@ -153,6 +171,10 @@ impl Store {
                 .map_err(sql_error)?;
             db.execute_batch("COMMIT;").map_err(sql_error)?;
         }
+        // Plugin tables are additive and need no version change, so a file
+        // this version has opened still opens in the previous release.
+        db.execute_batch(crate::plugin_host::SCHEMA)
+            .map_err(sql_error)?;
         Ok(Self { db })
     }
 
@@ -184,7 +206,8 @@ impl Store {
                 reachability: HostReachability::default(),
             });
         }
-        let edges = read_edges(&self.db)?;
+        let mut edges = read_edges(&self.db)?;
+        attach_kinds(&self.db, &mut edges)?;
         let events = read_events(&self.db, true)?;
         Ok(MapState {
             contract_version: CONTRACT_VERSION,
@@ -200,6 +223,12 @@ impl Store {
         let host = hostname(&input.host)?;
         let id = ServerId::generate();
         let tx = self.db.transaction().map_err(sql_error)?;
+        // A host InfraWerf already discovered in the SSH configuration is
+        // adopted rather than refused as a duplicate (D054).
+        if let Some(adopted) = crate::monitoring::adopt_candidate(&tx, &host, &name)? {
+            tx.commit().map_err(sql_error)?;
+            return Ok(adopted);
+        }
         let count: i64 = tx
             .query_row("SELECT count(*) FROM servers", [], |r| r.get(0))
             .map_err(sql_error)?;
@@ -221,6 +250,17 @@ impl Store {
     }
 
     pub fn update_server(&mut self, id: &ServerId, input: UpdateServer) -> Result<(), AtlasError> {
+        self.update_server_replacing(id, input).map(|_| ())
+    }
+
+    /// Updates a server. When the new host was held only by a discovered
+    /// candidate, that candidate is removed and its ID returned so the caller
+    /// can end anything still attached to it.
+    pub fn update_server_replacing(
+        &mut self,
+        id: &ServerId,
+        input: UpdateServer,
+    ) -> Result<Option<ServerId>, AtlasError> {
         input.validate()?;
         let name = input
             .name
@@ -229,6 +269,11 @@ impl Store {
             .transpose()?;
         let host = input.host.as_ref().map(|v| hostname(v)).transpose()?;
         let tx = self.db.transaction().map_err(sql_error)?;
+        // A host held only by a discovered candidate is given to this server (D054).
+        let replaced = match host.as_deref() {
+            Some(host) => crate::monitoring::release_candidate_host(&tx, host, id)?,
+            None => None,
+        };
         let changed = tx.execute("UPDATE servers SET name=coalesce(?1,name),host=coalesce(?2,host),x=coalesce(?3,x),y=coalesce(?4,y) WHERE id=?5", params![name, host, input.x, input.y, id.as_str()]).map_err(sql_error)?;
         if changed == 0 {
             return Err(AtlasError::new(ErrorCode::NotFound));
@@ -236,30 +281,34 @@ impl Store {
         if name.is_some() || host.is_some() {
             event(&tx, "Server details updated", Some(id.as_str()))?;
         }
-        tx.commit().map_err(sql_error)
+        tx.commit().map_err(sql_error)?;
+        Ok(replaced)
     }
 
     pub fn remove_server(&mut self, id: &ServerId) -> Result<(), AtlasError> {
         let tx = self.db.transaction().map_err(sql_error)?;
-        tx.execute("DELETE FROM events WHERE server_id=?", [id.as_str()])
-            .map_err(sql_error)?;
-        tx.execute(
-            "DELETE FROM edges WHERE source=?1 OR target=?1",
-            [id.as_str()],
-        )
-        .map_err(sql_error)?;
-        if tx
-            .execute("DELETE FROM servers WHERE id=?", [id.as_str()])
-            .map_err(sql_error)?
-            == 0
-        {
+        if !delete_server_rows(&tx, id)? {
             return Err(AtlasError::new(ErrorCode::NotFound));
         }
         event(&tx, "Server removed from map", None)?;
         tx.commit().map_err(sql_error)
     }
 
+    /// Documents a plain relationship. One with a plugin kind goes through
+    /// `add_relationship_with_kinds`, which checks the kind is available.
     pub fn add_relationship(&mut self, input: AddRelationship) -> Result<EdgeId, AtlasError> {
+        if input.kind.is_some() {
+            return Err(AtlasError::new(ErrorCode::InvalidInput));
+        }
+        self.insert_relationship(input, None)
+    }
+
+    /// `kind` is the plugin ID, the kind's ID and its title, already checked.
+    pub(crate) fn insert_relationship(
+        &mut self,
+        input: AddRelationship,
+        kind: Option<(&str, &str, &str)>,
+    ) -> Result<EdgeId, AtlasError> {
         if input.source == input.target {
             return Err(AtlasError::new(ErrorCode::InvalidInput));
         }
@@ -286,9 +335,24 @@ impl Store {
             ],
         )
         .map_err(sql_error)?;
+        let described = match kind {
+            Some((plugin, kind_id, title)) => {
+                tx.execute(
+                    "INSERT INTO edge_kind VALUES(?,?,?,?)",
+                    params![id.as_str(), plugin, kind_id, title],
+                )
+                .map_err(sql_error)?;
+                if label.is_empty() {
+                    title.to_owned()
+                } else {
+                    format!("{title}: {label}")
+                }
+            }
+            None => label.clone(),
+        };
         event(
             &tx,
-            &format!("Relationship documented: {label}"),
+            &format!("Relationship documented: {described}"),
             Some(input.source.as_str()),
         )?;
         tx.commit().map_err(sql_error)?;
@@ -360,9 +424,35 @@ fn read_edges(db: &Connection) -> Result<Vec<Relationship>, AtlasError> {
                 source: ServerId::parse(&source)?,
                 target: ServerId::parse(&target)?,
                 label,
+                kind: None,
             })
         })
         .collect()
+}
+
+/// Adds the plugin relationship kind each relationship was documented with.
+fn attach_kinds(db: &Connection, edges: &mut [Relationship]) -> Result<(), AtlasError> {
+    let mut statement = db
+        .prepare("SELECT edge_id,plugin_id,kind_id,title FROM edge_kind")
+        .map_err(sql_error)?;
+    let rows = statement
+        .query_map([], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                RelationshipKindRef {
+                    plugin_id: r.get(1)?,
+                    kind_id: r.get(2)?,
+                    title: r.get(3)?,
+                },
+            ))
+        })
+        .map_err(sql_error)?
+        .collect::<Result<std::collections::HashMap<_, _>, _>>()
+        .map_err(sql_error)?;
+    for edge in edges {
+        edge.kind = rows.get(edge.id.as_str()).cloned();
+    }
+    Ok(())
 }
 fn read_events(db: &Connection, limit: bool) -> Result<Vec<Activity>, AtlasError> {
     let sql = if limit {

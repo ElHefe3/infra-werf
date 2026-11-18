@@ -19,7 +19,7 @@ let app, browser, page;
 const results = [];
 try {
   const info = await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`SSH fixture startup failed: ${diagnostic}`)), 30000);
+    const timer = setTimeout(() => reject(new Error(`SSH fixture startup failed: ${diagnostic}`)), 90000);
     lines.once('line', line => { clearTimeout(timer); resolve(JSON.parse(line)); });
     server.once('exit', code => { if (code) { clearTimeout(timer); reject(new Error(`SSH fixture exited: ${diagnostic}`)); } });
   });
@@ -90,7 +90,7 @@ try {
   expect(afterComplete.edges).toEqual(before.edges);
   expect(afterComplete.servers.find(server => server.id === otherId)).toEqual(before.servers.find(server => server.id === otherId));
   expect(afterComplete.events).toHaveLength(before.events.length + 1);
-  expect(afterComplete.events[0].message).toContain('Approved inventory refreshed');
+  expect(afterComplete.events[0].message).toMatch(/Initial approved inventory collected|Approved inventory refreshed/);
   const formattedSourceTime = await page.evaluate(value => new Date(value).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }), ownerAfter.inventory.collected_at);
   expect(await workspace.getByRole('status').innerText()).toContain(formattedSourceTime);
   const completeDbBytes = await readFile(database);
@@ -139,7 +139,9 @@ try {
   if (app && app.exitCode === null) { app.kill(); await new Promise(resolve => app.once('exit', resolve)); }
   if (server.exitCode === null) {
     server.stdin.end('\n');
-    await Promise.race([new Promise(resolve => server.once('exit', resolve)), delay(5000)]);
+    // The fixture removes its Podman container (bounded at 30 s) before exiting; killing it
+    // sooner leaves the container running and slows every later fixture start.
+    await Promise.race([new Promise(resolve => server.once('exit', resolve)), delay(60000)]);
     if (server.exitCode === null) server.kill();
   }
   lines.close();

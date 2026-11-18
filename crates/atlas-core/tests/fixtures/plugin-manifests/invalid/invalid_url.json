@@ -1,0 +1,36 @@
+{
+  "id": "org.example.backup-overview",
+  "name": "Backup overview",
+  "version": "1.0.0",
+  "api_version": 1,
+  "description": "Shows when each server was last backed up.",
+  "author": "Example Author",
+  "license": "MIT",
+  "homepage": "http://example.org/",
+  "capabilities": [
+    "read_saved_state",
+    "ssh_session",
+    "run_approved_command"
+  ],
+  "contributions": [
+    {
+      "id": "backups-tab",
+      "point": "workspace_tab",
+      "title": "Backups",
+      "order": 200,
+      "capabilities": [
+        "read_saved_state",
+        "ssh_session",
+        "run_approved_command"
+      ]
+    },
+    {
+      "id": "last-backup",
+      "point": "server_badge",
+      "title": "Last backup",
+      "capabilities": [
+        "read_saved_state"
+      ]
+    }
+  ]
+}

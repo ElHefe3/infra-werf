@@ -1,0 +1,738 @@
+{
+  "work": "<temporary folder>",
+  "hits": {
+    "tcp": [],
+    "udp": [],
+    "udp2": []
+  },
+  "history_limit": 1000,
+  "log_before": [
+    [
+      "set_permissions",
+      "done",
+      "read_saved_state, ssh_session, run_approved_command"
+    ],
+    [
+      "enable",
+      "done",
+      "read_only"
+    ]
+  ],
+  "views": [
+    {
+      "plugin_id": "org.example.hostile-view-review",
+      "plugin_name": "Hostile view (review)",
+      "contribution_id": "escape2",
+      "title": "Review attempts"
+    }
+  ],
+  "opened_via_tab": true,
+  "phase1": {
+    "context": {
+      "reached": true,
+      "value": "{\"api_version\":1,\"contribution_id\":\"escape2\",\"plugin_id\":\"org.example.hostile-view-review\",\"server\":{\"host\":\"secret-host.home.arpa\",\"id\":\"3b4cc88f96cf4ee1b6cb9ebf5949ffa4\",\"name\":\"View host\"}}"
+    },
+    "exfil_payload": {
+      "value": "5669657720686f73747c7365637265742d686f73742e686f6d652e617270"
+    },
+    "rtc_stun_loopback": {
+      "reached": false,
+      "value": "PC is not a constructor"
+    },
+    "rtc_stun_lan": {
+      "reached": false,
+      "value": "PC is not a constructor"
+    },
+    "rtc_checks_loopback": {
+      "reached": false,
+      "value": "no constructor (undefined)"
+    },
+    "rtc_checks_lan": {
+      "reached": false,
+      "value": "no constructor (undefined)"
+    },
+    "rtc_globals_left": {
+      "value": "RTCTrackEvent,RTCStatsReport,RTCSessionDescription,RTCRtpTransceiver,RTCPeerConnectionIceEvent,RTCPeerConnectionIceErrorEvent,RTCIceCandidate,RTCErrorEvent,RTCError,RTCEncodedVideoFrame,RTCEncodedAudioFrame,RTCDataChannelEvent,RTCDTMFToneChangeEvent,RTCDTMFSender,RTCCertificate,RTCRtpScriptTransform,RTCPeerConnection,webkitRTCPeerConnection,RTCDataChannel,RTCIceTransport,RTCSctpTransport,RTCDtlsTransport,RTCRtpSender,RTCRtpReceiver"
+    },
+    "realm_sync_blank": {
+      "reached": false,
+      "value": "no constructor (undefined)"
+    },
+    "realm_frames_index": {
+      "reached": false,
+      "value": "no constructor (undefined)"
+    },
+    "realm_explicit_about_blank": {
+      "reached": false,
+      "value": "no constructor (undefined)"
+    },
+    "realm_srcdoc": {
+      "reached": false,
+      "value": "no constructor (undefined)"
+    },
+    "realm_srcdoc_sync": {
+      "reached": false,
+      "value": "no constructor (undefined)"
+    },
+    "realm_sandbox_srcdoc": {
+      "reached": false,
+      "value": "no constructor (undefined)"
+    },
+    "realm_nested_blank": {
+      "reached": false,
+      "value": "no constructor (undefined)"
+    },
+    "realm_document_open_write": {
+      "reached": false,
+      "value": "no constructor (undefined)"
+    },
+    "realm_document_open_then_read": {
+      "reached": false,
+      "value": "no constructor (undefined)"
+    },
+    "realm_detached": {
+      "reached": false,
+      "value": "no constructor (undefined)"
+    },
+    "realm_moved_frame": {
+      "reached": false,
+      "value": "no constructor (undefined)"
+    },
+    "realm_frame_reload": {
+      "reached": false,
+      "value": "no constructor (undefined)"
+    },
+    "realm_frame_srcdoc_change": {
+      "reached": false,
+      "value": "no constructor (undefined)"
+    },
+    "realm_object_blank": {
+      "reached": false,
+      "value": "no constructor (undefined)"
+    },
+    "realm_descriptor": {
+      "reached": false,
+      "value": "no constructor (undefined)"
+    },
+    "realm_transceiver_proto": {
+      "reached": false,
+      "value": "Evaluating a string as JavaScript violates the following Content Security Policy directive because 'unsafe-eval' is not an allowed source of script: script-src 'self'\".\n"
+    },
+    "realm_session_description_route": {
+      "reached": false,
+      "value": "no constructor (undefined)"
+    },
+    "worklet_realm": {
+      "reached": true,
+      "value": "loaded (no RTC in worklets)"
+    },
+    "preconnect": {
+      "reached": true,
+      "value": "added"
+    },
+    "dns_prefetch": {
+      "reached": true,
+      "value": "added"
+    },
+    "prefetch": {
+      "reached": true,
+      "value": "added"
+    },
+    "prerender_rules": {
+      "reached": true,
+      "value": "added"
+    },
+    "preload_fetch": {
+      "reached": true,
+      "value": "added"
+    },
+    "css_import": {
+      "reached": true,
+      "value": "added"
+    },
+    "svg_image": {
+      "reached": true,
+      "value": "added"
+    },
+    "send_beacon": {
+      "reached": true,
+      "value": "true"
+    },
+    "event_source": {
+      "reached": false,
+      "value": "blocked"
+    },
+    "anchor_ping": {
+      "reached": true,
+      "value": "clicked"
+    },
+    "anchor_download": {
+      "reached": true,
+      "value": "clicked"
+    },
+    "window_open_popup": {
+      "reached": false,
+      "value": "refused"
+    },
+    "service_worker": {
+      "reached": false,
+      "value": "Failed to register a ServiceWorker: The provided scriptURL ('http://127.0.0.1:62753/665db7bb9b4e425ca4c0b9b3e53bf38c/view/attack.js') violates the Content Security Policy."
+    },
+    "webtransport": {
+      "reached": false,
+      "value": "Refused to connect to 'https://127.0.0.1:52131/wt' because it violates the document's Content Security Policy"
+    },
+    "other_local_origin_fetch": {
+      "reached": false,
+      "value": "Failed to fetch"
+    },
+    "short_name_HIDDEN~1.JSO": {
+      "reached": false,
+      "value": "404"
+    },
+    "short_name_hidden~1.jso": {
+      "reached": false,
+      "value": "404"
+    },
+    "dot_name": {
+      "reached": false,
+      "value": "404"
+    },
+    "csp_report_forgery": {
+      "reached": true,
+      "value": "200"
+    }
+  },
+  "slowloris": {
+    "threads_before": 22,
+    "threads_with_1000_idle_connections": 38,
+    "threads_after_17s_trickle": 22,
+    "view_still_answers": 200,
+    "view_answers_after_release": 200,
+    "page_requests_while_16_slots_held": [
+      "TypeError: Failed to fetch",
+      "TypeError: Failed to fetch",
+      "TypeError: Failed to fetch",
+      "TypeError: Failed to fetch",
+      "TypeError: Failed to fetch",
+      "TypeError: Failed to fetch",
+      "TypeError: Failed to fetch",
+      "TypeError: Failed to fetch"
+    ],
+    "view_answers_after_hold": 200
+  },
+  "blocked_after_phase1": [
+    "content_policy: other https://trusted.example",
+    "content_policy: connect-src http://localhost:62753",
+    "content_policy: connect-src https://127.0.0.1:52131",
+    "content_policy: worker-src http://127.0.0.1:62753",
+    "content_policy: connect-src http://127.0.0.1:52131",
+    "content_policy: connect-src http://127.0.0.1:52131",
+    "content_policy: img-src http://127.0.0.1:52131",
+    "content_policy: connect-src http://127.0.0.1:52131",
+    "content_policy: img-src http://127.0.0.1:52131",
+    "new_window: about://",
+    "content_policy: style-src-elem http://127.0.0.1:52131",
+    "content_policy: connect-src http://127.0.0.1:52131",
+    "content_policy: script-src-elem inline",
+    "content_policy: default-src http://127.0.0.1:52131",
+    "ipc: RTCPeerConnection",
+    "content_policy: script-src eval",
+    "ipc: RTCPeerConnection",
+    "ipc: RTCPeerConnection",
+    "ipc: RTCPeerConnection",
+    "ipc: RTCPeerConnection",
+    "ipc: RTCPeerConnection",
+    "ipc: RTCPeerConnection",
+    "ipc: RTCPeerConnection",
+    "ipc: RTCPeerConnection",
+    "ipc: RTCPeerConnection",
+    "ipc: RTCPeerConnection",
+    "ipc: RTCPeerConnection",
+    "ipc: RTCPeerConnection",
+    "ipc: RTCPeerConnection",
+    "ipc: RTCPeerConnection",
+    "ipc: RTCPeerConnection",
+    "ipc: RTCPeerConnection",
+    "ipc: RTCPeerConnection",
+    "ipc: RTCPeerConnection",
+    "ipc: RTCPeerConnection",
+    "ipc: RTCPeerConnection",
+    "ipc: RTCPeerConnection",
+    "ipc: RTCPeerConnection"
+  ],
+  "oldest_entry_before_flood": [
+    "enable",
+    "done",
+    "read_only",
+    "2026-11-17T15:59:28.899743500+00:00"
+  ],
+  "entries_before_flood": 41,
+  "phase2": {
+    "context": {
+      "reached": true,
+      "value": "{\"api_version\":1,\"contribution_id\":\"escape2\",\"plugin_id\":\"org.example.hostile-view-review\",\"server\":{\"host\":\"secret-host.home.arpa\",\"id\":\"3b4cc88f96cf4ee1b6cb9ebf5949ffa4\",\"name\":\"View host\"}}"
+    },
+    "exfil_payload": {
+      "value": "5669657720686f73747c7365637265742d686f73742e686f6d652e617270"
+    },
+    "rtc_stun_loopback": {
+      "reached": false,
+      "value": "PC is not a constructor"
+    },
+    "rtc_stun_lan": {
+      "reached": false,
+      "value": "PC is not a constructor"
+    },
+    "rtc_checks_loopback": {
+      "reached": false,
+      "value": "no constructor (undefined)"
+    },
+    "rtc_checks_lan": {
+      "reached": false,
+      "value": "no constructor (undefined)"
+    },
+    "rtc_globals_left": {
+      "value": "RTCTrackEvent,RTCStatsReport,RTCSessionDescription,RTCRtpTransceiver,RTCPeerConnectionIceEvent,RTCPeerConnectionIceErrorEvent,RTCIceCandidate,RTCErrorEvent,RTCError,RTCEncodedVideoFrame,RTCEncodedAudioFrame,RTCDataChannelEvent,RTCDTMFToneChangeEvent,RTCDTMFSender,RTCCertificate,RTCRtpScriptTransform,RTCPeerConnection,webkitRTCPeerConnection,RTCDataChannel,RTCIceTransport,RTCSctpTransport,RTCDtlsTransport,RTCRtpSender,RTCRtpReceiver"
+    },
+    "realm_sync_blank": {
+      "reached": false,
+      "value": "no constructor (undefined)"
+    },
+    "realm_frames_index": {
+      "reached": false,
+      "value": "no constructor (undefined)"
+    },
+    "realm_explicit_about_blank": {
+      "reached": false,
+      "value": "no constructor (undefined)"
+    },
+    "realm_srcdoc": {
+      "reached": false,
+      "value": "no constructor (undefined)"
+    },
+    "realm_srcdoc_sync": {
+      "reached": false,
+      "value": "no constructor (undefined)"
+    },
+    "realm_sandbox_srcdoc": {
+      "reached": false,
+      "value": "no constructor (undefined)"
+    },
+    "realm_nested_blank": {
+      "reached": false,
+      "value": "no constructor (undefined)"
+    },
+    "realm_document_open_write": {
+      "reached": false,
+      "value": "no constructor (undefined)"
+    },
+    "realm_document_open_then_read": {
+      "reached": false,
+      "value": "no constructor (undefined)"
+    },
+    "realm_detached": {
+      "reached": false,
+      "value": "no constructor (undefined)"
+    },
+    "realm_moved_frame": {
+      "reached": false,
+      "value": "no constructor (undefined)"
+    },
+    "realm_frame_reload": {
+      "reached": false,
+      "value": "no constructor (undefined)"
+    },
+    "realm_frame_srcdoc_change": {
+      "reached": false,
+      "value": "no constructor (undefined)"
+    },
+    "realm_object_blank": {
+      "reached": false,
+      "value": "no constructor (undefined)"
+    },
+    "realm_descriptor": {
+      "reached": false,
+      "value": "no constructor (undefined)"
+    },
+    "realm_transceiver_proto": {
+      "reached": false,
+      "value": "Evaluating a string as JavaScript violates the following Content Security Policy directive because 'unsafe-eval' is not an allowed source of script: script-src 'self'\".\n"
+    },
+    "realm_session_description_route": {
+      "reached": false,
+      "value": "no constructor (undefined)"
+    },
+    "worklet_realm": {
+      "reached": true,
+      "value": "loaded (no RTC in worklets)"
+    },
+    "preconnect": {
+      "reached": true,
+      "value": "added"
+    },
+    "dns_prefetch": {
+      "reached": true,
+      "value": "added"
+    },
+    "prefetch": {
+      "reached": true,
+      "value": "added"
+    },
+    "prerender_rules": {
+      "reached": true,
+      "value": "added"
+    },
+    "preload_fetch": {
+      "reached": true,
+      "value": "added"
+    },
+    "css_import": {
+      "reached": true,
+      "value": "added"
+    },
+    "svg_image": {
+      "reached": true,
+      "value": "added"
+    },
+    "send_beacon": {
+      "reached": true,
+      "value": "true"
+    },
+    "event_source": {
+      "reached": false,
+      "value": "blocked"
+    },
+    "anchor_ping": {
+      "reached": true,
+      "value": "clicked"
+    },
+    "anchor_download": {
+      "reached": true,
+      "value": "clicked"
+    },
+    "window_open_popup": {
+      "reached": false,
+      "value": "refused"
+    },
+    "service_worker": {
+      "reached": false,
+      "value": "Failed to register a ServiceWorker: The provided scriptURL ('http://127.0.0.1:62753/665db7bb9b4e425ca4c0b9b3e53bf38c/view/attack.js') violates the Content Security Policy."
+    },
+    "webtransport": {
+      "reached": false,
+      "value": "Refused to connect to 'https://127.0.0.1:52131/wt' because it violates the document's Content Security Policy"
+    },
+    "other_local_origin_fetch": {
+      "reached": false,
+      "value": "Failed to fetch"
+    },
+    "short_name_HIDDEN~1.JSO": {
+      "reached": false,
+      "value": "404"
+    },
+    "short_name_hidden~1.jso": {
+      "reached": false,
+      "value": "404"
+    },
+    "dot_name": {
+      "reached": false,
+      "value": "404"
+    },
+    "csp_report_forgery": {
+      "reached": true,
+      "value": "200"
+    },
+    "flood": {
+      "value": 1050
+    },
+    "flood_ms": {
+      "value": 4598
+    }
+  },
+  "after_flood": {
+    "total_entries": 43,
+    "view_blocked_entries": 40,
+    "refused_view_requests": 0,
+    "other_entries_left": [
+      [
+        "view_blocked",
+        "refused",
+        "unknown_call: GET junk-1"
+      ],
+      [
+        "view_blocked",
+        "refused",
+        "unknown_call: GET junk-0"
+      ],
+      [
+        "view_blocked",
+        "refused",
+        "content_policy: other https://trusted.example"
+      ],
+      [
+        "view_blocked",
+        "refused",
+        "content_policy: connect-src http://localhost:62753"
+      ],
+      [
+        "view_blocked",
+        "refused",
+        "content_policy: connect-src https://127.0.0.1:52131"
+      ],
+      [
+        "view_blocked",
+        "refused",
+        "content_policy: worker-src http://127.0.0.1:62753"
+      ],
+      [
+        "view_blocked",
+        "refused",
+        "content_policy: connect-src http://127.0.0.1:52131"
+      ],
+      [
+        "view_blocked",
+        "refused",
+        "content_policy: connect-src http://127.0.0.1:52131"
+      ],
+      [
+        "view_blocked",
+        "refused",
+        "content_policy: img-src http://127.0.0.1:52131"
+      ],
+      [
+        "view_blocked",
+        "refused",
+        "content_policy: connect-src http://127.0.0.1:52131"
+      ],
+      [
+        "view_blocked",
+        "refused",
+        "content_policy: img-src http://127.0.0.1:52131"
+      ],
+      [
+        "view_blocked",
+        "refused",
+        "new_window: about://"
+      ],
+      [
+        "view_blocked",
+        "refused",
+        "content_policy: style-src-elem http://127.0.0.1:52131"
+      ],
+      [
+        "view_blocked",
+        "refused",
+        "content_policy: connect-src http://127.0.0.1:52131"
+      ],
+      [
+        "view_blocked",
+        "refused",
+        "content_policy: script-src-elem inline"
+      ],
+      [
+        "view_blocked",
+        "refused",
+        "content_policy: default-src http://127.0.0.1:52131"
+      ],
+      [
+        "view_blocked",
+        "refused",
+        "ipc: RTCPeerConnection"
+      ],
+      [
+        "view_blocked",
+        "refused",
+        "content_policy: script-src eval"
+      ],
+      [
+        "view_blocked",
+        "refused",
+        "ipc: RTCPeerConnection"
+      ],
+      [
+        "view_blocked",
+        "refused",
+        "ipc: RTCPeerConnection"
+      ],
+      [
+        "view_blocked",
+        "refused",
+        "ipc: RTCPeerConnection"
+      ],
+      [
+        "view_blocked",
+        "refused",
+        "ipc: RTCPeerConnection"
+      ],
+      [
+        "view_blocked",
+        "refused",
+        "ipc: RTCPeerConnection"
+      ],
+      [
+        "view_blocked",
+        "refused",
+        "ipc: RTCPeerConnection"
+      ],
+      [
+        "view_blocked",
+        "refused",
+        "ipc: RTCPeerConnection"
+      ],
+      [
+        "view_blocked",
+        "refused",
+        "ipc: RTCPeerConnection"
+      ],
+      [
+        "view_blocked",
+        "refused",
+        "ipc: RTCPeerConnection"
+      ],
+      [
+        "view_blocked",
+        "refused",
+        "ipc: RTCPeerConnection"
+      ],
+      [
+        "view_blocked",
+        "refused",
+        "ipc: RTCPeerConnection"
+      ],
+      [
+        "view_blocked",
+        "refused",
+        "ipc: RTCPeerConnection"
+      ],
+      [
+        "view_blocked",
+        "refused",
+        "ipc: RTCPeerConnection"
+      ],
+      [
+        "view_blocked",
+        "refused",
+        "ipc: RTCPeerConnection"
+      ],
+      [
+        "view_blocked",
+        "refused",
+        "ipc: RTCPeerConnection"
+      ],
+      [
+        "view_blocked",
+        "refused",
+        "ipc: RTCPeerConnection"
+      ],
+      [
+        "view_blocked",
+        "refused",
+        "ipc: RTCPeerConnection"
+      ],
+      [
+        "view_blocked",
+        "refused",
+        "ipc: RTCPeerConnection"
+      ],
+      [
+        "view_blocked",
+        "refused",
+        "ipc: RTCPeerConnection"
+      ],
+      [
+        "view_blocked",
+        "refused",
+        "ipc: RTCPeerConnection"
+      ],
+      [
+        "view_blocked",
+        "refused",
+        "ipc: RTCPeerConnection"
+      ],
+      [
+        "view_blocked",
+        "refused",
+        "ipc: RTCPeerConnection"
+      ],
+      [
+        "open_view",
+        "done",
+        "escape2"
+      ],
+      [
+        "set_permissions",
+        "done",
+        "read_saved_state, ssh_session, run_approved_command"
+      ],
+      [
+        "enable",
+        "done",
+        "read_only"
+      ]
+    ]
+  },
+  "dialog": {
+    "request_to_dialog_visible_ms_upper_bound": 88,
+    "run_button": {
+      "x": 809.3125,
+      "y": 493.71875,
+      "width": 45.6875,
+      "height": 33
+    },
+    "view_area": {
+      "x": 179,
+      "y": 273.84375,
+      "width": 922,
+      "height": 452.15625
+    },
+    "run_button_inside_view_area": true,
+    "run_enabled_immediately": true,
+    "focused": "Decline",
+    "run_enabled_after_ms": 1363
+  },
+  "blob": "no blob page seen",
+  "blocked_after_blob": [
+    "ipc: RTCPeerConnection",
+    "ipc: RTCPeerConnection",
+    "ipc: RTCPeerConnection",
+    "ipc: RTCPeerConnection",
+    "ipc: RTCPeerConnection"
+  ],
+  "map_after": [
+    "secret-host.home.arpa"
+  ],
+  "views_open_after_lock": [],
+  "port_after_lock": "closed",
+  "db_after_close": {
+    "rows": 45,
+    "by_kind": [
+      {
+        "action": "enable",
+        "outcome": "done",
+        "n": 1
+      },
+      {
+        "action": "open_view",
+        "outcome": "done",
+        "n": 1
+      },
+      {
+        "action": "set_permissions",
+        "outcome": "done",
+        "n": 1
+      },
+      {
+        "action": "view_blocked",
+        "outcome": "refused",
+        "n": 42
+      }
+    ],
+    "view_blocked_tail": [
+      "1 requests from outside the view were refused (not counted as the plugin's)",
+      "1096 more refused or blocked attempts were not logged one by one",
+      "unknown_call: GET junk-1",
+      "unknown_call: GET junk-0"
+    ]
+  }
+}

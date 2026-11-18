@@ -1,0 +1,19 @@
+{
+  "id": "org.example.note",
+  "name": "Note",
+  "version": "0.1.0-alpha.1+build.5",
+  "api_version": 1,
+  "capabilities": [
+    "read_saved_state"
+  ],
+  "contributions": [
+    {
+      "id": "note",
+      "point": "menu_item",
+      "title": "Note",
+      "capabilities": [
+        "read_saved_state"
+      ]
+    }
+  ]
+}

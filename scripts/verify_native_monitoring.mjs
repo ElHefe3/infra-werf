@@ -80,6 +80,18 @@ try{
   await invoke('remove_server',{id:node.id});expect((await invoke('map_state')).events.every(e=>e.server_id!==node.id)).toBe(true);
   await invoke('monitoring_discover');const rediscovered=(await invoke('map_state')).servers.find(s=>s.host==='monitor-node');expect(rediscovered.id).not.toBe(node.id);expect((await invoke('monitoring_state')).records.find(r=>r.server_id===rediscovered.id).policy.lifecycle).toBe('candidate');
   expect(JSON.parse(await readFile(info.stats,'utf8')).offline_auth).toBe(0);expect(errors).toEqual([]);results.push('ignore stops checks; deletion removes local history; rediscovery produces a fresh non-contacted candidate; offline host never authenticated');
+  // T052: application Settings holds the application-wide options; Servers & monitoring keeps only per-server controls.
+  await page.getByRole('button',{name:'Settings',exact:true}).first().click();
+  await expect(page.getByRole('heading',{name:'Settings',exact:true})).toBeVisible();
+  await expect(page.getByRole('region',{name:'History retention',exact:true})).toBeVisible();await expect(page.getByRole('region',{name:'SSH alias discovery',exact:true})).toBeVisible();
+  const retention=page.getByRole('combobox',{name:'History retention',exact:true});const retentionBefore=(await invoke('monitoring_state')).history_limit;const retentionNext=retentionBefore===200?'1000':'200';
+  await retention.selectOption(retentionNext);await expect.poll(async()=>(await invoke('monitoring_state')).history_limit).toBe(Number(retentionNext));await expect(page.getByRole('status')).toContainText('History retention saved.');
+  await retention.selectOption(String(retentionBefore));await expect.poll(async()=>(await invoke('monitoring_state')).history_limit).toBe(retentionBefore);
+  await page.getByRole('button',{name:'Discover configured servers',exact:true}).click();await expect(page.getByRole('status')).toContainText('SSH configuration checked for new candidates.');
+  await page.getByRole('button',{name:'Servers & monitoring',exact:true}).first().click();
+  await expect(page.getByRole('heading',{name:'Servers & monitoring',exact:true})).toBeVisible();await expect(page.getByRole('combobox',{name:'History retention',exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'Discover configured servers',exact:true})).toHaveCount(0);
+  await page.getByRole('button',{name:'Open Settings',exact:true}).click();await expect(page.getByRole('heading',{name:'Settings',exact:true})).toBeVisible();
+  expect(errors).toEqual([]);results.push('application Settings holds history retention and alias discovery; Servers & monitoring no longer does and links to Settings');
   await page.screenshot({path:path.join(directory,'servers.png'),fullPage:true});
   await writeFile(path.join(directory,'result.json'),JSON.stringify({result:'pass',results,errors,directory,beforeReview},null,2));console.log(JSON.stringify({result:'pass',results,directory},null,2));await quit();
 }catch(error){console.error(`Monitoring proof artifacts: ${directory}`);await page?.screenshot({path:path.join(directory,'failure.png')}).catch(()=>{});throw error;}

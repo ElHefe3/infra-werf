@@ -1,6 +1,6 @@
 # F19 — Plugin API and manifest v1
 
-<!-- atlas-feature: {"id":"F19","scope":"S12","depends_on":["F18"],"deferred":true} -->
+<!-- atlas-feature: {"id":"F19","scope":"S12","depends_on":["F18"],"deferred":false} -->
 
 ## Work packet
 
@@ -12,11 +12,11 @@
 
 Read [SCOPE.md](../SCOPE.md) for access boundaries; use [AGENT.md](../AGENT.md) for execution/proof rules. Ticket dependencies, not numeric ordering, control implementation.
 
-Context: Other people will write plugins for their own instances, so the contract must be stable and documented from the first public release. Direction and working assumptions are recorded in [D052](../discovery/D052-plugin-platform-direction.md). Deferred until the owner activates S12.
+Context: Other people will write plugins for their own instances, so the contract must be stable and documented from the first public release. Direction and working assumptions are recorded in [D052](../discovery/D052-plugin-platform-direction.md). Activated 2026-11-12 ([D053](../discovery/D053-owner-activates-extensibility.md)).
 
 ## T039 — Define and validate the plugin manifest and API version
 
-<!-- atlas-ticket: {"id":"T039","feature":"F19","status":"deferred","depends_on":["T038"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T039","feature":"F19","status":"done","depends_on":["T038"],"evidence":"../evidence/T039-acceptance.md"} -->
 
 ### Outcome and included work
 
@@ -34,10 +34,10 @@ Choose one manifest format and publish its JSON Schema generated from the Rust t
 
 ### Acceptance criteria
 
-- [ ] A valid manifest loads; each invalid fixture is rejected with a specific, stable error code.
-- [ ] The published schema is generated from the same types the core validates with.
-- [ ] A manifest that requires a newer API version is refused with a clear message.
-- [ ] The compatibility rule for API changes is written down.
+- [x] A valid manifest loads; each invalid fixture is rejected with a specific, stable error code.
+- [x] The published schema is generated from the same types the core validates with.
+- [x] A manifest that requires a newer API version is refused with a clear message.
+- [x] The compatibility rule for API changes is written down.
 
 ### Verification
 
@@ -45,7 +45,7 @@ Fixture manifests (valid and one per rejection rule) in unit tests; schema gener
 
 ### Evidence and closure
 
-None yet. The ticket is deferred until the owner activates S12.
+Accepted on `8c908f4`: [T039 acceptance](../evidence/T039-acceptance.md). All four criteria are met. Native suites were not run because no application behaviour changed; the record says so. No separate review pass was run.
 
 ### Stop conditions
 
@@ -53,7 +53,7 @@ Stop if the manifest needs to grant a capability that SCOPE.md forbids; raise it
 
 ## T040 — Write the plugin author guide and example pack
 
-<!-- atlas-ticket: {"id":"T040","feature":"F19","status":"deferred","depends_on":["T039"],"evidence":null} -->
+<!-- atlas-ticket: {"id":"T040","feature":"F19","status":"done","depends_on":["T039"],"evidence":"../evidence/T040-acceptance.md"} -->
 
 ### Outcome and included work
 
@@ -71,9 +71,9 @@ Keep the guide in the repository next to the schema. The example plugin lives un
 
 ### Acceptance criteria
 
-- [ ] The guide documents every manifest field and extension point in API v1.
-- [ ] The example plugin validates and loads in an automated test.
-- [ ] A person who has not seen the code can build the example from the guide alone (recorded walkthrough).
+- [x] The guide documents every manifest field and extension point in API v1.
+- [x] The example plugin validates and loads in an automated test.
+- [x] A person who has not seen the code can build the example from the guide alone (recorded walkthrough).
 
 ### Verification
 
@@ -81,7 +81,7 @@ Automated load of the example; one recorded cold-read walkthrough of the guide.
 
 ### Evidence and closure
 
-None yet. The ticket is deferred until the owner activates S12.
+Accepted on `8aff7ed`: [T040 acceptance](../evidence/T040-acceptance.md). All three criteria are met. The owner did the cold-read walkthrough on 2026-11-15; five things it showed were fixed. The guide's section on the owner's review is deliberately limited until T041 builds that screen. No separate review pass was run.
 
 ### Stop conditions
 

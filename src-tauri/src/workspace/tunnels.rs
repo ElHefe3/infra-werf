@@ -20,6 +20,12 @@ pub(super) struct Tunnels {
     /// Latest discovery per server and endpoint; authorises specific-address
     /// destinations. Cleared when the server's target changes.
     discovered: HashMap<ServerId, (ServerTarget, Vec<DiscoveredApp>)>,
+    /// Tunnels opened for a plugin pack's application (F21/T044). They end
+    /// when what plugins may do changes.
+    from_packs: HashSet<String>,
+    /// Tunnels ended by such a change, for the next reap to report so the
+    /// shell closes their windows.
+    ended: Vec<String>,
 }
 
 impl Workspace {
@@ -32,6 +38,10 @@ impl Workspace {
         request: TunnelRequest,
     ) -> Result<TunnelInfo, AtlasError> {
         request.validate()?;
+        self.broker.extensions().authorize(
+            atlas_core::extensions::OPERATION_LOOPBACK_TUNNEL,
+            atlas_core::extensions::Capability::LoopbackTunnel,
+        )?;
         if let Some(host) = request.remote_host.as_deref() {
             // A non-loopback destination must be an address discovery found
             // this server listening on, for this exact port and endpoint.
@@ -149,6 +159,29 @@ impl Workspace {
         })
     }
 
+    /// Marks a tunnel as opened for a pack application.
+    pub(super) fn mark_pack_tunnel(&self, tunnel_id: &str) -> Result<(), AtlasError> {
+        self.lock_tunnels()?.from_packs.insert(tunnel_id.to_owned());
+        Ok(())
+    }
+
+    /// Ends every tunnel opened for a pack application. Their windows are
+    /// closed by the next reap.
+    pub(super) fn close_pack_tunnels(&self) {
+        let Ok(mut tunnels) = self.lock_tunnels() else {
+            return;
+        };
+        let ids: Vec<String> = tunnels.from_packs.drain().collect();
+        let removed: Vec<_> = ids
+            .iter()
+            .filter_map(|id| tunnels.entries.remove(id))
+            .collect();
+        tunnels.ended.extend(ids);
+        drop(tunnels);
+        // Dropping the entries kills and reaps each OpenSSH child.
+        drop(removed);
+    }
+
     pub fn close_tunnel(&self, tunnel_id: &str) -> Result<(), AtlasError> {
         // Dropping the entry kills and reaps the OpenSSH child.
         let removed = self.lock_tunnels()?.entries.remove(tunnel_id);
@@ -166,7 +199,9 @@ impl Workspace {
     }
 
     pub fn tunnels(&self) -> Result<Vec<TunnelInfo>, AtlasError> {
-        self.reap_tunnels();
+        // Tunnels a plugin change ended stay reported for the background
+        // reap, which closes their windows.
+        self.reap(false);
         let mut list: Vec<_> = self
             .lock_tunnels()?
             .entries
@@ -181,6 +216,10 @@ impl Workspace {
     /// server is no longer active/contactable or changed endpoint. Returns the
     /// removed IDs so the shell can close their windows.
     pub fn reap_tunnels(&self) -> Vec<String> {
+        self.reap(true)
+    }
+
+    fn reap(&self, take_ended: bool) -> Vec<String> {
         let candidates: Vec<(String, ServerId, ServerTarget)> = match self.lock_tunnels() {
             Ok(tunnels) => tunnels
                 .entries
@@ -190,7 +229,10 @@ impl Workspace {
             Err(_) => return Vec::new(),
         };
         if candidates.is_empty() {
-            return Vec::new();
+            return match self.lock_tunnels() {
+                Ok(mut tunnels) if take_ended => std::mem::take(&mut tunnels.ended),
+                _ => Vec::new(),
+            };
         }
         // Policy is read without holding the tunnel lock.
         let revoked: HashSet<String> = candidates
@@ -201,7 +243,7 @@ impl Workspace {
         let Ok(mut tunnels) = self.lock_tunnels() else {
             return Vec::new();
         };
-        let ended: Vec<String> = tunnels
+        let mut ended: Vec<String> = tunnels
             .entries
             .iter_mut()
             .filter_map(|(id, entry)| {
@@ -211,6 +253,13 @@ impl Workspace {
                 .then(|| id.clone())
             })
             .collect();
+        for id in &ended {
+            tunnels.from_packs.remove(id);
+        }
+        if take_ended {
+            let closed_for_plugins = std::mem::take(&mut tunnels.ended);
+            ended.extend(closed_for_plugins);
+        }
         let removed: Vec<_> = ended
             .iter()
             .filter_map(|id| tunnels.entries.remove(id))

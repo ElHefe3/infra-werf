@@ -1,11 +1,19 @@
 //! Shared domain contracts. Native commands and coordinator transports use the
 //! same definitions; neither this crate nor a DTO grants authenticated access.
 pub mod contracts;
+pub mod extensions;
 pub mod files;
 pub mod health;
 pub mod inventory;
 pub mod monitoring;
 pub mod operations;
+pub mod pack;
+pub mod plugin;
+pub mod plugin_host;
+pub mod plugin_install;
+pub mod plugin_jobs;
+pub mod plugin_sandbox;
+pub mod plugin_view;
 mod sftp;
 pub mod ssh;
 pub mod store;

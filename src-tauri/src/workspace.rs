@@ -4,8 +4,11 @@ use atlas_core::files::{
     TransferDirection, TransferView,
 };
 use atlas_core::*;
+mod jobs;
 mod monitoring;
+mod packs;
 mod tunnels;
+mod views;
 use atlas_core::{
     files::{
         FileAction, FileChange, FileMutationPreview, FileMutationReceipt, FileResult, FileSession,
@@ -18,6 +21,7 @@ use atlas_core::{
         WorkloadAction, WorkloadControlPreview, WorkloadControlReceipt, WorkloadInspection,
     },
 };
+pub use jobs::JobAnswer;
 use std::{
     collections::HashMap,
     path::PathBuf,
@@ -26,6 +30,7 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
+pub use views::ViewBounds;
 struct LocalGrant {
     value: LocalTransfer,
     target: ServerTarget,
@@ -109,12 +114,34 @@ pub struct Workspace {
     live: Mutex<monitoring::LiveScheduler>,
     live_contact: Mutex<()>,
     tunnels: Mutex<tunnels::Tunnels>,
+    packs: packs::Packs,
+    views: views::Views,
+    jobs: jobs::Jobs,
+    /// Updates checked and shown to the owner, by token (T046).
+    updates: Mutex<HashMap<String, PendingUpdate>>,
 }
+
+/// An update exactly as it was checked and shown, so applying it uses the
+/// same files rather than fetching or reading them again.
+struct PendingUpdate {
+    plugin: String,
+    prepared: atlas_core::plugin_install::Prepared,
+    previous_hash: String,
+    checked: std::time::Instant,
+}
+const UPDATE_LIFETIME: std::time::Duration = std::time::Duration::from_secs(15 * 60);
 
 impl Workspace {
     pub fn new(paths: Paths) -> Arc<Self> {
         let store = paths.open();
         let broker = OperationBroker::default();
+        // Optional built-in extensions can be left out at start-up (T038).
+        let disabled = std::env::var(atlas_core::extensions::DISABLED_EXTENSIONS_ENV)
+            .map(|value| atlas_core::extensions::parse_disabled(&value))
+            .unwrap_or_default();
+        broker
+            .set_extensions(atlas_core::extensions::builtin_with(&disabled))
+            .expect("fresh local broker registry");
         let authority = broker
             .issue_backend_authority()
             .expect("fresh local broker authority");
@@ -125,7 +152,7 @@ impl Workspace {
             ssh.clone(),
             SessionPolicy::default(),
         );
-        Arc::new(Self {
+        let workspace = Arc::new(Self {
             paths,
             store: Mutex::new(store),
             lifecycle: Mutex::new(Lifecycle::default()),
@@ -138,11 +165,266 @@ impl Workspace {
             live: Mutex::new(monitoring::LiveScheduler::default()),
             live_contact: Mutex::new(()),
             tunnels: Mutex::new(tunnels::Tunnels::default()),
-        })
+            packs: packs::Packs::default(),
+            updates: Mutex::new(HashMap::new()),
+            views: views::Views::default(),
+            jobs: jobs::Jobs::default(),
+        });
+        // The start-up check of installed plugins' files (T045). A store
+        // that cannot open is reported where it is used.
+        let directory = workspace.plugins_directory();
+        let _ = workspace.with_store(|store| store.plugins_verify(&directory));
+        workspace
     }
 
     pub fn live_contact_guard(&self) -> Result<std::sync::MutexGuard<'_, ()>, AtlasError> {
         self.live_contact.lock().map_err(|_| failure())
+    }
+    /// Registered extension points for the interface (S12/F18).
+    pub fn extensions(&self) -> atlas_core::extensions::ExtensionCatalogue {
+        self.broker.extensions().catalogue()
+    }
+    /// Where plugins are looked for: beside the workspace database.
+    pub fn plugins_directory(&self) -> PathBuf {
+        std::env::var_os(atlas_core::plugin_host::PLUGINS_DIR_ENV)
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                self.paths
+                    .database
+                    .parent()
+                    .unwrap_or_else(|| std::path::Path::new("."))
+                    .join("plugins")
+            })
+    }
+    pub fn plugins_state(&self) -> Result<atlas_core::plugin_host::PluginsState, AtlasError> {
+        let directory = self.plugins_directory();
+        self.with_store(|store| store.plugins_state(&directory))
+    }
+    pub fn plugin_enable(
+        &self,
+        plugin: &str,
+        trust: atlas_core::plugin_host::TrustLevel,
+    ) -> Result<atlas_core::plugin_host::PluginsState, AtlasError> {
+        let directory = self.plugins_directory();
+        let state = self.with_store(|store| {
+            store.plugin_enable(&directory, plugin, trust)?;
+            store.plugins_state(&directory)
+        });
+        self.plugins_changed_for(Some(plugin));
+        state
+    }
+    pub fn plugin_disable(
+        &self,
+        plugin: &str,
+    ) -> Result<atlas_core::plugin_host::PluginsState, AtlasError> {
+        let directory = self.plugins_directory();
+        let state = self.with_store(|store| {
+            store.plugin_disable(&directory, plugin)?;
+            store.plugins_state(&directory)
+        });
+        self.plugins_changed_for(Some(plugin));
+        state
+    }
+    pub fn plugin_set_grant(
+        &self,
+        plugin: &str,
+        server: &ServerId,
+        capabilities: &[atlas_core::extensions::Capability],
+    ) -> Result<atlas_core::plugin_host::PluginsState, AtlasError> {
+        let directory = self.plugins_directory();
+        let state = self.with_store(|store| {
+            store.plugin_set_grant(&directory, plugin, server, capabilities)?;
+            store.plugins_state(&directory)
+        });
+        self.plugins_changed_for(Some(plugin));
+        state
+    }
+    /// Installs a plugin. Reading, unpacking and checking happen before the
+    /// store is touched; only the final publish holds it.
+    pub fn plugin_install(
+        &self,
+        request: &atlas_core::plugin_install::InstallRequest,
+    ) -> Result<atlas_core::plugin_install::InstallReport, AtlasError> {
+        let directory = self.plugins_directory();
+        match atlas_core::plugin_install::prepare(request) {
+            Ok(prepared) => self.with_store(|store| store.plugin_publish(&directory, &prepared)),
+            Err(problem) => Ok(atlas_core::plugin_install::InstallReport::refused(problem)),
+        }
+    }
+    /// Reads and checks an update, and shows what it would change. Nothing
+    /// is applied; the checked files are kept for 15 minutes under a token.
+    pub fn plugin_update_check(
+        &self,
+        plugin: &str,
+        request: &atlas_core::plugin_install::InstallRequest,
+    ) -> Result<atlas_core::plugin_install::UpdatePreview, AtlasError> {
+        use atlas_core::plugin_install::{UpdatePreview, prepare};
+        let directory = self.plugins_directory();
+        let name = self
+            .plugins_state()?
+            .plugins
+            .into_iter()
+            .find(|p| p.id == plugin)
+            .map(|p| p.name)
+            .ok_or_else(|| AtlasError::new(ErrorCode::NotFound))?;
+        let prepared = match prepare(request) {
+            Ok(prepared) => prepared,
+            Err(problem) => return Ok(UpdatePreview::refused(plugin, &name, problem)),
+        };
+        let (previous_hash, diff) = match self
+            .with_store(|store| store.plugin_update_diff(&directory, plugin, &prepared))?
+        {
+            Ok(found) => found,
+            Err(problem) => return Ok(UpdatePreview::refused(plugin, &name, problem)),
+        };
+        let token = OperationId::generate().as_str().to_owned();
+        let mut updates = self.updates.lock().map_err(|_| failure())?;
+        updates.retain(|_, pending| {
+            pending.checked.elapsed() < UPDATE_LIFETIME && pending.plugin != plugin
+        });
+        updates.insert(
+            token.clone(),
+            PendingUpdate {
+                plugin: plugin.to_owned(),
+                prepared,
+                previous_hash,
+                checked: std::time::Instant::now(),
+            },
+        );
+        Ok(UpdatePreview {
+            contract_version: CONTRACT_VERSION,
+            token: Some(token),
+            plugin_id: plugin.to_owned(),
+            plugin_name: name,
+            diff: Some(diff),
+            problem: None,
+        })
+    }
+    /// Applies an update the owner checked. A refusal or failure leaves the
+    /// installed version as it was, and is logged.
+    pub fn plugin_update_apply(
+        &self,
+        token: &str,
+        allow_downgrade: bool,
+    ) -> Result<atlas_core::plugin_install::UpdatePreview, AtlasError> {
+        use atlas_core::plugin_install::{InstallProblem, InstallProblemCode, UpdatePreview};
+        let directory = self.plugins_directory();
+        let pending = self
+            .updates
+            .lock()
+            .map_err(|_| failure())?
+            .remove(token)
+            .filter(|pending| pending.checked.elapsed() < UPDATE_LIFETIME);
+        let Some(pending) = pending else {
+            return Ok(UpdatePreview::refused(
+                "",
+                "",
+                InstallProblem::new(
+                    InstallProblemCode::PreviewExpired,
+                    "This update was checked more than 15 minutes ago, or was already applied. Check it again.",
+                ),
+            ));
+        };
+        let name = pending.prepared.manifest.name.clone();
+        let outcome = self.with_store(|store| {
+            let applied = store.plugin_apply_update(
+                &directory,
+                &pending.plugin,
+                &pending.prepared,
+                &pending.previous_hash,
+                allow_downgrade,
+            );
+            let why = match &applied {
+                Ok(Ok(_)) => None,
+                Ok(Err(problem)) => Some(
+                    serde_json::to_value(problem.code)
+                        .ok()
+                        .and_then(|v| v.as_str().map(str::to_owned))
+                        .unwrap_or_default(),
+                ),
+                Err(_) => Some("io_failure".to_owned()),
+            };
+            if let Some(why) = why {
+                store.plugin_update_failed(&directory, &pending.plugin, &why)?;
+            }
+            applied
+        });
+        // The plugin's files changed: work in flight for plugins stops.
+        self.plugins_changed();
+        Ok(match outcome? {
+            Ok(diff) => UpdatePreview {
+                contract_version: CONTRACT_VERSION,
+                token: None,
+                plugin_id: pending.plugin,
+                plugin_name: name,
+                diff: Some(diff),
+                problem: None,
+            },
+            Err(problem) => UpdatePreview::refused(&pending.plugin, &name, problem),
+        })
+    }
+    /// Forgets a checked update the owner decided not to apply.
+    pub fn plugin_update_discard(&self, token: &str) -> Result<(), AtlasError> {
+        self.updates.lock().map_err(|_| failure())?.remove(token);
+        Ok(())
+    }
+    /// Removes a plugin folder with its permissions and install record.
+    pub fn plugin_remove(
+        &self,
+        folder: &str,
+    ) -> Result<atlas_core::plugin_host::PluginsState, AtlasError> {
+        let directory = self.plugins_directory();
+        let state = self.with_store(|store| {
+            store.plugin_remove(&directory, folder)?;
+            store.plugins_state(&directory)
+        });
+        self.plugins_changed();
+        state
+    }
+    pub fn plugin_activity(
+        &self,
+        limit: u32,
+    ) -> Result<atlas_core::plugin_host::PluginActivityLog, AtlasError> {
+        self.with_store(|store| store.plugin_activity(limit))
+    }
+    /// The kill switch: every plugin off, or back on (T042).
+    pub fn plugins_set_all_off(
+        &self,
+        off: bool,
+    ) -> Result<atlas_core::plugin_host::PluginsState, AtlasError> {
+        let directory = self.plugins_directory();
+        let state = self.with_store(|store| {
+            store.plugins_set_all_off(off)?;
+            store.plugins_state(&directory)
+        });
+        self.plugins_changed();
+        state
+    }
+    pub fn plugin_revoke_trusted(
+        &self,
+        plugin: &str,
+    ) -> Result<atlas_core::plugin_host::PluginsState, AtlasError> {
+        let directory = self.plugins_directory();
+        let state = self.with_store(|store| {
+            store.plugin_revoke_trusted(&directory, plugin)?;
+            store.plugins_state(&directory)
+        });
+        self.plugins_changed_for(Some(plugin));
+        state
+    }
+    /// The enforcement point for a plugin's use of a capability (T041).
+    pub fn plugin_authorize(
+        &self,
+        plugin: &str,
+        server: &ServerId,
+        capability: atlas_core::extensions::Capability,
+    ) -> Result<atlas_core::plugin_host::PluginDecision, AtlasError> {
+        let directory = self.plugins_directory();
+        self.with_store(|store| store.plugin_authorize(&directory, plugin, server, capability))
+    }
+    /// Refuses a command whose extension is disabled.
+    pub fn require_extension(&self, extension: &str) -> Result<(), AtlasError> {
+        self.broker.extensions().require(extension)
     }
     pub fn status(&self) -> Result<WorkspaceStatus, AtlasError> {
         Ok(WorkspaceStatus {
@@ -227,6 +509,10 @@ impl Workspace {
     ) -> Result<HealthSnapshot, AtlasError> {
         let _contact = self.live_contact_guard()?;
         config.validate()?;
+        self.broker.extensions().authorize(
+            atlas_core::extensions::health_check_id(config.service_kind),
+            atlas_core::extensions::Capability::NetworkProbe,
+        )?;
         if self
             .with_store(|s| s.monitoring())?
             .records
@@ -545,6 +831,10 @@ impl Workspace {
         revision: Option<&str>,
         source_binding: Option<&str>,
     ) -> Result<InventoryRefreshResult, AtlasError> {
+        self.broker.extensions().authorize(
+            atlas_core::extensions::COLLECTOR_BASELINE_INVENTORY,
+            atlas_core::extensions::Capability::RunApprovedCommand,
+        )?;
         let _refresh_admission = self.begin()?;
         let target = self.ssh_target(id)?;
         let ticket = self.files.prepare(&target)?;
