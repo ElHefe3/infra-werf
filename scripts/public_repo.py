@@ -91,6 +91,8 @@ def problems(data: bytes, forbid) -> list[str]:
         for match in pattern.finditer(data):
             value = match.group(0)
             if name == "private address":
+                if data[match.end():match.end() + 1] == b"/":
+                    continue  # a network in CIDR notation, such as a rule's own range
                 try:
                     address = ipaddress.ip_address(value.decode())
                 except ValueError:
