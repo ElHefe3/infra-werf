@@ -3,6 +3,7 @@ name = "atlas-native"
 version = "0.1.5"
 edition = "2024"
 rust-version = "1.99.1"
+license = "MIT OR Apache-2.0"
 
 [lib]
 name = "atlas_native_lib"

@@ -7,7 +7,10 @@ import net from 'node:net';
 import path from 'node:path';
 
 const host = process.env.ATLAS_LIVE_TEST_HOST;
-if (!['lab-server-2', 'lab-server-3', 'lab-server-4'].includes(host)) throw new Error('Select an explicitly approved working host; server 1 is excluded.');
+// The owner lists the hosts they approve for live checks (OpenSSH aliases,
+// comma-separated) in ATLAS_LIVE_APPROVED_HOSTS; nothing else is contacted.
+const approved = (process.env.ATLAS_LIVE_APPROVED_HOSTS ?? '').split(',').map(name => name.trim()).filter(Boolean);
+if (!host || !approved.includes(host)) throw new Error('Select a host the owner listed in ATLAS_LIVE_APPROVED_HOSTS.');
 if (!process.env.ATLAS_DESKTOP_BINARY) throw new Error('Select the actual desktop executable.');
 const directory = path.resolve('.tools', `live-connection-proof-${randomUUID()}`);
 await mkdir(directory);

@@ -16,3 +16,6 @@ src-tauri/gen/schemas/
 *.jks
 *.keystore
 *.p12
+
+# The owner's private replacements for the public repository (D062); never commit.
+.public-terms.json
