@@ -9,7 +9,7 @@ export { activeMap, liveStatus } from "./live-model";
 export function MonitoringHub({state,monitoring,client,reload,remove,open,openSettings}:{state:MapState;monitoring:MonitoringState|null;client:WorkspaceClient;reload:()=>Promise<void>;remove:(id:string)=>void;open:(id:string)=>void;openSettings:()=>void}) {
   const [busy,setBusy]=useState(false); const [failure,setFailure]=useState(""); const [message,setMessage]=useState("");
   async function act(action:()=>Promise<unknown>,message:string) {setBusy(true);setFailure("");try {await action();await reload();setMessage(message);}catch(e){setFailure(errorMessage(e));}finally{setBusy(false);}}
-  return <div className="monitoring-hub"><div className="section-heading"><div><h2>Servers & monitoring</h2><p>Checks run while InfraWerf is open. Saved inventory remains available during outages.</p></div></div>
+  return <div className="monitoring-hub"><div className="section-heading"><div><h2>Servers &amp; monitoring</h2><p>Checks run while InfraWerf is open. Saved inventory remains available during outages.</p></div></div>
     <p className="muted">History retention and SSH alias discovery apply to the whole application. <button className="text-button" onClick={openSettings}>Open Settings</button></p>
     {failure && <p className="form-error" role="alert">{failure}</p>}{message && <p role="status">{message}</p>}
     {state.servers.map(server=>{const record=monitoring?.records.find(r=>r.server_id===server.id);const status=liveStatus({...server,monitoring:record} as LiveServer);return <details className="managed-server" key={server.id}><summary><strong>{server.name}</strong><span>{server.host}</span><span className={`live-status ${status.kind}`} title={status.detail}>{status.label}</span></summary>

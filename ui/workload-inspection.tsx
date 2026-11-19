@@ -217,7 +217,7 @@ export function WorkloadInspectionPanel({ server, onBusy }: { server: MapServer;
   const workloads = access.session?.workloads ?? [];
   const inventoryBoundToHost = server.inventory?.source_host === server.host;
   return <div className="workload-inspection">
-    <div className="section-heading"><div><h3>Live workload details & logs</h3><p>On-demand status and the latest 50 log lines, capped at 8 KiB. Results stay in this protected view.</p></div>
+    <div className="section-heading"><div><h3>Live workload details &amp; logs</h3><p>On-demand status and the latest 50 log lines, capped at 8 KiB. Results stay in this protected view.</p></div>
       {access.session ? <button onClick={lock}>Lock protected view</button> : <button className="primary" disabled={access.busy || !inventoryBoundToHost} onClick={() => void access.connect()}>{access.busy ? "Opening…" : "Open protected view"}</button>}
     </div>
     {access.error && <p className="form-error" role="alert">{access.error}</p>}
