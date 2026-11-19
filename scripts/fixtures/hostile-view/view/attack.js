@@ -63,6 +63,7 @@ const status = async response => { const body = await response.text(); if (!resp
   await outcome("api_context", () => fetch(api("context")).then(status));
   await outcome("api_observations", () => fetch(api("observations")).then(status));
   await outcome("api_inventory", () => fetch(api("inventory")).then(status));
+  await outcome("api_jobs", () => fetch(api("jobs")).then(status));
   await outcome("api_action", () => fetch(api("actions"), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ contribution_id: "kernel" }) }).then(status));
   await outcome("api_unknown", () => fetch(api("servers/remove")).then(status));
   // Try to flood the activity log and push other entries out.

@@ -247,7 +247,7 @@ Stop if icons or the cache would need data beyond the discovery result.
 
 ### Outcome and included work
 
-An optional InfraWerf PIN, set in Settings → PIN. While it is set and locked, host key fingerprints and application details are hidden, and Files, Terminal, live workload details and application windows refuse to open until the PIN is entered. One entry unlocks for 5 minutes; "Lock now" ends it early. Decision and limits in [D067](../discovery/D067-owner-pin.md).
+An optional InfraWerf PIN, set in Settings → PIN. While it is set and locked, host key fingerprints and application details are hidden, and Files, Terminal, live workload details and application windows refuse to open until the PIN is entered. One entry unlocks for 5 minutes; "Lock now" ends it early and closes any open Files, Terminal, workload-details session and application window. Decision and limits in [D067](../discovery/D067-owner-pin.md).
 
 ### Exclusions
 
@@ -255,7 +255,7 @@ Windows Hello; encrypting data at rest; hiding server names or the map.
 
 ### Implementation and contracts
 
-`atlas-core/src/pin.rs` (hash, unlock timer, attempt limit, `pin_required` error) and `src-tauri/src/workspace/pin.rs` (`pin.json` beside the database). Commands `pin_status`, `pin_unlock`, `pin_lock`, `pin_set`, `pin_clear` are main-window only. `files_open`, `files_terminal_start`, `workload_inspect`, `tunnel_open` and `pack_app_open` call `require_pin`. The UI transport asks for the PIN on `pin_required` and retries once (`ui/pin-model.ts`); `Secret` masks values on screen (`ui/pin.tsx`).
+`atlas-core/src/pin.rs` (hash, unlock timer, attempt limit, `pin_required` error) and `src-tauri/src/workspace/pin.rs` (`pin.json` beside the database; the wrong-PIN count in `pin-attempts.json`, so a restart does not reset it). Commands `pin_status`, `pin_unlock`, `pin_lock`, `pin_set`, `pin_clear` are main-window only. `files_open`, `files_terminal_start`, `workload_inspect`, `tunnel_open` and `pack_app_open` call `require_pin`. The UI transport asks for the PIN on `pin_required` and retries once (`ui/pin-model.ts`); `Secret` masks values on screen (`ui/pin.tsx`).
 
 **Ticket dependencies:** [T026](F12-release-acceptance.md).
 
@@ -263,12 +263,13 @@ Windows Hello; encrypting data at rest; hiding server names or the map.
 
 - [ ] With a PIN set and locked, the protected commands refuse until the PIN is entered, then work for 5 minutes.
 - [ ] Fingerprints and app details are masked until unlocked and hide again when the unlock ends.
-- [ ] Only a salted hash is stored; wrong PINs are rate limited; removing `pin.json` removes the PIN.
+- [ ] Only a salted hash is stored; wrong PINs are rate limited, also across a restart; removing `pin.json` removes the PIN.
+- [ ] "Lock now" closes open Files, Terminal, workload-details sessions and application windows.
 - [ ] Without a PIN, nothing changes.
 
 ### Verification
 
-`crates/atlas-core/src/pin.rs` tests; `ui/pin-model.test.ts`; owner review on the installed build.
+`crates/atlas-core/src/pin.rs` and `src-tauri/src/workspace/pin.rs` tests; `ui/pin-model.test.ts`; owner review on the installed build.
 
 ### Evidence and closure
 
@@ -317,3 +318,39 @@ Not yet accepted. Close with owner acceptance on the installed build, recorded i
 ### Stop conditions
 
 Stop if replacing a plugin would skip the update review rules.
+
+## T067 — A plugin view can read its own job results
+
+<!-- atlas-ticket: {"id":"T067","feature":"F27","status":"in_progress","depends_on":["T026"],"evidence":null} -->
+
+### Outcome and included work
+
+The view message API v1 gains `GET jobs`: the plugin's own jobs on the server, with each job's schedule and its latest run (`started_at`, `finished_at`, `state`, `exit_code` and the job's own `result`). With it, a plugin can show live data in its own tab without the owner pressing Run, by scheduling its job. The owner asked for this on 2026-11-19 for the Containers plugin, which now has a Containers tab of container tiles (in its own repository).
+
+### Exclusions
+
+Starting a job from a view; any data beyond what the plugin's own job returned.
+
+### Implementation and contracts
+
+`src-tauri/src/workspace/views.rs` (`ViewLink::jobs`), gated by `read_saved_state` on the server like `observations` and `inventory`; documented in `docs/plugin-api/views.md`. Version 1 allows added calls, so existing views are unaffected.
+
+**Ticket dependencies:** [T026](F12-release-acceptance.md).
+
+### Acceptance criteria
+
+- [ ] A view without `read_saved_state` on the server gets `not_granted`.
+- [ ] A view sees only its own plugin's jobs on that server, with the latest run's result.
+- [ ] The Containers plugin's tab shows live state, health and images after a scheduled run.
+
+### Verification
+
+`view_jobs` test in `src-tauri/src/workspace/views.rs` (own plugin only, newest run, no logs); the hostile view in `verify_native_plugin_views.mjs` tries `GET jobs` without the grant; owner review with the Containers plugin 1.2.0 on the installed build.
+
+### Evidence and closure
+
+Not yet accepted. Close with owner acceptance, recorded in `agent/evidence/`.
+
+### Stop conditions
+
+Stop if a view could read another plugin's results or start a run.

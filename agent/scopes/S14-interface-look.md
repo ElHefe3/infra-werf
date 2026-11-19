@@ -18,7 +18,7 @@ T059 (look) comes first; T060 (dark theme) and T061 (layout) build on it. T062 (
 
 | Feature | Tickets | Journey |
 | --- | --- | --- |
-| [F27](../features/F27-interface-look.md) | T059–T066 | Open InfraWerf → the map fills the window → switch look and theme from the top bar → hide and show the menu and inspector → messages appear and fade without taking space. |
+| [F27](../features/F27-interface-look.md) | T059–T067 | Open InfraWerf → the map fills the window → switch look and theme from the top bar → hide and show the menu and inspector → messages appear and fade without taking space. |
 
 Ticket status is canonical in the feature packets; scope progress is derived.
 

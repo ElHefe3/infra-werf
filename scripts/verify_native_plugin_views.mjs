@@ -104,7 +104,7 @@ try {
   await expect.poll(async () => hostile.isClosed() ? 'closed' : await hostile.title().catch(() => ''), { timeout: 60000 }).toBe('done');
   const attempts = JSON.parse(await hostile.locator('#results').innerText());
   await writeFile(path.join(directory, 'hostile-results.json'), JSON.stringify(attempts, null, 2));
-  const mustFail = ['webrtc_stun', 'rtc_blank_frame', 'rtc_frames_index', 'rtc_srcdoc_frame', 'rtc_nested_frame', 'tauri_add_server', 'tauri_post_message', 'tauri_global', 'ipc_postmessage', 'webview_postmessage', 'ipc_protocol_fetch', 'ipc_protocol_remove', 'main_origin_fetch', 'internet_fetch', 'image_beacon', 'websocket', 'worker', 'window_open', 'api_without_secret', 'api_observations', 'api_inventory', 'api_action', 'api_unknown'];
+  const mustFail = ['webrtc_stun', 'rtc_blank_frame', 'rtc_frames_index', 'rtc_srcdoc_frame', 'rtc_nested_frame', 'tauri_add_server', 'tauri_post_message', 'tauri_global', 'ipc_postmessage', 'webview_postmessage', 'ipc_protocol_fetch', 'ipc_protocol_remove', 'main_origin_fetch', 'internet_fetch', 'image_beacon', 'websocket', 'worker', 'window_open', 'api_without_secret', 'api_observations', 'api_inventory', 'api_jobs', 'api_action', 'api_unknown'];
   for (const name of mustFail) expect(attempts[name]?.reached, `${name}: ${JSON.stringify(attempts[name])}`).toBe(false);
   expect(attempts.api_context.reached).toBe(true);
   // Tauri freezes its internals in every page, so the page can call
@@ -151,7 +151,7 @@ try {
   expect(entries.some(e => e.plugin_id === HOSTILE && e.action === 'view_request' && e.outcome === 'refused' && e.detail === 'kernel')).toBe(true);
   await page.screenshot({ path: path.join(directory, 'hostile-view.png') });
   await hostile.screenshot({ path: path.join(directory, 'hostile-view-page.png') }).catch(() => {});
-  results.push(`the hostile view's ${mustFail.length} escape attempts all failed: Tauri internals, window.ipc and chrome.webview were gone; fetches to ipc.localhost, InfraWerf's own page and the internet, an image beacon, a WebSocket, frames, a blank frame's IPC, a worker, window.open, the API without the secret, ungranted observations, inventory and a command, and an unknown call were refused; navigating the view to InfraWerf's page was refused; the map was unchanged; each kind of attempt is in the plugin activity log`);
+  results.push(`the hostile view's ${mustFail.length} escape attempts all failed: Tauri internals, window.ipc and chrome.webview were gone; fetches to ipc.localhost, InfraWerf's own page and the internet, an image beacon, a WebSocket, frames, a blank frame's IPC, a worker, window.open, the API without the secret, ungranted observations, inventory, jobs and a command, and an unknown call were refused; navigating the view to InfraWerf's page was refused; the map was unchanged; each kind of attempt is in the plugin activity log`);
 
   // 3. The example view reads what its grants allow and asks to run a command.
   await workspace.getByRole('tab', { name: 'Host dashboard', exact: true }).click();

@@ -49,6 +49,7 @@ All calls are relative to the page: `../infrawerf/v1/<call>` from `view/index.ht
 | `GET context` | nothing; `read_saved_state` for `server` | `api_version` (1), `plugin_id`, `contribution_id`, and `server` with `id`, `name`, `host`, or `null` without `read_saved_state`. |
 | `GET observations` | `read_saved_state` on the server | This plugin's pack commands allowed on the server: `contribution_id`, `title`, `health_check`, `parameters` (each with `name`, `source` and the `choices` it may take, as `id` and `name`) and its latest `observation`, or `null`. |
 | `GET inventory` | `read_saved_state` on the server | `{"inventory": ...}`: the server's saved inventory, or `null`. |
+| `GET jobs` | `read_saved_state` on the server | This plugin's jobs on the server: `contribution_id`, `title`, `schedule` (`every_minutes`, `next_run_at`, `last_run_at`, `paused`) or `null`, and `latest`: the newest run's `started_at`, `finished_at`, `state`, `exit_code` and the job's own `result`, or `null`. Added in InfraWerf 0.1.13. |
 | `POST actions` | the command allowed on the server | Body `{"contribution_id": "...", "parameters": {"name": "<workload id>"}}`. Asks the owner to run one of this plugin's pack commands. Answers `{"id": "...", "state": "waiting"}`. One request may wait per view. |
 | `GET actions/<id>` | nothing | `state`: `waiting`, `running`, `declined`, `done`, `failed` or `cancelled`, and the `observation` once done. |
 

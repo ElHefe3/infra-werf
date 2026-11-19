@@ -290,6 +290,18 @@ impl ViewLink {
         }
     }
 
+    /// This plugin's jobs on the server, with their schedule and latest
+    /// run's result: what the plugin's own logic produced (T067).
+    fn jobs(&self, workspace: &Workspace) -> ApiReply {
+        if !self.allowed(workspace, Capability::ReadSavedState) {
+            return Self::not_granted();
+        }
+        let Ok(state) = workspace.plugin_jobs(&self.server) else {
+            return ApiReply::refused(500, "unavailable", "InfraWerf could not read the jobs.");
+        };
+        ApiReply::ok(view_jobs(&state, &self.tab.plugin_id))
+    }
+
     fn ask(&self, workspace: &Arc<Workspace>, body: &[u8]) -> ApiReply {
         let Ok(ask) = serde_json::from_slice::<ActionAsk>(body) else {
             return ApiReply::refused(
@@ -483,6 +495,7 @@ impl ViewApi for ViewLink {
             ("GET", "context") => self.context(&workspace),
             ("GET", "observations") => self.observations(&workspace),
             ("GET", "inventory") => self.inventory(&workspace),
+            ("GET", "jobs") => self.jobs(&workspace),
             ("POST", "actions") => self.ask(&workspace, body),
             ("GET", action) if action.starts_with("actions/") => {
                 self.action(&workspace, &action["actions/".len()..])
@@ -819,5 +832,84 @@ impl Workspace {
             Err(_) => action.state = ViewActionState::Failed,
         }
         Ok(action.state.clone())
+    }
+}
+
+/// What `GET jobs` answers: only `plugin`'s jobs in `state` (one server's),
+/// each with its schedule and its newest run (T067).
+fn view_jobs(state: &atlas_core::plugin_jobs::JobsState, plugin: &str) -> serde_json::Value {
+    let jobs: Vec<_> = state
+        .jobs
+        .iter()
+        .filter(|job| job.plugin_id == plugin)
+        .map(|job| {
+            // Runs are newest first.
+            let latest = state.runs.iter().find(|run| {
+                run.plugin_id == job.plugin_id && run.contribution_id == job.contribution_id
+            });
+            serde_json::json!({
+                "contribution_id": job.contribution_id,
+                "title": job.title,
+                "schedule": job.schedule.as_ref().map(|s| serde_json::json!({
+                    "every_minutes": s.every_minutes,
+                    "next_run_at": s.next_run_at,
+                    "last_run_at": s.last_run_at,
+                    "paused": s.paused,
+                })),
+                "latest": latest.map(|run| serde_json::json!({
+                    "started_at": run.started_at,
+                    "finished_at": run.finished_at,
+                    "state": run.state,
+                    "exit_code": run.outcome.as_ref().and_then(|o| o.exit_code),
+                    "result": run.outcome.as_ref().and_then(|o| o.result.clone()),
+                })),
+            })
+        })
+        .collect();
+    serde_json::json!(jobs)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn job(plugin: &str, contribution: &str) -> serde_json::Value {
+        serde_json::json!({
+            "plugin_id": plugin, "plugin_name": plugin, "contribution_id": contribution,
+            "title": contribution, "job": {"module": "job.wasm"}, "trust": "read_only",
+            "schedule": null, "elevation_exceptions": [],
+        })
+    }
+
+    fn run(plugin: &str, contribution: &str, started: &str, result: i32) -> serde_json::Value {
+        serde_json::json!({
+            "run_id": started, "plugin_id": plugin, "contribution_id": contribution,
+            "server_id": "srv_00000000000000000000000000000001", "attended": false,
+            "started_at": started, "finished_at": started, "state": "done", "actions": [],
+            "outcome": {"exit_code": 0, "stopped": null, "reason": null, "logs": ["secret log"],
+                        "result": {"n": result}, "fuel_used": 1, "host_calls": 0, "refused": []},
+        })
+    }
+
+    #[test]
+    fn a_view_sees_only_its_own_plugins_jobs_and_their_newest_result() {
+        let state: atlas_core::plugin_jobs::JobsState = serde_json::from_value(serde_json::json!({
+            "contract_version": 1,
+            "server_id": "srv_00000000000000000000000000000001",
+            "jobs": [job("org.example.mine", "check"), job("org.example.other", "check")],
+            "runs": [
+                run("org.example.other", "check", "2026-11-19T10:00:00Z", 99),
+                run("org.example.mine", "check", "2026-11-19T09:00:00Z", 2),
+                run("org.example.mine", "check", "2026-11-19T08:00:00Z", 1),
+            ],
+        }))
+        .unwrap();
+        let answer = view_jobs(&state, "org.example.mine");
+        let jobs = answer.as_array().unwrap();
+        assert_eq!(jobs.len(), 1);
+        assert_eq!(jobs[0]["latest"]["result"], serde_json::json!({"n": 2}));
+        assert_eq!(jobs[0]["latest"]["started_at"], "2026-11-19T09:00:00Z");
+        assert!(!answer.to_string().contains("secret log"));
+        assert_eq!(view_jobs(&state, "org.example.none"), serde_json::json!([]));
     }
 }
