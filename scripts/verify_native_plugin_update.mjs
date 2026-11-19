@@ -66,11 +66,14 @@ try {
 
   const nav = page.getByRole('navigation', { name: 'Main navigation' });
   await nav.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Settings pages' }).getByRole('button', { name: 'Plugins', exact: true }).click();
   const section = page.getByRole('region', { name: 'Plugins', exact: true });
   await section.getByRole('button', { name: 'Configure Host basics', exact: true }).click();
   const pluginPage = page.getByRole('region', { name: 'Host basics plugin', exact: true });
   const panel = pluginPage.getByRole('region', { name: 'Update Host basics', exact: true });
   async function check(url) {
+    // Update is opened from the plugin page's header (T066).
+    if (!(await panel.isVisible())) await pluginPage.getByRole('button', { name: 'Update…', exact: true }).click();
     const form = panel.getByRole('form', { name: 'Update source for Host basics' });
     await form.getByRole('radio', { name: 'HTTPS address' }).check();
     await form.getByLabel('Plugin address', { exact: true }).fill(url);

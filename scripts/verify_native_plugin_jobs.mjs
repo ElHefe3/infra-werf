@@ -82,6 +82,7 @@ try {
   // 2. The plugin's page shows what the job may do, and the owner's settings per server.
   const nav = page.getByRole('navigation', { name: 'Main navigation' });
   await nav.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Settings pages' }).getByRole('button', { name: 'Plugins', exact: true }).click();
   const section = page.getByRole('region', { name: 'Plugins', exact: true });
   await section.getByRole('button', { name: 'Configure Service keeper', exact: true }).click();
   const pluginPage = page.getByRole('region', { name: 'Service keeper plugin', exact: true });

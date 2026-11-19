@@ -423,7 +423,8 @@ export type InstallProblemCode = "unreadable" | "not_https" | "unsupported_archi
 export type InstallProblem = { code: InstallProblemCode, message: string, };
 export type InstallReport = { contract_version: number,
 /**
- * Set when the plugin was installed. It is disabled until reviewed.
+ * Set when the plugin was installed (it is disabled until reviewed), or
+ * with `already_installed`, the plugin that is already there.
  */
 plugin_id: string | null, plugin_name: string | null, content_sha256: string | null, problem: InstallProblem | null, };
 export type Integrity = "verified" | "changed" | "not_checked";

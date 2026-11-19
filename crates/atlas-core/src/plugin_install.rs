@@ -141,7 +141,8 @@ impl InstallProblem {
 #[serde(deny_unknown_fields)]
 pub struct InstallReport {
     pub contract_version: u32,
-    /// Set when the plugin was installed. It is disabled until reviewed.
+    /// Set when the plugin was installed (it is disabled until reviewed), or
+    /// with `already_installed`, the plugin that is already there.
     pub plugin_id: Option<String>,
     pub plugin_name: Option<String>,
     pub content_sha256: Option<String>,

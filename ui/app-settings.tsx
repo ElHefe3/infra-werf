@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { PinSettings } from "./pin";
 import type { MapServer, MonitoringState } from "./contracts.gen";
 import type { WorkspaceClient } from "./workspace-client";
@@ -47,6 +47,18 @@ export const appSettings: Record<string, AppSettingsRenderer> = {
   </>,
 };
 
+/** Settings is split into pages (T066); each lists the sections it holds. */
+export const SETTINGS_PAGES: { id: string; title: string; sections: string[] }[] = [
+  { id: "general", title: "General", sections: ["builtin.app-settings.history-retention", "builtin.app-settings.ssh-discovery", "builtin.app-settings.menu-layout"] },
+  { id: "pin", title: "PIN", sections: ["builtin.app-settings.pin"] },
+  { id: "plugins", title: "Plugins", sections: ["builtin.app-settings.plugins"] },
+  { id: "activity", title: "Plugin activity", sections: ["builtin.app-settings.plugin-activity"] },
+];
+/** The page each section is on; anything not listed goes to "Other". */
+export function pageOf(sectionId: string): string { return SETTINGS_PAGES.find(page => page.sections.includes(sectionId))?.id ?? "other"; }
+// The page last shown, kept while InfraWerf runs.
+let lastPage = "general";
+
 export function SettingsScreen({ sections, monitoring, client, reload, resetMenu, servers, pluginFocus, setPluginFocus }: { sections: Bound<AppSettingsRenderer>[]; monitoring: MonitoringState | null; client: WorkspaceClient; reload: () => Promise<void>; resetMenu: () => void; servers: MapServer[]; pluginFocus: string | null; setPluginFocus: (id: string | null) => void }) {
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState("");
@@ -58,9 +70,19 @@ export function SettingsScreen({ sections, monitoring, client, reload, resetMenu
     finally { setBusy(false); }
   }
   const context: AppSettingsContext = { monitoring, client, busy, act, resetMenu, servers, pluginFocus, setPluginFocus };
-  return <div className="settings-screen"><div className="section-heading"><div><h2>Settings</h2><p>Settings for InfraWerf itself. Settings for one server are in that server’s workspace.</p></div></div>
-    {failure && <p className="form-error" role="alert">{failure}</p>}{message && <p role="status">{message}</p>}
-    {sections.map(({ contribution, renderer }) => <section className="settings-section" key={contribution.id} aria-label={contribution.title}><h3>{contribution.title}</h3>{renderer(context)}</section>)}
-    {!sections.length && <p className="empty-copy">No application settings are available.</p>}
+  const pages = [...SETTINGS_PAGES, { id: "other", title: "Other", sections: [] }].filter(page => sections.some(section => pageOf(section.contribution.id) === page.id));
+  const [page, setPageState] = useState(() => pluginFocus ? "plugins" : lastPage);
+  const setPage = (next: string) => { lastPage = next; setPageState(next); setMessage(""); setFailure(""); };
+  // Opening a plugin from elsewhere goes to the Plugins page.
+  useEffect(() => { if (pluginFocus) { lastPage = "plugins"; setPageState("plugins"); } }, [pluginFocus]);
+  const current = pages.find(entry => entry.id === page) ?? pages[0];
+  const shown = sections.filter(section => pageOf(section.contribution.id) === current?.id);
+  return <div className="settings-screen settings-paged">
+    <nav className="settings-nav" aria-label="Settings pages"><h2>Settings</h2>{pages.map(entry => <button key={entry.id} className={entry.id === current?.id ? "active" : ""} aria-current={entry.id === current?.id ? "page" : undefined} onClick={() => setPage(entry.id)}>{entry.title}</button>)}</nav>
+    <div className="settings-page">
+      {failure && <p className="form-error" role="alert">{failure}</p>}{message && <p role="status">{message}</p>}
+      {shown.map(({ contribution, renderer }) => <section className="settings-section" key={contribution.id} aria-label={contribution.title}><h3>{contribution.title}</h3>{renderer(context)}</section>)}
+      {!sections.length && <p className="empty-copy">No application settings are available.</p>}
+    </div>
   </div>;
 }

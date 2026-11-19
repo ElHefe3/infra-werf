@@ -151,8 +151,13 @@ fn a_plugin_installs_from_a_folder_and_from_each_archive_kind_and_is_disabled() 
         // An archive made from a folder is unpacked without its top folder.
         assert!(f.plugins.join(PACK).join(MANIFEST).exists());
         // The same plugin cannot be installed twice.
-        let again = f.install(&request).problem.unwrap();
-        assert_eq!(again.code, InstallProblemCode::AlreadyInstalled);
+        let again = f.install(&request);
+        assert_eq!(
+            again.problem.unwrap().code,
+            InstallProblemCode::AlreadyInstalled
+        );
+        // It names the installed plugin, so the update path can be offered.
+        assert_eq!(again.plugin_id.as_deref(), Some(PACK));
         assert_eq!(f.entries(), [PACK]);
         let log = f.store.plugin_activity(50).unwrap().entries;
         assert_eq!(log[0].action, ACTION_INSTALL);

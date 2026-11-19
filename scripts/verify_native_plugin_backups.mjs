@@ -67,6 +67,7 @@ try {
   await page.reload();
   const nav = page.getByRole('navigation', { name: 'Main navigation' });
   await nav.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Settings pages' }).getByRole('button', { name: 'Plugins', exact: true }).click();
   await page.getByRole('region', { name: 'Plugins', exact: true }).getByRole('button', { name: 'Configure Systemd backups', exact: true }).click();
   const pluginPage = page.getByRole('region', { name: 'Systemd backups plugin', exact: true });
   await expect(pluginPage).toContainText('systemctl list-units --all --type=service --state=failed,auto-restart --no-legend --no-pager --plain --full');

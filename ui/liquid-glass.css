@@ -138,3 +138,6 @@
 :root[data-look="glass"] .inspector-open { top: 16px; right: 18px; }
 :root[data-look="glass"] .app-tile { border-radius: 16px; }
 :root[data-look="glass"] .app-details { background: rgba(250, 253, 251, .96); }
+:root[data-look="glass"] .settings-nav button { border-color: transparent; background: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; border-radius: 12px; }
+:root[data-look="glass"] .settings-nav button:hover:not(:disabled):not(.active) { background: rgba(255, 255, 255, .2); }
+:root[data-look="glass"] .settings-nav button.active { background: rgba(255, 255, 255, .42); border-color: rgba(255, 255, 255, .6); }

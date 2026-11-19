@@ -136,6 +136,7 @@ try {
   const ask = async (server, capability) => { const decision = await invoke('plugin_authorize', { pluginId: PLUGIN, serverId: server.id, capability }); return decision.allowed ? (decision.needs_confirmation ? 'confirm' : 'allowed') : decision.refusal; };
   expect(await ask(core, 'ssh_session')).toBe('plugin_disabled');
   await nav.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Settings pages' }).getByRole('button', { name: 'Plugins', exact: true }).click();
   const pluginsSection = page.getByRole('region', { name: 'Plugins', exact: true });
   const installed = pluginsSection.getByRole('list', { name: 'Installed plugins' });
   await expect(installed.getByRole('listitem')).toHaveCount(1);
@@ -211,6 +212,7 @@ try {
   expect((await invoke('plugins_state')).plugins[0]).toMatchObject({ id: PLUGIN, status: 'enabled', trust: 'trusted_automation' });
   // T042: the kill switch, revoking trusted automation and the plugin activity log.
   await nav.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Settings pages' }).getByRole('button', { name: 'Plugins', exact: true }).click();
   await expect(installed).toContainText('Enabled · Trusted automation · allowed on 1 server');
   expect(await ask(core, 'ssh_session')).toBe('allowed');
   await pluginsSection.getByRole('button', { name: 'Turn all plugins off', exact: true }).click();
@@ -223,6 +225,7 @@ try {
   expect((await invoke('plugins_state')).all_off).toBe(true);
   expect(await ask(core, 'run_approved_command')).toBe('all_plugins_off');
   await nav.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Settings pages' }).getByRole('button', { name: 'Plugins', exact: true }).click();
   await pluginsSection.getByRole('button', { name: 'Turn plugins back on', exact: true }).click();
   await expect(installed).toContainText('Enabled · Trusted automation · allowed on 1 server');
   expect(await ask(core, 'ssh_session')).toBe('allowed');

@@ -66,6 +66,8 @@ What happens when it applies:
 | Asks for anything new: a new capability, a new contribution, or a changed command, application or access | It is switched off ("changed since you reviewed it") until the owner reviews and enables it again. Its earlier permissions are kept but unused, and nothing new is allowed until the owner allows it on a server. |
 | Replaces a plugin whose files had changed | It needs a new review either way. |
 
+**Install a plugin** does the same when the plugin is already installed: a newer (or the same) version is checked and applied as an update, with the rules above, instead of being refused. An older version is not applied from there; going back needs **Update** on the plugin's page, where the downgrade is confirmed.
+
 The update is checked once and applied from exactly what was checked: it is not fetched or read again. A check expires after 15 minutes, and applying is refused if the installed plugin changed in between. Every update, applied or refused, is in the plugin activity log.
 
 ## Removing
@@ -89,7 +91,7 @@ The update is checked once and applied from exactly what was checked: it is not 
 | `signature_invalid` | The signature does not match the archive and key. |
 | `invalid_public_key` | Not a minisign public key. |
 | `signature_not_possible` | A public key was given for a folder. |
-| `already_installed` | A plugin with this ID, or a folder with its name, is already there. |
+| `already_installed` | A plugin with this ID, or a folder with its name, is already there. The report names the installed plugin; the interface then offers it as an update. |
 | `different_plugin` | An update whose manifest has another plugin's ID. |
 | `downgrade` | An older version, and the owner did not confirm going back. |
 | `changed_since_preview` | The installed plugin changed between checking and applying the update. |

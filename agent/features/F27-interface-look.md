@@ -277,3 +277,43 @@ Not yet accepted. Close with owner acceptance on the installed build against a r
 ### Stop conditions
 
 Stop if the gate would need to store the PIN itself or change the database.
+
+## T066 — Settings pages and a manageable plugin screen
+
+<!-- atlas-ticket: {"id":"T066","feature":"F27","status":"in_progress","depends_on":["T026"],"evidence":null} -->
+
+### Outcome and included work
+
+- Settings is split into pages (General, PIN, Plugins, Plugin activity) with a page list on the left; one page shows at a time and the last one is remembered while InfraWerf runs. Opening a plugin from a server's Settings tab goes to the Plugins page.
+- The plugin list is compact: name, version, status, and Configure and Remove on each row.
+- A plugin's page leads with its status and actions (Disable, Update…, Remove) and the trust choice. Server permissions are one compact row per server with short checkbox labels (the full sentence is the accessible name and tooltip) and All / None. What it adds, what it asks for, installation details and recent activity are collapsed sections; each command is behind its own disclosure.
+- Installing a plugin that is already installed no longer fails: a newer or equal version is checked and applied through the reviewed update path (T046), so it replaces the old one, and anything new it asks for still switches it off until reviewed. An older version is refused there and needs Update on its page.
+
+### Exclusions
+
+Changing what permissions or reviews mean; installing over a plugin with a different ID.
+
+### Implementation and contracts
+
+`ui/app-settings.tsx` (`SETTINGS_PAGES`, `pageOf`), `ui/plugins.tsx`, `ui/plugin-install.tsx`. The core's `already_installed` report now names the installed plugin (`plugin_id`, `plugin_name`) so the interface can run `plugin_update_check` and `plugin_update_apply` with the same source. `docs/plugin-api/install.md` describes it.
+
+**Ticket dependencies:** [T026](F12-release-acceptance.md).
+
+### Acceptance criteria
+
+- [ ] Each Settings page shows only its own sections; switching pages keeps the last page while InfraWerf runs.
+- [ ] A plugin can be removed from the list or its page in two clicks, with the confirmation.
+- [ ] Installing a newer version of an installed plugin replaces it; an update that asks for more switches it off until reviewed; an older version is refused with a pointer to Update.
+- [ ] The native journeys pass with the new pages (they now pick the Settings page first, and open Update from the header).
+
+### Verification
+
+`crates/atlas-core/tests/plugin_install.rs`; the native plugin journeys; owner review on the installed build.
+
+### Evidence and closure
+
+Not yet accepted. Close with owner acceptance on the installed build, recorded in `agent/evidence/`.
+
+### Stop conditions
+
+Stop if replacing a plugin would skip the update review rules.

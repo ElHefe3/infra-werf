@@ -1280,12 +1280,15 @@ impl Store {
             || directory.join(id).exists()
             || install_record(&self.db, id)?.is_some();
         if taken {
-            return Ok(InstallReport::refused(InstallProblem::new(
+            // The report names the installed plugin, so the interface can
+            // offer the reviewed update path (T046) instead (T066).
+            let mut report = InstallReport::refused(InstallProblem::new(
                 InstallProblemCode::AlreadyInstalled,
-                format!(
-                    "A plugin with the ID {id} is already installed. Remove it first; updating a plugin is not available yet."
-                ),
-            )));
+                format!("A plugin with the ID {id} is already installed."),
+            ));
+            report.plugin_id = Some(id.clone());
+            report.plugin_name = Some(prepared.manifest.name.clone());
+            return Ok(report);
         }
         let target = match crate::plugin_install::publish(directory, prepared) {
             Ok(target) => target,

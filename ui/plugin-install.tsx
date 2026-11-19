@@ -84,10 +84,30 @@ function SourceForm({ label, title, intro, action, working: workingLabel, busy, 
 
 export const problemText = (problem: InstallProblem, after: string) => `${PROBLEM[problem.code]}. ${problem.message} ${after}`;
 
-export function InstallForm({ busy, installed }: { busy: boolean; installed: (report: InstallReport) => void }) {
-  return <SourceForm label="Install a plugin" title="Install a plugin" busy={busy} action="Install" working="Checking and installing…"
-    intro="Installing copies the plugin into the plugins folder after checking every file. It allows nothing: you review and enable it on its page. No install script is ever run."
-    submit={async request => { const report = await client.installPlugin(request); if (report.problem) return problemText(report.problem, "Nothing was installed."); installed(report); return null; }} />;
+/** Installs a plugin. A newer version of one already installed replaces it
+ * through the reviewed update path (T046/T066): what it changes is checked and
+ * applied, and anything new it asks for switches it off until reviewed. */
+export function InstallForm({ busy, installed, updated }: { busy: boolean; installed: (report: InstallReport) => void; updated: (message: string) => void }) {
+  return <SourceForm label="Install a plugin" title="Install or update a plugin" busy={busy} action="Install" working="Checking and installing…"
+    intro="Checks every file, then copies the plugin into the plugins folder. A new plugin arrives disabled for you to review; a newer version of an installed plugin replaces it. No install script is ever run."
+    submit={async request => {
+      const report = await client.installPlugin(request);
+      if (report.problem?.code === "already_installed" && report.plugin_id) {
+        const found = await client.checkPluginUpdate(report.plugin_id, request);
+        if (found.problem) return problemText(found.problem, "The installed version is unchanged.");
+        if (!found.token || !found.diff) return "The update could not be checked. The installed version is unchanged.";
+        if (found.diff.downgrade) {
+          void client.discardPluginUpdate(found.token).catch(() => {});
+          return `${found.plugin_name} ${found.diff.from_version} is installed and this is the older ${found.diff.to_version}. To go back to it, use Update on the plugin's page. The installed version is unchanged.`;
+        }
+        const applied = await client.applyPluginUpdate(found.token, false);
+        if (applied.problem) return problemText(applied.problem, "The installed version is unchanged.");
+        if (applied.diff) { updated(updatedMessage(found.plugin_name, applied.diff)); return null; }
+        return "The update could not be applied. The installed version is unchanged.";
+      }
+      if (report.problem) return problemText(report.problem, "Nothing was installed.");
+      installed(report); return null;
+    }} />;
 }
 
 /** Update an installed plugin: check first, see what changes, then apply (T046). */

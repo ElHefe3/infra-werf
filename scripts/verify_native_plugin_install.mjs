@@ -69,6 +69,7 @@ try {
   const server = (await invoke('map_state')).servers[0];
   const nav = page.getByRole('navigation', { name: 'Main navigation' });
   await nav.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Settings pages' }).getByRole('button', { name: 'Plugins', exact: true }).click();
   const section = page.getByRole('region', { name: 'Plugins', exact: true });
   await expect(section).toContainText('No plugins found.');
 
@@ -166,6 +167,7 @@ try {
   const decision = await invoke('plugin_authorize', { pluginId: MAP, serverId: server.id, capability: 'read_saved_state' });
   expect([decision.allowed, decision.refusal]).toEqual([false, 'files_changed']);
   await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Settings pages' }).getByRole('button', { name: 'Plugins', exact: true }).click();
   const section2 = page.getByRole('region', { name: 'Plugins', exact: true });
   await expect(section2.getByRole('list', { name: 'Installed plugins' })).toContainText('Files changed since it was installed · switched off');
   await section2.getByRole('button', { name: 'Configure Homelab map', exact: true }).click();

@@ -88,6 +88,7 @@ try {
 
   // 2. The owner reads the exact commands before enabling, then enables and allows one server.
   await nav.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Settings pages' }).getByRole('button', { name: 'Plugins', exact: true }).click();
   const pluginsSection = page.getByRole('region', { name: 'Plugins', exact: true });
   await pluginsSection.getByRole('button', { name: 'Configure Host basics', exact: true }).click();
   const pluginPage = page.getByRole('region', { name: 'Host basics plugin', exact: true });
@@ -245,6 +246,7 @@ try {
   expect(log.some(e => e.action === 'ssh_session' && e.outcome === 'refused' && e.detail === 'not_granted' && e.server_id === other.id)).toBe(true);
   await workspace.getByRole('button', { name: 'Close dialog', exact: true }).click();
   await nav.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Settings pages' }).getByRole('button', { name: 'Plugin activity', exact: true }).click();
   const activity = page.getByRole('region', { name: 'Plugin activity', exact: true }).getByRole('table', { name: 'Plugin activity log' });
   for (const text of ['Ran its command "kernel"', 'Finished', 'Ran its command "wait"', 'Cancelled: its permissions changed while it ran', 'Ran its command "listing"', 'Failed: nothing was read']) await expect(activity).toContainText(text);
   const stored = Buffer.concat(await Promise.all(['', '-wal'].map(suffix => readFile(database + suffix).catch(() => Buffer.alloc(0)))));

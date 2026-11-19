@@ -14,7 +14,7 @@
 - **Core target:** Windows desktop 100% by the owner’s explicit 2026-10-26 decision. Mobile/coordinator is future S09; agents/rsync stay deferred. Run all remaining desktop batches sequentially without asking between batches; retain proportional proof/review and actual permission boundaries.
 - **Budget target:** two five-hour usage windows; a prioritisation target, not a quota or elapsed-time guarantee.
 - **Baseline:** A01 Python/SQLite/browser work is historical, with evidence in [IMPLEMENTATION.md](../IMPLEMENTATION.md). It does not complete new Rust/React/native tickets.
-- **Tracker:** 65 tickets / 27 features / 14 scopes: 52 core and 13 deferred tickets. Done=42, in progress=9, todo=1, deferred=13. Feature-packet ticket metadata is the sole status authority. S10/F16/T034 is the authorised dynamic desktop extension; mobile and server-agent deployment remain deferred.
+- **Tracker:** 66 tickets / 27 features / 14 scopes: 53 core and 13 deferred tickets. Done=42, in progress=10, todo=1, deferred=13. Feature-packet ticket metadata is the sole status authority. S10/F16/T034 is the authorised dynamic desktop extension; mobile and server-agent deployment remain deferred.
 
 ## Read protocol
 
@@ -39,7 +39,7 @@
 | 11 | [S11 Remote applications](scopes/S11-remote-applications.md) | [F17 remote applications](features/F17-remote-applications.md) | T035–T036 | Owner-activated 2026-11-08 (D051); loopback forwards only |
 | 12 | [S12 Extensibility](scopes/S12-extensibility.md) | [F18 extension points](features/F18-extension-points.md), [F19 plugin API](features/F19-plugin-api-manifest.md), [F20 permissions](features/F20-plugin-permissions.md), [F21 packs](features/F21-declarative-packs.md), [F22 install](features/F22-plugin-install-integrity.md), [F23 views](features/F23-plugin-views.md), [F24 logic/automation](features/F24-plugin-logic-automation.md), [F25 open source](features/F25-open-source-readiness.md) | T037–T052 | Owner-activated 2026-11-12 (D053); on branch `feature/s12-extensibility` until the feature set is done |
 | 13 | [S13 Plugin API, next version](scopes/S13-plugin-api-next.md) | [F26 API gaps](features/F26-plugin-api-gaps.md) | T054–T058 | Deferred; gaps found by the reference plugin (T051); separate owner activation after S12 |
-| 14 | [S14 Interface look](scopes/S14-interface-look.md) | [F27 look and layout](features/F27-interface-look.md) | T059–T065 | Owner-requested 2026-11-18 (D065); glass/classic, light/dark, canvas-first layout, map lines, app tiles, owner PIN |
+| 14 | [S14 Interface look](scopes/S14-interface-look.md) | [F27 look and layout](features/F27-interface-look.md) | T059–T066 | Owner-requested 2026-11-18 (D065); glass/classic, light/dark, canvas-first layout, map lines, app tiles, owner PIN, Settings pages |
 
 [S09 Future mobile](scopes/S09-future-mobile.md) retains T009–T011, Android adapters, pairing and phone acceptance for separate activation after desktop completion.
 

@@ -79,17 +79,39 @@ export function statusLabel(status: PluginStatus, trust: TrustLevel | null, allO
   return "Not enabled";
 }
 
-function RemovePlugin({ name, folder, busy, run, done }: { name: string; folder: string; busy: boolean; run: (action: () => Promise<PluginsState>, done: string) => Promise<void>; done?: () => void }) {
+function RemovePlugin({ name, folder, busy, run, done, short = false }: { name: string; folder: string; busy: boolean; run: (action: () => Promise<PluginsState>, done: string) => Promise<void>; done?: () => void; short?: boolean }) {
   const [asking, setAsking] = useState(false);
-  if (!asking) return <button className="danger text-button" disabled={busy} onClick={() => setAsking(true)}>Remove {name}</button>;
+  if (!asking) return <button className="danger" disabled={busy} aria-label={`Remove ${name}`} onClick={() => setAsking(true)}>{short ? "Remove" : `Remove ${name}`}</button>;
   return <div className="plugin-remove" role="group" aria-label={`Remove ${name}?`}>
     <p>Remove <strong>{name}</strong>? Its folder <code>{folder}</code> is deleted from the plugins folder, and its trust level and permissions on every server are forgotten. Its activity history is kept. This cannot be undone; you can install it again later.</p>
     <div className="plugin-actions"><button disabled={busy} onClick={() => setAsking(false)}>Keep it</button><button className="danger-button" disabled={busy} onClick={() => void run(() => client.removePlugin(folder), `${name} removed.`).then(() => done?.())}>Remove permanently</button></div>
   </div>;
 }
 
+/** Short names for permission checkboxes; the full sentence is the accessible name and tooltip. */
+const SHORT: Partial<Record<Capability, string>> = {
+  read_saved_state: "Saved data", ssh_session: "SSH", run_approved_command: "Read-only commands", loopback_tunnel: "App tunnels",
+  control_workloads: "Control workloads", write_files: "Write files", interactive_terminal: "Terminal", edit_map: "Edit map",
+  network_probe: "Network checks", read_files: "Read files", transfer_files: "Transfers",
+};
+const shortName = (entry: { capability: Capability; summary: string }) => SHORT[entry.capability] ?? entry.capability.replaceAll("_", " ");
+
+/** One contribution in a line, with its command or effect behind a disclosure. */
+function Contribution({ entry, plugin }: { entry: PluginView["contributions"][number]; plugin: PluginView }) {
+  const detail = entry.command ? <span className="pack-shown">Runs exactly this on a server, only when you press Run{plugin.contributions.some(other => other.job) ? " or its job runs" : ""}: <code aria-label={`${entry.title} command`}>{commandLine(entry.command.argv)}</code>
+      {entry.command.parameters?.map(parameter => <small key={parameter.name}>{`{${parameter.name}}`} is a {parameter.source} you choose from that server’s inventory.</small>)}<small>{describeExtract(entry.command)} No shell reads the command, and it cannot use sudo.</small>{entry.workload_kind && <small>Shows each row as a workload named by its {entry.workload_kind.name_column} column{entry.workload_kind.state_column ? `, with its ${entry.workload_kind.state_column} as the state` : ""}.</small>}</span>
+    : entry.app ? <span className="pack-shown">Opens <code aria-label={`${entry.title} address`}>localhost:{entry.app.port}{entry.app.path ?? "/"}</code> on the server, through the same private tunnel as any application, only when you press Open. It cannot reach another machine.</span>
+    : entry.badge ? <span className="pack-shown"><small>Shows the latest result of “{plugin.contributions.find(other => other.id === entry.badge!.observation)?.title ?? entry.badge.observation}” on each server card. It never runs the command itself.</small></span>
+    : entry.job ? <JobConsent job={entry.job} />
+    : entry.view ? <span className="pack-shown"><small>Its own page, <code>{entry.view.entry}</code>, shown in a tab isolated from InfraWerf. It sees only what you allow it on a server, and anything it asks to run is shown to you first.</small></span>
+    : entry.relationship ? <span className="pack-shown"><small>A {entry.relationship.line ?? "solid"} {entry.relationship.color ?? "green"} line you can choose when documenting a relationship. It applies nothing.</small></span>
+    : null;
+  return <li>{detail ? <details><summary><strong>{entry.title}</strong><span>{POINT[entry.point]}</span></summary>{detail}</details> : <div className="plugin-add-line"><strong>{entry.title}</strong><span>{POINT[entry.point]}</span></div>}</li>;
+}
+
 function PluginPage({ plugin, servers, busy, run, back, leave, allOff, activity }: { leave: () => void; plugin: PluginView; servers: MapServer[]; busy: boolean; run: (action: () => Promise<PluginsState>, done: string) => Promise<void>; back: () => void; allOff: boolean; activity: PluginActivity[] }) {
   const [choice, setChoice] = useState<TrustLevel | null>(null);
+  const [updating, setUpdating] = useState(false);
   // A new review starts with nothing chosen.
   useEffect(() => setChoice(null), [plugin.id, plugin.status]);
   const grantable = plugin.capabilities.filter(entry => entry.kind !== "elevation");
@@ -98,56 +120,49 @@ function PluginPage({ plugin, servers, busy, run, back, leave, allOff, activity 
   const setGrant = (server: MapServer, capabilities: Capability[], done: string) => run(() => client.setPluginGrant(plugin.id, server.id, capabilities), done);
   return <section className="plugin-page" aria-label={`${plugin.name} plugin`}>
     <button className="text-button" onClick={back}>← All plugins</button>
-    <h4>{plugin.name} <small>version {plugin.version}</small></h4>
-    {plugin.description && <p>{plugin.description}</p>}
-    <dl className="plugin-facts"><div><dt>Identifier</dt><dd><code>{plugin.id}</code></dd></div>{plugin.author && <div><dt>Author</dt><dd>{plugin.author}</dd></div>}{plugin.license && <div><dt>Licence</dt><dd>{plugin.license}</dd></div>}{plugin.homepage && <div><dt>Homepage</dt><dd>{plugin.homepage}</dd></div>}<div><dt>Folder</dt><dd>{plugin.folder}</dd></div></dl>
-    <p className={`plugin-status ${plugin.status}`}><strong>Status:</strong> {statusLabel(plugin.status, plugin.trust, allOff)}</p>
-    {plugin.install ? <InstallRecord record={plugin.install} /> : <p className="muted">Placed in the plugins folder by hand, so InfraWerf has no recorded hash for it. Install it from a file or address to have its files checked at every start-up.</p>}
+    <header className="plugin-head">
+      <div><h4>{plugin.name} <small>version {plugin.version}</small></h4>{plugin.description && <p className="muted">{plugin.description}</p>}
+        <p className={`plugin-status ${plugin.status}`}><strong>Status:</strong> {statusLabel(plugin.status, plugin.trust, allOff)}</p></div>
+      <div className="plugin-head-actions">
+        {plugin.status === "enabled" && <button disabled={busy} onClick={() => void run(() => client.disablePlugin(plugin.id), `${plugin.name} disabled.`)}>Disable plugin</button>}
+        <button disabled={busy} aria-expanded={updating} onClick={() => setUpdating(open => !open)}>Update…</button>
+        <RemovePlugin name={plugin.name} folder={plugin.folder} busy={busy} run={run} done={leave} />
+      </div>
+    </header>
+    {updating && <UpdatePanel pluginId={plugin.id} name={plugin.name} busy={busy} updated={message => { setUpdating(false); void run(client.plugins, message); }} />}
 
-    <h5>What it adds</h5>
-    <ul className="plugin-adds">{plugin.contributions.map(entry => <li key={entry.id}><strong>{entry.title}</strong>: {POINT[entry.point]}{entry.command && <span className="pack-shown">Runs exactly this on a server, only when you press Run: <code aria-label={`${entry.title} command`}>{commandLine(entry.command.argv)}</code>
-        {entry.command.parameters?.map(parameter => <small key={parameter.name}>{`{${parameter.name}}`} is a {parameter.source} you choose from that server’s inventory.</small>)}<small>{describeExtract(entry.command)} No shell reads the command, and it cannot use sudo.</small>{entry.workload_kind && <small>Shows each row as a workload named by its {entry.workload_kind.name_column} column{entry.workload_kind.state_column ? `, with its ${entry.workload_kind.state_column} as the state` : ""}.</small>}</span>}
-        {entry.app && <span className="pack-shown">Opens <code aria-label={`${entry.title} address`}>localhost:{entry.app.port}{entry.app.path ?? "/"}</code> on the server, through the same private tunnel as any application, only when you press Open. It cannot reach another machine.</span>}
-        {entry.badge && <span className="pack-shown"><small>Shows the latest result of “{plugin.contributions.find(other => other.id === entry.badge!.observation)?.title ?? entry.badge.observation}” on each server card. It never runs the command itself.</small></span>}
-        {entry.job && <JobConsent job={entry.job} />}
-        {entry.view && <span className="pack-shown"><small>Its own page, <code>{entry.view.entry}</code>, shown in a tab isolated from InfraWerf. It sees only what you allow it on a server, and anything it asks to run is shown to you first.</small></span>}
-        {entry.relationship && <span className="pack-shown"><small>A {entry.relationship.line ?? "solid"} {entry.relationship.color ?? "green"} line you can choose when documenting a relationship. It applies nothing.</small></span>}</li>)}</ul>
-
-    <h5>What it asks for</h5>
-    <p className="muted">This is everything the plugin can ever use. It can use each item only on the servers where you allow it below.</p>
-    <ul className="plugin-asks" aria-label="Requested capabilities">{plugin.capabilities.map(entry => <li key={entry.capability}><span className={`kind ${entry.kind}`}>{KIND[entry.kind]}</span><span>{entry.summary}<small>Used by: {entry.used_by.join(", ")} · <code>{entry.capability}</code></small></span></li>)}</ul>
-    {asksSudo && <p className="muted">Sudo is never part of a trust level. This plugin asks for it, and it stays refused: InfraWerf cannot yet grant sudo to a plugin.</p>}
-
-    <h5>Trust level</h5>
-    {plugin.status === "files_changed" ? <p className="form-error" role="alert">This plugin’s files no longer match what was installed, so nothing it asks for is allowed. Remove it and install it again from a source you trust.</p> : plugin.status === "enabled" ? <>
-      <p><strong>{trustLabel(plugin.trust)}.</strong> {TRUST_LEVELS.find(level => level.value === plugin.trust)?.detail}</p>
-      <p className="muted">To give more trust, disable the plugin and enable it again.</p>
-      <div className="plugin-actions"><button disabled={busy} onClick={() => void run(() => client.disablePlugin(plugin.id), `${plugin.name} disabled.`)}>Disable plugin</button>
-        {plugin.trust === "trusted_automation" && <button disabled={busy} onClick={() => void run(() => client.revokeTrustedAutomation(plugin.id), `Trusted automation revoked for ${plugin.name}. Each change now needs your confirmation.`)}>Revoke trusted automation</button>}</div>
-    </> : <>
-      {plugin.status === "changed_since_review" && <p className="form-error" role="alert">This plugin’s manifest changed after you enabled it, so it has been switched off. Review what it asks for above, then enable it again.</p>}
+    {plugin.status === "files_changed" ? <p className="form-error" role="alert">This plugin’s files no longer match what was installed, so nothing it asks for is allowed. Remove it and install it again from a source you trust.</p> : plugin.status === "enabled" ? <div className="plugin-trust">
+      <p><strong>{trustLabel(plugin.trust)}.</strong> {TRUST_LEVELS.find(level => level.value === plugin.trust)?.detail} <span className="muted">To give more trust, disable the plugin and enable it again.</span></p>
+      {plugin.trust === "trusted_automation" && <button disabled={busy} onClick={() => void run(() => client.revokeTrustedAutomation(plugin.id), `Trusted automation revoked for ${plugin.name}. Each change now needs your confirmation.`)}>Revoke trusted automation</button>}
+    </div> : <div className="plugin-trust">
+      {plugin.status === "changed_since_review" && <p className="form-error" role="alert">This plugin changed after you enabled it, so it has been switched off. Review what changed below, then enable it again.</p>}
       <fieldset className="trust-choice"><legend>Choose how far this plugin may act. Nothing is chosen for you.</legend>
-        {TRUST_LEVELS.map(level => <label key={level.value}><input type="radio" name={`trust-${plugin.id}`} value={level.value} checked={choice === level.value} disabled={busy} onChange={() => setChoice(level.value)} /><span><strong>{level.label}</strong><small>{level.detail}</small></span></label>)}
+        {TRUST_LEVELS.map(level => <label key={level.value} title={level.detail}><input type="radio" name={`trust-${plugin.id}`} value={level.value} checked={choice === level.value} disabled={busy} onChange={() => setChoice(level.value)} /><span><strong>{level.label}</strong><small>{level.detail}</small></span></label>)}
       </fieldset>
       <button className="primary" disabled={busy || !choice} onClick={() => { if (choice) void run(() => client.enablePlugin(plugin.id, choice), `${plugin.name} enabled: ${trustLabel(choice)}.`); }}>Enable plugin</button>
-    </>}
+    </div>}
 
     <h5>Servers</h5>
-    <p className="muted">A plugin can do nothing on a server until you allow it here. You can set this before enabling the plugin.</p>
-    {!servers.length && <p className="empty-copy">Add a server to your map first.</p>}
-    {servers.map(server => { const allowed = allowedOn(server.id); return <section className="plugin-server" key={server.id} aria-label={`Permissions on ${server.name}`}>
-      <header><strong>{server.name}</strong><span>{server.host}</span><span className="count">{allowed.length} of {grantable.length} allowed</span>
-        <button disabled={busy || allowed.length === grantable.length} aria-label={`Allow all on ${server.name}`} onClick={() => void setGrant(server, grantable.map(entry => entry.capability), `Everything allowed on ${server.name}.`)}>Allow all</button>
-        <button disabled={busy || !allowed.length} aria-label={`Withdraw all on ${server.name}`} onClick={() => void setGrant(server, [], `Everything withdrawn on ${server.name}.`)}>Withdraw all</button></header>
-      {grantable.map(entry => <label key={entry.capability}><input type="checkbox" disabled={busy} checked={allowed.includes(entry.capability)} onChange={event => void setGrant(server, event.target.checked ? [...allowed, entry.capability] : allowed.filter(item => item !== entry.capability), `Permissions on ${server.name} saved.`)} /><span>{entry.summary}</span></label>)}
+    {!servers.length ? <p className="empty-copy">Add a server to your map first.</p> : <p className="muted">Nothing is allowed on a server until you tick it here.</p>}
+    <div className="plugin-servers">{servers.map(server => { const allowed = allowedOn(server.id); return <section className="plugin-server" key={server.id} aria-label={`Permissions on ${server.name}`}>
+      <header><strong title={server.host}>{server.name}</strong><span className="count">{allowed.length} of {grantable.length} allowed</span>
+        <span className="plugin-grants">{grantable.map(entry => <label key={entry.capability} title={entry.summary}><input type="checkbox" aria-label={entry.summary} disabled={busy} checked={allowed.includes(entry.capability)} onChange={event => void setGrant(server, event.target.checked ? [...allowed, entry.capability] : allowed.filter(item => item !== entry.capability), `Permissions on ${server.name} saved.`)} /><span aria-hidden>{shortName(entry)}</span></label>)}</span>
+        <button disabled={busy || allowed.length === grantable.length} aria-label={`Allow all on ${server.name}`} onClick={() => void setGrant(server, grantable.map(entry => entry.capability), `Everything allowed on ${server.name}.`)}>All</button>
+        <button disabled={busy || !allowed.length} aria-label={`Withdraw all on ${server.name}`} onClick={() => void setGrant(server, [], `Everything withdrawn on ${server.name}.`)}>None</button></header>
       <JobSettings pluginId={plugin.id} server={server} busy={busy} />
-    </section>; })}
+    </section>; })}</div>
 
-    <h5>Recent activity</h5>
-    <ActivityTable entries={activity} servers={servers} label={`${plugin.name} recent activity`} />
-    <UpdatePanel pluginId={plugin.id} name={plugin.name} busy={busy} updated={message => void run(client.plugins, message)} />
-    <h5>Remove</h5>
-    <RemovePlugin name={plugin.name} folder={plugin.folder} busy={busy} run={run} done={leave} />
+    <details className="plugin-more"><summary>What it adds <span className="count">{plugin.contributions.length}</span></summary>
+      <ul className="plugin-adds">{plugin.contributions.map(entry => <Contribution key={entry.id} entry={entry} plugin={plugin} />)}</ul></details>
+    <details className="plugin-more"><summary>What it asks for <span className="count">{plugin.capabilities.length}</span></summary>
+      <p className="muted">This is everything the plugin can ever use, and only on the servers where you allow it.</p>
+      <ul className="plugin-asks" aria-label="Requested capabilities">{plugin.capabilities.map(entry => <li key={entry.capability}><span className={`kind ${entry.kind}`}>{KIND[entry.kind]}</span><span>{entry.summary}<small>Used by: {entry.used_by.join(", ")} · <code>{entry.capability}</code></small></span></li>)}</ul>
+      {asksSudo && <p className="muted">Sudo is never part of a trust level. This plugin asks for it, and it stays refused: InfraWerf cannot yet grant sudo to a plugin.</p>}</details>
+    <details className="plugin-more"><summary>About and installation</summary>
+      <dl className="plugin-facts"><div><dt>Identifier</dt><dd><code>{plugin.id}</code></dd></div>{plugin.author && <div><dt>Author</dt><dd>{plugin.author}</dd></div>}{plugin.license && <div><dt>Licence</dt><dd>{plugin.license}</dd></div>}{plugin.homepage && <div><dt>Homepage</dt><dd>{plugin.homepage}</dd></div>}<div><dt>Folder</dt><dd>{plugin.folder}</dd></div></dl>
+      {plugin.install ? <InstallRecord record={plugin.install} /> : <p className="muted">Placed in the plugins folder by hand, so InfraWerf has no recorded hash for it. Install it from a file or address to have its files checked at every start-up.</p>}</details>
+    <details className="plugin-more"><summary>Recent activity <span className="count">{activity.length}</span></summary>
+      <ActivityTable entries={activity} servers={servers} label={`${plugin.name} recent activity`} /></details>
   </section>;
 }
 
@@ -175,12 +190,11 @@ export function PluginsSection({ servers, focus, setFocus }: { servers: MapServe
         ? <button className="primary" disabled={busy} onClick={() => void run(() => client.setAllPluginsOff(false), "Plugins are back on, with the permissions you had set.")}>Turn plugins back on</button>
         : <button className="danger-button" disabled={busy} onClick={() => void run(() => client.setAllPluginsOff(true), "All plugins are off.")}>Turn all plugins off</button>}
         <span className="muted">One switch for every plugin. Your settings are kept.</span></div>
-      {state.plugins.length ? <ul className="plugin-list" aria-label="Installed plugins">{state.plugins.map(plugin => <li key={plugin.id}><div><strong>{plugin.name}</strong> <small>version {plugin.version}</small><span className={`plugin-status ${state.all_off ? "disabled" : plugin.status}`}>{statusLabel(plugin.status, plugin.trust, state.all_off)} · allowed on {plugin.grants.length} {plugin.grants.length === 1 ? "server" : "servers"}</span></div><button aria-label={`Configure ${plugin.name}`} onClick={() => { setMessage(""); setFocus(plugin.id); }}>Configure</button></li>)}</ul>
+      {state.plugins.length ? <ul className="plugin-list" aria-label="Installed plugins">{state.plugins.map(plugin => <li key={plugin.id}><div><span><strong>{plugin.name}</strong> <small>version {plugin.version}</small></span><span className={`plugin-status ${state.all_off ? "disabled" : plugin.status}`}>{statusLabel(plugin.status, plugin.trust, state.all_off)} · allowed on {plugin.grants.length} {plugin.grants.length === 1 ? "server" : "servers"}</span></div><span className="plugin-row-actions"><button aria-label={`Configure ${plugin.name}`} onClick={() => { setMessage(""); setFocus(plugin.id); }}>Configure</button><RemovePlugin name={plugin.name} folder={plugin.folder} busy={busy} run={run} short /></span></li>)}</ul>
         : <p className="empty-copy">No plugins found.</p>}
-      <p className="muted">A plugin is a folder that contains <code>infrawerf-plugin.json</code>, placed in <code>{state.directory}</code>.</p>
-      <button disabled={busy} onClick={() => void run(client.plugins, "Plugin folder read again.")}>Look again</button>
+      <p className="muted plugin-folder-note">Plugins folder: <code>{state.directory}</code> <button className="text-button" disabled={busy} onClick={() => void run(client.plugins, "Plugin folder read again.")}>Look again</button></p>
       {state.invalid.length > 0 && <><h5>Folders that are not usable plugins</h5><ul className="plugin-invalid" aria-label="Unusable plugin folders">{state.invalid.map(entry => <li key={entry.folder}><strong>{entry.folder}</strong>{entry.problems.map((problem, index) => <code key={index}>{problem}</code>)}<RemovePlugin name={entry.folder} folder={entry.folder} busy={busy} run={run} /></li>)}</ul></>}
-      <InstallForm busy={busy} installed={report => void run(client.plugins, `${report.plugin_name} installed. It is disabled: open its page to review and enable it.`)} />
+      <InstallForm busy={busy} installed={report => void run(client.plugins, `${report.plugin_name} installed. It is disabled: open its page to review and enable it.`)} updated={message => void run(client.plugins, message)} />
     </>}
   </div>;
 }

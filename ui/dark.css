@@ -104,3 +104,7 @@
 :root[data-theme="dark"][data-look] :is(.plugin-remove, .terminal-lock) { background: rgba(230, 90, 70, .14); border-color: rgba(240, 120, 100, .3); color: #ffc2b6; }
 :root[data-theme="dark"][data-look] :is(.plugins h5, .plugin-page h5, .plugin-view-bar, .trust-choice legend) { color: #dce8e1; }
 :root[data-theme="dark"][data-look] .pack-command .kind { background: transparent; border-color: rgba(255, 255, 255, .16); color: #c2d3c9; }
+:root[data-theme="dark"][data-look] .settings-nav button.active { background: rgba(95, 209, 154, .14); color: #6fdca6; }
+:root[data-look="glass"][data-theme="dark"] .settings-nav button.active { background: rgba(255, 255, 255, .13); border-color: rgba(255, 255, 255, .18); color: #6fdca6; }
+:root[data-look="glass"][data-theme="dark"] .settings-nav button:hover:not(:disabled):not(.active) { background: rgba(255, 255, 255, .07); }
+:root[data-look="glass"][data-theme="dark"] .settings-nav button:not(.active) { background: transparent; border-color: transparent; box-shadow: none; }

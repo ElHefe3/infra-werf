@@ -99,6 +99,7 @@ try {
   expect(state.invalid[0].problems.join(' ')).toContain('invalid_app');
   // The owner reads where the application is before enabling.
   await nav.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Settings pages' }).getByRole('button', { name: 'Plugins', exact: true }).click();
   await page.getByRole('region', { name: 'Plugins', exact: true }).getByRole('button', { name: 'Configure Homelab map', exact: true }).click();
   const pluginPage = page.getByRole('region', { name: 'Homelab map plugin', exact: true });
   await expect(pluginPage.getByLabel('Status page address', { exact: true })).toHaveText('localhost:8099/status');
@@ -231,6 +232,7 @@ try {
   expect(log.some(e => e.action === 'loopback_tunnel' && e.outcome === 'refused' && e.detail === 'trust_too_low')).toBe(true);
   expect(log.some(e => e.action === 'loopback_tunnel' && e.outcome === 'refused' && e.detail === 'not_granted')).toBe(true);
   await nav.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Settings pages' }).getByRole('button', { name: 'Plugin activity', exact: true }).click();
   const activity = page.getByRole('region', { name: 'Plugin activity', exact: true }).getByRole('table', { name: 'Plugin activity log' });
   for (const text of ['Opened its application "status-page"', 'Opened through a private tunnel']) await expect(activity).toContainText(text);
   results.push('each application open is in the plugin activity log, and refusals name the reason (trust too low, not granted)');
