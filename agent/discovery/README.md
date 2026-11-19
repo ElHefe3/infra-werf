@@ -74,3 +74,4 @@ Link important discoveries from affected feature packets and the checkpoint. Nev
 - [D065 The owner requests an interface redesign](D065-owner-requests-interface-redesign.md)
 - [D066 Discovered apps are cached on this PC and carry their own icons](D066-cached-app-discovery-and-icons.md)
 - [D067 An owner PIN hides sensitive details and gates protected views](D067-owner-pin.md)
+- [D068 The glib advisory affects a Linux-only dependency](D068-glib-advisory-is-linux-only.md)
