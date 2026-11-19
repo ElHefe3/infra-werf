@@ -4,7 +4,7 @@ use std::path::Path;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let destination = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../ui/contracts.gen.ts");
     let generated = typescript_contracts();
-    if std::env::args().any(|arg| arg == "--write") {
+    if std::env::args().skip(1).any(|arg| arg == "--write") {
         std::fs::write(&destination, generated)?;
         println!("Generated {}", destination.display());
     } else {
