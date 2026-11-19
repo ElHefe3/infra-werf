@@ -36,10 +36,8 @@ unsafe extern "C" {
 /// Room for an answer from InfraWerf. The job takes the bytes back in `host`.
 #[unsafe(no_mangle)]
 pub extern "C" fn alloc(len: i32) -> i32 {
-    let mut room = Vec::<u8>::with_capacity(len.max(0) as usize);
-    let ptr = room.as_mut_ptr();
-    std::mem::forget(room);
-    ptr as i32
+    let room = vec![0u8; len.max(0) as usize].into_boxed_slice();
+    Box::into_raw(room) as *mut u8 as i32
 }
 
 /// Calls a host function. An answer is `{"ok": ...}` or `{"error": ...}`.
@@ -47,8 +45,10 @@ fn host(function: &str, args: Value) -> Result<Value, String> {
     let request = json!({ "function": function, "args": args }).to_string();
     let packed = unsafe { call(request.as_ptr() as i32, request.len() as i32) };
     let (ptr, len) = ((packed >> 32) as u32 as usize, packed as u32 as usize);
-    // SAFETY: InfraWerf wrote `len` bytes into room `alloc` gave it.
-    let bytes = unsafe { Vec::from_raw_parts(ptr as *mut u8, len, len) };
+    // SAFETY: The host returns the pointer and length from this module's
+    // alloc, after writing exactly that many bytes. Recreate the boxed slice
+    // with its original allocation layout and reclaim it exactly once.
+    let bytes = unsafe { Box::from_raw(std::ptr::slice_from_raw_parts_mut(ptr as *mut u8, len)) };
     let mut answer: Value =
         serde_json::from_slice(&bytes).map_err(|_| "unreadable answer".to_owned())?;
     match answer.get_mut("ok") {
