@@ -68,10 +68,10 @@ test("cached discovery keeps only well-formed fields and survives corrupt storag
 
 test("tile names are short and letter tiles keep a stable colour", async () => {
   const { appName, appHue } = await import("./remote-apps-model.ts");
-  assert.equal(appName({ title: "Forgejo: Beyond coding. We Forge.", process: "git-host", port: 3000 }), "Forgejo");
+  assert.equal(appName({ title: "Gitea: Git with a cup of tea", process: "gitea", port: 3000 }), "Gitea");
   assert.equal(appName({ title: "Notes Web", process: null, port: 8000 }), "Notes Web");
   assert.equal(appName({ title: "Grafana - Home", process: null, port: 3000 }), "Grafana");
   assert.equal(appName({ title: null, process: "tunnel-client", port: 18094 }), "tunnel-client");
   assert.equal(appName({ title: null, process: null, port: 8080 }), "Port 8080");
-  assert.equal(appHue("example-term"), appHue("example-term"));
+  assert.equal(appHue("Jellyfin"), appHue("jellyfin"));
 });
