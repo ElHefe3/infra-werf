@@ -1,0 +1,111 @@
+name: Security scans
+
+on:
+  push:
+    branches: [master, main]
+  schedule:
+    - cron: '23 2 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  codeql:
+    name: CodeQL (${{ matrix.language }})
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [javascript-typescript, python, rust]
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+          tools: linked
+      - uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          category: /language:${{ matrix.language }}
+          upload: true
+
+  dependency:
+    name: OSV (${{ matrix.input }})
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - input: root-cargo
+            file: Cargo.lock
+          - input: example-cargo
+            file: examples/systemd-backups-job/Cargo.lock
+          - input: pnpm
+            file: pnpm-lock.yaml
+          - input: python
+            file: 'requirements.txt:scripts/ssh-fixture-requirements.txt'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Install verified OSV-Scanner 2.7.1
+        run: |
+          curl --fail --silent --show-error --location --output "$RUNNER_TEMP/osv" https://github.com/google/osv-scanner/releases/download/v2.7.1/osv-scanner_linux_amd64
+          echo 'fb7dab19a8bd9bbe5c3189f09d4b7ee1820c9553a23bac202648a56efd2f6ee8  '"$RUNNER_TEMP/osv" | sha256sum --check --status
+          chmod +x "$RUNNER_TEMP/osv"
+      - name: Scan dependency input privately
+        env:
+          SECURITY_INPUT: ${{ matrix.file }}
+        run: python3 scripts/security_scan.py osv "$RUNNER_TEMP/osv" "$SECURITY_INPUT" "$RUNNER_TEMP/osv.sarif"
+      - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          sarif_file: ${{ runner.temp }}/osv.sarif
+          category: osv-${{ matrix.input }}
+
+  semgrep:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          repository: semgrep/semgrep-rules
+          ref: a5ad1714f00c9f7fde980cab0ea1d6dc6d414fd2
+          path: .security-rules
+          persist-credentials: false
+      - name: Install Semgrep 1.186.0
+        run: python3 -m pip install --disable-pip-version-check --quiet semgrep==1.186.0
+      - name: Scan source privately
+        run: python3 scripts/security_scan.py semgrep "$RUNNER_TEMP/semgrep.sarif"
+      - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          sarif_file: ${{ runner.temp }}/semgrep.sarif
+          category: semgrep
+
+  secrets:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install verified Gitleaks 8.30.1
+        run: |
+          curl --fail --silent --show-error --location --output "$RUNNER_TEMP/gitleaks.tar.gz" https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  '"$RUNNER_TEMP/gitleaks.tar.gz" | sha256sum --check --status
+          tar -xzf "$RUNNER_TEMP/gitleaks.tar.gz" -C "$RUNNER_TEMP" gitleaks
+      - name: Scan available Git history
+        run: python3 scripts/security_scan.py gitleaks "$RUNNER_TEMP/gitleaks"

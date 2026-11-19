@@ -1,0 +1,9 @@
+# Security scanning
+
+The Security scans workflow runs on pushes to `main` or `master`, weekly, and on demand. It scans the public checkout only. GitHub code-scanning and Dependabot alerts must be enabled by a repository administrator; enable GitHub secret scanning when available. Review alerts in **Security and quality**, which is restricted to authorized users. Public Actions logs show status, not raw scanner output; do not upload reports as Actions artifacts.
+
+CodeQL scans JavaScript/TypeScript, Python and Rust with no build. Semgrep Community Edition 1.186.0 uses security rules from `semgrep/semgrep-rules` at commit `a5ad1714f00c9f7fde980cab0ea1d6dc6d414fd2`. OSV-Scanner 2.7.1 scans each Cargo lockfile, pnpm lockfile, and the pinned SSH fixture requirements separately. Gitleaks 8.30.1 scans all history fetched by checkout; findings are not retained or uploaded. Its public status reveals whether findings exist, but not their details. Reproduce and investigate privately. Never paste secrets into issues, evidence or logs; rotate real exposed credentials.
+
+Findings are report-only; failed scans and failed uploads fail their jobs. Code-scanning alerts are not a complete historical archive. OSV and Dependabot may overlap; GitHub documents a pnpm 12 dependency-graph limitation, so OSV is essential here. The Python requirements are a manifest of pinned fixture packages, not proof of a local virtual environment's contents. CI does not scan private-only source or history, verify runtime Tauri isolation, perform dynamic testing or inspect Windows binary hardening.
+
+Review the baseline privately after the first successful run, then agree on triage and gating. Review scanner/rule/action pins and advisory coverage at least quarterly. To diagnose scanner errors, rerun on an isolated local copy and protect any output. Do not use raw reports as public artifacts.
