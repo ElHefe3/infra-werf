@@ -1,23 +1,23 @@
 # Security model
 
-InfraWerf manages servers you own. This page states plainly what it does, what it refuses to do, and where its limits are. The [vulnerability reporting policy](../SECURITY.md) is separate.
+This page describes what InfraWerf reads and changes on your PC and your servers, and its limits. To report a vulnerability, see [SECURITY.md](../SECURITY.md).
 
-## Principles
+## How it works
 
-1. **Your PC is the only place your data lives.** No account, no cloud service, no telemetry.
-2. **Use the access you already have.** InfraWerf uses your system OpenSSH and your existing public-key identities or SSH agent.
-3. **Be explicit about trust.** A server's identity is checked, shown to you, and never trusted silently.
-4. **Fetch protected information only when you ask,** through an authenticated session. InfraWerf does not collect it in advance and hide it in the interface.
-5. **Changes need a deliberate step.** Anything that alters a server shows what will happen, asks for confirmation and, for privileged work, asks for authentication again.
+- Data is stored on your PC. InfraWerf has no account system, cloud service or telemetry, and it connects only to servers you add.
+- It uses your system OpenSSH and your existing public-key identities or SSH agent.
+- A server's host key is checked and shown to you. It is not trusted automatically.
+- Protected information, such as file listings, terminal output and logs, is fetched through an authenticated session when you open it. It is not collected beforehand and hidden in the interface.
+- A change to a server shows what will happen and asks for confirmation. Privileged changes also ask for a password each time.
 
-## What InfraWerf never does
+## What it does not do
 
-- Copy, store or display **private keys** or passwords.
-- Edit your **known-hosts** file, your SSH configuration, or the server's trust settings.
-- Accept an **unknown or changed fingerprint** automatically.
-- **Overwrite** a file on Files, or delete a directory recursively.
+- Copy, store or display private keys or passwords.
+- Edit your known-hosts file, your SSH configuration, or the server's trust settings.
+- Accept an unknown or changed fingerprint automatically.
+- Overwrite a file in Files, or delete a directory recursively.
 - Send your data, inventory or logs to anyone.
-- Run an **installer script** from a plugin. Plugins are data, not programs, except for sandboxed jobs described below.
+- Run an installer script from a plugin. Plugins are data, except for sandboxed jobs described below.
 
 ## SSH trust
 
@@ -27,7 +27,7 @@ Verification uses strict host trust:
 - An unknown fingerprint must be checked through your own process, outside InfraWerf.
 - A changed fingerprint is never accepted from inside the app. Resolve it the way you normally would, and then verify again.
 
-Unsupported configurations (jump hosts, proxy commands, known-host helper programs) are refused rather than guessed at. That keeps trust decisions with you.
+Unsupported configurations (jump hosts, proxy commands, known-host helper programs) are refused, because InfraWerf cannot check trust through them.
 
 ## Protected sessions
 

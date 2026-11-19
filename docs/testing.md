@@ -1,6 +1,6 @@
 # Testing
 
-InfraWerf's tests are designed to run against **disposable loopback fixtures**, never real servers. Some checks exercise the actual Windows application (WebView2 and Rust IPC), not just the code. This page explains which tests exist, what each one proves, and what to run before you change something.
+The tests run against disposable loopback fixtures, not real servers. Some of them drive the built Windows application (WebView2 and Rust IPC). This page lists the tests, what each one checks, and what to run before a change.
 
 ## Before any change
 

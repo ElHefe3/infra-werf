@@ -83,7 +83,7 @@ That workload system (systemd user session, Podman or Docker) is not present or 
 That is expected. Every privileged control needs a fresh password. The password is not stored.
 
 **A control says the result is uncertain.**
-Check the item on the server before doing anything else. Refresh the Workloads tab once you know its real state.
+Check the item on the server before doing anything else. Refresh the Services tab once you know its real state.
 
 ## Plugins
 

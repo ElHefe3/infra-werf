@@ -1,62 +1,60 @@
-<h1 align="center"><img src="docs/images/banner.svg" alt="InfraWerf — Your homelab, connected." width="100%"></h1>
+<p align="center"><img src="public/brand/infrawerf-wordmark.svg" alt="InfraWerf — Your homelab, connected." width="420"></p>
 
-A desktop workspace for the servers you run yourself. See your machines on one map, and open any of them to review its inventory, health, files, terminal, services and containers, all through your own OpenSSH access.
+InfraWerf is a Windows desktop app for servers you run yourself. It shows them on a map. For each server it lists saved inventory and health, browses and transfers files over SFTP, opens a terminal, and inspects and controls systemd, Podman and Docker workloads. It connects through your existing OpenSSH setup and saves its data on your PC.
 
 [![Platform](https://img.shields.io/badge/platform-Windows%2011%20x64-0078D4)](docs/install.md)
 [![Licence](https://img.shields.io/badge/licence-MIT%20OR%20Apache--2.0-green)](#licence)
 [![Stack](https://img.shields.io/badge/stack-Tauri%20%C2%B7%20Rust%20%C2%B7%20React%20%C2%B7%20SQLite-orange)](docs/build.md)
 [![Plugin API](https://img.shields.io/badge/plugin%20API-v2-blueviolet)](docs/plugins.md)
 
----
+## What it does
 
-## Why InfraWerf
-
-- **One map for the whole estate.** Draw how your machines depend on each other and keep it as you change things.
-- **Your access, not a new one.** It uses the OpenSSH setup and keys you already have. It never copies a private key and never edits your known-hosts file.
-- **Honest about what it knows.** Every saved observation shows when it was taken. Old data is labelled stale, never presented as live.
-- **Deliberate changes.** Anything that changes a server needs a fresh, separate authentication, shows an exact preview, and asks for confirmation.
-- **Extensible within limits.** Plugins add data, views and automation. A manifest is a request, and you decide what each plugin may do.
-
-## Features
-
-| Area | What you get |
+| Area | Behaviour |
 | --- | --- |
-| **Map** | Editable server cards, directed relationships, pan, zoom, keyboard navigation and automatic layout. |
-| **Server workspace** | Saved inventory with search, the server's current health and its workloads. |
-| **Health** | Bounded TCP/HTTP checks with clear *healthy*, *unhealthy*, *stale* and *unknown* states. |
-| **Files** | Protected SFTP browser: browse, create folders, rename, move and delete, each with an exact-path preview and confirmation. |
-| **Transfers** | Streamed uploads and downloads with SHA-256 checks, progress, cancel and no silent overwrites. |
-| **Terminal** | Interactive shell on an authenticated session, with resize and Ctrl+C. |
-| **Services and containers** | Inspect systemd, Podman and Docker workloads and their logs; start, stop and restart through reviewed, scoped actions. |
-| **Apps** | Open a web app running on a server's localhost through a private, short-lived tunnel. |
-| **Plugins** | Install from a folder, an archive or an `https://` address. Each plugin declares what it needs; nothing is enabled until you allow it. |
-| **Lock** | One action clears every protected result and session from memory. |
+| Map | Server cards and directed relationships that you add and arrange. Positions and links are saved. |
+| Server workspace | Saved inventory with search, health, and the server's workloads. |
+| Health | TCP and HTTP checks. Results are healthy, unhealthy, stale or unknown. Stale means the last result is old, not that the server is down. |
+| Files | SFTP browser. Create folder, rename, move and delete need a confirmation that shows the exact path. Nothing is overwritten and directories are not deleted recursively. |
+| Transfers | Uploads and downloads with progress, cancel and a SHA-256 check. |
+| Terminal | Interactive shell over an authenticated SSH session. |
+| Services and containers | Shows systemd, Podman and Docker state and recent logs. Start, stop and restart ask for a fresh password each time. |
+| Apps | Opens a web app on a server's localhost through a tunnel to a local port on your PC. |
+| Plugins | Add tabs, badges, read-only commands and jobs. A plugin gets only the permissions you grant it. |
+| Lock | Ends every protected session and clears what they showed. |
 
-## How it works
+InfraWerf uses your system OpenSSH and your own keys. It does not copy private keys and does not edit your known-hosts file. Data is fetched through an authenticated session when you open it, and saved observations show the time they were taken.
 
-<p align="center"><img src="docs/images/how-it-works.svg" alt="InfraWerf runs on your PC: a React interface talks to a Rust core, which keeps a local SQLite database and reaches your servers through your system OpenSSH, with your own keys." width="100%"></p>
+## Demo
 
-The interface never touches a server or the database itself. Only the Rust core does, and only through your own OpenSSH access. Details are in the [security model](docs/security.md).
+These recordings come from the app itself, using a throwaway workspace and local test servers. They contain no real hosts.
 
-## Quick start
+**Map.** Add servers and document how they relate.
 
-### Install (Windows 11 x64)
+![Adding three servers to the map and documenting two relationships](docs/images/map.gif)
 
-1. Download the latest `InfraWerf_<version>_x64-setup.exe` from the releases you were given.
-2. Run it. It installs for your user only, with no administrator prompt.
-3. Open **InfraWerf** from the Start menu.
+**Files.** Open an SFTP session over strict host trust, look at a file, open a folder, then lock the session.
 
-Full details, including updates, uninstall and data locations: **[docs/install.md](docs/install.md)**.
+![Browsing a server's files over SFTP, then locking the session, which clears the listing](docs/images/files.gif)
 
-### First server
+**Health.** Run a TCP check and an HTTP check. The service is stopped partway through, so its result changes to unhealthy.
 
-1. Add a server on the map and give it the hostname it uses in your OpenSSH config.
-2. Open the server, go to **Settings → Verify SSH access**.
-3. Confirm the fingerprint against your own records, then continue.
+![A TCP check reports reachable and an HTTP check reports healthy, then unhealthy after the service stops](docs/images/health.gif)
 
-Step-by-step guidance for each screen: **[docs/user-guide.md](docs/user-guide.md)**.
+The interface talks only to the Rust core. The core keeps the SQLite database and reaches servers through your system OpenSSH. See the [security model](docs/security.md).
 
-### Build from source (developers)
+## Install
+
+Windows 11 x64. It has been tested only on Windows 11 x64; other Windows versions have not been tried.
+
+1. Get `InfraWerf_<version>_x64-setup.exe` from the release you were given.
+2. Run it. It installs for your user and needs no administrator prompt.
+3. Open InfraWerf from the Start menu.
+
+The installer is not code-signed yet, so Windows may show a warning. See [docs/install.md](docs/install.md) for updating, uninstalling and where data is stored.
+
+To add your first server, create an entry on the map, set its hostname to the alias in your OpenSSH config, then open its Settings and run Verify SSH access. The [user guide](docs/user-guide.md#first-steps) covers the steps.
+
+## Build from source
 
 ```bash
 mise trust
@@ -66,43 +64,38 @@ mise run check
 mise run smoke:desktop
 ```
 
-Requires [mise](https://mise.jdx.dev/), the Microsoft C++ Build Tools and WebView2. See **[docs/build.md](docs/build.md)**.
+You need [mise](https://mise.jdx.dev/), the Microsoft C++ Build Tools and WebView2. See [docs/build.md](docs/build.md).
 
 ## Documentation
 
-| I want to… | Read |
+| Topic | Page |
 | --- | --- |
-| Install it and get started | [Install](docs/install.md) · [First steps](docs/user-guide.md#first-steps) |
-| Learn every screen and action | [User guide](docs/user-guide.md) |
-| Understand what it can and cannot touch | [Security model](docs/security.md) |
-| Back up, move or reset my data | [Data and backup](docs/data-and-backup.md) |
-| Fix a problem | [Troubleshooting](docs/troubleshooting.md) |
-| Build or develop InfraWerf | [Build from source](docs/build.md) · [Testing](docs/testing.md) |
-| Write or install a plugin | [Plugins](docs/plugins.md) · [Plugin author guide](docs/plugin-api/guide.md) · [Plugin API reference](docs/plugin-api/README.md) |
-| Know what stays stable between versions | [Compatibility](docs/COMPATIBILITY.md) |
-| Contribute | [CONTRIBUTING.md](CONTRIBUTING.md) |
-| Report a security issue | [SECURITY.md](SECURITY.md) |
+| Install | [docs/install.md](docs/install.md) |
+| Using the app | [docs/user-guide.md](docs/user-guide.md) |
+| What it reads and changes | [docs/security.md](docs/security.md) |
+| Data location, backup, reset | [docs/data-and-backup.md](docs/data-and-backup.md) |
+| Problems and fixes | [docs/troubleshooting.md](docs/troubleshooting.md) |
+| Building and tests | [docs/build.md](docs/build.md), [docs/testing.md](docs/testing.md) |
+| Plugins | [docs/plugins.md](docs/plugins.md), [author guide](docs/plugin-api/guide.md), [manifest reference](docs/plugin-api/README.md) |
+| Compatibility between versions | [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) |
+| Contributing | [CONTRIBUTING.md](CONTRIBUTING.md) |
+| Security reports | [SECURITY.md](SECURITY.md) |
 
-The full index is in **[docs/README.md](docs/README.md)**.
+The full index is [docs/README.md](docs/README.md).
 
 ## Status
 
-- **Windows 11 x64 desktop** is the release target, in daily use, and accepted by its owner as the primary app. Current version: **0.1.13**.
-- **Phone access and Android** (compact interface, authenticated pairing over LAN or VPN) are planned, not part of this release.
-- **Python reference** (`atlas.py`) is a retired prototype kept for comparison. The desktop app does not read or write its data. See [docs/data-and-backup.md](docs/data-and-backup.md#the-python-reference).
-- **Code signing** is not yet configured. Windows may warn on first run.
+- The Windows 11 x64 desktop app is the release target and the only platform it has been tested on. Current version: 0.1.13.
+- A phone interface and Android packaging are planned and not part of this release.
+- `atlas.py` is an earlier Python prototype. The desktop app does not read or write its data. See [docs/data-and-backup.md](docs/data-and-backup.md#the-python-reference).
+- Installers are not code-signed.
 
-Project history, decisions and acceptance evidence live under [`agent/`](agent/AGENT.md) and [`docs/`](docs/README.md). The [roadmap](ROADMAP.md) lists what comes next.
+The project's plan, decisions and test evidence are under [`agent/`](agent/AGENT.md). The [roadmap](ROADMAP.md) lists what is next.
 
 ## Contributing
 
-Contributions are welcome. The most useful first step is a plugin: most new features belong in one, in your own repository. Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
+Most new features fit better as plugins in their own repository. Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
 
 ## Licence
 
-InfraWerf is licensed under either of
-
-- [MIT licence](LICENSE-MIT)
-- [Apache licence, version 2.0](LICENSE-APACHE)
-
-at your option. Plugins are their authors' own works under the licences their authors choose.
+InfraWerf is licensed under either of the [MIT licence](LICENSE-MIT) or the [Apache licence, version 2.0](LICENSE-APACHE), at your option. Plugins are their authors' own works under the licences their authors choose.

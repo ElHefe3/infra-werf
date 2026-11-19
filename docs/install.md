@@ -6,7 +6,7 @@ This page covers installing the Windows desktop app. To build it yourself, see [
 
 | Requirement | Notes |
 | --- | --- |
-| Windows 11, 64-bit | The release target. Other platforms are not supported yet. |
+| Windows 11, 64-bit | The release target, and the only version it has been tested on. Other Windows versions have not been tried. Linux and macOS are not supported. |
 | Microsoft Edge WebView2 Runtime | Already present on most Windows 11 PCs. If missing, the installer downloads it, so it needs internet access once. |
 | OpenSSH client | Windows' built-in OpenSSH (`ssh.exe`) with your servers configured in `%USERPROFILE%\.ssh\config`, or the equivalent for your setup. |
 | Your existing SSH access | Public-key login to each server you want to manage. InfraWerf does not create keys or accounts for you. |

@@ -47,24 +47,25 @@ Map edits are saved to your local database immediately. Removing a server from I
 
 ## Server workspace
 
-Open a server to reach its workspace. Its tabs group everything InfraWerf knows and can do for that server:
+Open a server to reach its workspace. It has these tabs:
 
 | Tab | Purpose |
 | --- | --- |
-| **Overview** | A summary of the server's saved state. |
-| **Inventory** | The saved details InfraWerf holds for the server, with search. |
-| **Health** | Its latest health checks and their state. |
+| **Services** | Saved services and containers from the last inventory. |
+| **Health** | TCP and HTTP checks and their results. |
 | **Files** | Protected file browser (SFTP). |
 | **Terminal** | Interactive shell. |
-| **Workloads** | Services and containers, with logs and scoped controls. |
 | **Apps** | Web applications on the server's localhost, opened through a private tunnel. |
-| **Settings** | Name, connection hostname, verification, and per-server plugin options. |
+| **Plugin data** | Results from commands that plugins run on this server. |
+| **System** | Saved system inventory: host details, services and containers from the latest complete collection. |
+| **Settings** | Name, connection hostname and Verify SSH access. |
+| **Transfers** | The queue of uploads and downloads for this server. |
 
 Plugins can add tabs and sections to this workspace. They appear beside the built-in ones.
 
 ## Inventory
 
-Inventory is what InfraWerf has saved about a server.
+Inventory is what InfraWerf has saved about a server. It appears in the **System** and **Services** tabs and in the **Inventory** view on the map.
 
 - **Refresh** asks the server, over an authenticated SSH session, for its current inventory. The result is saved with the time it was received.
 - If a refresh only partly succeeds, InfraWerf keeps the earlier data and shows what failed. It does not silently throw away good data.
@@ -74,23 +75,23 @@ Inventory is saved information. It tells you what was there when it was last ref
 
 ## Health
 
-Health runs simple checks against a server:
+The **Health** tab runs two checks against a server, separately:
 
-- **TCP** checks whether a port accepts connections.
-- **HTTP** checks whether a URL responds, within a limit.
+- **Host**: whether a TCP port accepts connections.
+- **Service**: an HTTP GET to a port and path, within a time limit.
 
-Each check is bounded in time and only goes to the addresses you configured. It does not log in.
+Enter the host TCP port, the service port and path, and the check interval, then choose **Save & start checks**. **Stop checks** ends them. Checks only go to the addresses you entered and do not log in. Results stay in memory.
 
-Health states:
+Each result is one of:
 
 | State | Meaning |
 | --- | --- |
-| **Healthy** | The latest check succeeded and is recent. |
+| **Reachable** or **healthy** | The latest check succeeded. |
 | **Unhealthy** | The latest check failed. |
-| **Stale** | The last result is older than the freshness limit. The check may be fine; you just have not checked recently. |
+| **Stale** | The last result is older than the freshness limit. It says nothing about whether the server is up now. |
 | **Unknown** | Nothing has been checked yet. |
 
-Run a check again from the Health tab.
+Each result shows when it was last checked and when it last succeeded.
 
 ## Files and transfers
 
@@ -104,7 +105,7 @@ With a file session open you can:
 
 Safety rules that apply here:
 
-- **No overwrite** and **no recursive delete** from the Files tab. To replace a file, delete or rename the old one deliberately.
+- **No overwrite** and **no recursive delete** from the Files tab. To replace a file, delete or rename the old one first.
 - **Move** locks the source while you choose a destination, so the file cannot change under you.
 - If a change's outcome is uncertain (for example, the connection drops after you confirm), InfraWerf closes the session and asks you to inspect the server before trying again.
 - The session ends after **five minutes idle** or **thirty minutes** in total. Leaving Files, hiding InfraWerf, or pressing **Lock** clears what is shown.
@@ -129,10 +130,10 @@ Terminal opens an interactive shell on the server. It uses the same authenticate
 
 ## Services and containers
 
-The Workloads tab shows what runs on the server, and how you can control it:
+The **Services** tab shows what runs on the server and how you can control it:
 
 - It reads **systemd** units (system and user), **Podman** containers (user) and **Docker** containers, when those are present on the server.
-- Each item shows its state, or says why it cannot tell: *stopped*, *denied*, *unavailable*.
+- Live state comes from an authenticated session. Each item shows its state, or says why it cannot tell: *stopped*, *denied*, *unavailable*.
 - **Logs** show the most recent lines, capped at 8 KiB and cut safely at character boundaries.
 - **Controls** (start, stop, restart) are scoped: InfraWerf only offers the actions the server's permissions and your configuration allow.
 
@@ -167,7 +168,7 @@ Plugins are installed and reviewed in **Settings → Plugins**. See the [plugins
 
 ## Locking and sessions
 
-**Lock** is the most important control in the app. It:
+**Lock**:
 
 - closes every protected session (Files, Terminal, transfers, Apps tunnels, workload control),
 - clears the results shown from them,

@@ -60,10 +60,6 @@ A plugin you copied into the plugins folder by hand has no recorded hash. InfraW
 
 On its page, choose **Remove**. This deletes the plugin's folder, its permissions and its install record. A command still running for it is cancelled, and its app tunnels are closed. The plugin's activity history remains in the activity log.
 
-## Plugin trust levels
-
-Trust is per plugin, and you set it. Plugins you have not reviewed should stay at the lowest level. Raise it only for plugins you have read.
-
 ## For authors
 
 Start with the [plugin author guide](plugin-api/guide.md). It takes you from an empty folder to a manifest that InfraWerf accepts, using the [backup overview example](../examples/backup-overview).

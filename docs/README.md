@@ -1,6 +1,6 @@
 # InfraWerf documentation
 
-Start with the path that matches what you're doing. Every page is written for someone who runs their own servers and has never used InfraWerf before.
+The pages are grouped by who they are for: owners, plugin authors and developers.
 
 ## For owners (using InfraWerf)
 
