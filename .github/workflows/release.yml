@@ -1,0 +1,97 @@
+name: Release
+
+# Builds the Windows installer when a version tag such as v0.1.13 or v0.1.13-rc.1
+# is pushed, then publishes it as a GitHub release. A tag with a hyphen is
+# published as a pre-release.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  windows-installer:
+    name: Build and publish the Windows installer
+    runs-on: windows-2025
+    timeout-minutes: 90
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - uses: jdx/mise-action@90f833d396d0cc3674b631d2d225e306476c303a # v5.2.10
+        with:
+          install_args: node pnpm rust
+
+      - name: Check that the tag matches the app version
+        shell: pwsh
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          $version = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          if ($env:TAG -notmatch "^v$([regex]::Escape($version))(-[0-9A-Za-z.]+)?$") {
+            throw "Tag $env:TAG does not match the app version $version in src-tauri/tauri.conf.json."
+          }
+
+      - name: Install dependencies
+        shell: pwsh
+        run: mise run deps
+
+      - name: Build the installer
+        shell: pwsh
+        run: |
+          # Keep the build machine's paths out of the binaries.
+          $sysroot = (mise exec -- rustc --print sysroot).Trim()
+          $remaps = @(
+            "--remap-path-prefix=$env:USERPROFILE=/home",
+            "--remap-path-prefix=$sysroot=/rust",
+            "--remap-path-prefix=$env:GITHUB_WORKSPACE=/src"
+          )
+          $env:CARGO_ENCODED_RUSTFLAGS = $remaps -join [char]0x1f
+          mise run build:desktop
+
+      - name: Check the build carries no runner paths
+        shell: pwsh
+        run: |
+          $text = [Text.Encoding]::Latin1.GetString([IO.File]::ReadAllBytes('target/release/atlas-native.exe'))
+          foreach ($marker in @('runneradmin', $env:GITHUB_WORKSPACE)) {
+            if ($text.Contains($marker)) { throw "target/release/atlas-native.exe contains the build path '$marker'." }
+          }
+
+      - name: Write the checksum and release notes
+        id: pack
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem target/release/bundle/nsis -Filter 'InfraWerf_*_x64-setup.exe' | Select-Object -First 1
+          if (-not $installer) { throw 'No installer was produced.' }
+          $hash = (Get-FileHash $installer.FullName -Algorithm SHA256).Hash.ToLower()
+          Set-Content -Encoding ascii -Path "$($installer.FullName).sha256" -Value "$hash  $($installer.Name)"
+          $notes = @(
+            "InfraWerf $env:GITHUB_REF_NAME for Windows 11 x64.",
+            '',
+            'It has been tested only on Windows 11 x64. The installer is not code-signed, so Windows may show a SmartScreen warning.',
+            '',
+            "SHA-256 of ``$($installer.Name)``:",
+            '',
+            '```',
+            $hash,
+            '```',
+            '',
+            'Install and update steps are in docs/install.md.'
+          )
+          Set-Content -Encoding utf8 -Path release-notes.md -Value $notes
+          "installer=$($installer.FullName)" | Add-Content -Path $env:GITHUB_OUTPUT
+
+      - name: Publish the release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          INSTALLER: ${{ steps.pack.outputs.installer }}
+        run: |
+          $flags = @()
+          if ($env:TAG -match '-') { $flags += '--prerelease' }
+          gh release create $env:TAG $env:INSTALLER "$env:INSTALLER.sha256" --verify-tag --title "InfraWerf $env:TAG" --notes-file release-notes.md @flags
