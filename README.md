@@ -1,6 +1,4 @@
-# InfraWerf
-
-**Your homelab, connected.**
+<h1 align="center"><img src="docs/images/banner.svg" alt="InfraWerf — Your homelab, connected." width="100%"></h1>
 
 A desktop workspace for the servers you run yourself. See your machines on one map, and open any of them to review its inventory, health, files, terminal, services and containers, all through your own OpenSSH access.
 
@@ -8,8 +6,6 @@ A desktop workspace for the servers you run yourself. See your machines on one m
 [![Licence](https://img.shields.io/badge/licence-MIT%20OR%20Apache--2.0-green)](#licence)
 [![Stack](https://img.shields.io/badge/stack-Tauri%20%C2%B7%20Rust%20%C2%B7%20React%20%C2%B7%20SQLite-orange)](docs/build.md)
 [![Plugin API](https://img.shields.io/badge/plugin%20API-v2-blueviolet)](docs/plugins.md)
-
-> **No account. No cloud service. No telemetry.** Your instance, its map and its saved data stay on your PC. InfraWerf connects only to the servers you configure.
 
 ---
 
@@ -35,6 +31,12 @@ A desktop workspace for the servers you run yourself. See your machines on one m
 | **Apps** | Open a web app running on a server's localhost through a private, short-lived tunnel. |
 | **Plugins** | Install from a folder, an archive or an `https://` address. Each plugin declares what it needs; nothing is enabled until you allow it. |
 | **Lock** | One action clears every protected result and session from memory. |
+
+## How it works
+
+<p align="center"><img src="docs/images/how-it-works.svg" alt="InfraWerf runs on your PC: a React interface talks to a Rust core, which keeps a local SQLite database and reaches your servers through your system OpenSSH, with your own keys." width="100%"></p>
+
+The interface never touches a server or the database itself. Only the Rust core does, and only through your own OpenSSH access. Details are in the [security model](docs/security.md).
 
 ## Quick start
 

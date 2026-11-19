@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="400" viewBox="0 0 1000 400" role="img" aria-labelledby="t d">
+  <title id="t">How InfraWerf works</title>
+  <desc id="d">InfraWerf runs on your PC as a React interface over a Rust core with a local SQLite database. The Rust core uses your system OpenSSH, with your own keys, to reach your servers. Nothing is sent anywhere else.</desc>
+  <style>
+    .f { font-family: Segoe UI, system-ui, -apple-system, sans-serif; }
+    .h { font-size: 18px; font-weight: 650; }
+    .s { font-size: 13px; }
+    .c { font-size: 12px; }
+    .card { fill: #f5f3e8; stroke: #255947; stroke-width: 2; }
+    .pc { fill: #eef2ee; stroke: #76877a; stroke-width: 2; stroke-dasharray: 8 6; }
+    .ink { fill: #1c3b30; }
+    .mut { fill: #4f6258; }
+    .arrow { stroke: #255947; stroke-width: 2.5; fill: none; marker-end: url(#a); }
+    .ssh { stroke: #255947; stroke-width: 2.5; fill: none; marker-end: url(#a); stroke-dasharray: 2 0; }
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#255947"/>
+    </marker>
+  </defs>
+  <rect width="1000" height="400" rx="18" fill="#ffffff"/>
+  <rect x="1" y="1" width="998" height="398" rx="18" fill="none" stroke="#d8dfd8" stroke-width="2"/>
+
+  <!-- your PC boundary -->
+  <rect x="30" y="50" width="600" height="310" rx="20" class="pc"/>
+  <text x="52" y="82" class="f h ink">Your PC (Windows 11)</text>
+  <text x="52" y="102" class="f s mut">Everything InfraWerf saves stays here.</text>
+
+  <!-- interface -->
+  <rect x="56" y="126" width="250" height="84" rx="14" class="card"/>
+  <text x="76" y="156" class="f h ink">Interface</text>
+  <text x="76" y="178" class="f s mut">React · TypeScript · React Flow</text>
+  <text x="76" y="196" class="f c mut">map, workspace, files, terminal</text>
+
+  <!-- rust core -->
+  <rect x="56" y="248" width="250" height="84" rx="14" class="card"/>
+  <text x="76" y="278" class="f h ink">Rust core (Tauri)</text>
+  <text x="76" y="300" class="f s mut">sessions, trust checks, limits</text>
+  <text x="76" y="318" class="f c mut">asks again before any change</text>
+  <path d="M181 212 L181 246" class="arrow"/>
+
+  <!-- sqlite -->
+  <rect x="352" y="126" width="250" height="84" rx="14" class="card"/>
+  <text x="372" y="156" class="f h ink">Local database</text>
+  <text x="372" y="178" class="f s mut">SQLite on this PC</text>
+  <text x="372" y="196" class="f c mut">no passwords, keys or file contents</text>
+  <path d="M308 262 L330 262 L330 168 L350 168" class="arrow"/>
+
+  <!-- openssh -->
+  <rect x="352" y="248" width="250" height="84" rx="14" class="card"/>
+  <text x="372" y="278" class="f h ink">System OpenSSH</text>
+  <text x="372" y="300" class="f s mut">your keys and agent</text>
+  <text x="372" y="318" class="f c mut">strict host-key trust</text>
+  <path d="M308 312 L350 312" class="arrow"/>
+
+  <!-- servers -->
+  <rect x="716" y="70" width="240" height="270" rx="20" fill="#255947"/>
+  <text x="740" y="104" class="f h" fill="#f5f3e8">Your servers</text>
+  <g class="f s" fill="#f5f3e8">
+    <rect x="740" y="124" width="192" height="40" rx="10" fill="#f5f3e8" fill-opacity="0.14"/>
+    <circle cx="762" cy="144" r="6" fill="#8fc7a8"/><text x="780" y="149">server-a</text>
+    <rect x="740" y="176" width="192" height="40" rx="10" fill="#f5f3e8" fill-opacity="0.14"/>
+    <circle cx="762" cy="196" r="6" fill="#8fc7a8"/><text x="780" y="201">server-b</text>
+    <rect x="740" y="228" width="192" height="40" rx="10" fill="#f5f3e8" fill-opacity="0.14"/>
+    <circle cx="762" cy="248" r="6" fill="#e0b050"/><text x="780" y="253">server-c · stale</text>
+    <rect x="740" y="280" width="192" height="40" rx="10" fill="#f5f3e8" fill-opacity="0.14"/>
+    <circle cx="762" cy="300" r="6" fill="#9aa59d"/><text x="780" y="305">server-d · unknown</text>
+  </g>
+  <path d="M604 290 C660 290 660 205 714 205" class="ssh"/>
+  <text x="624" y="254" class="f c ink" transform="rotate(-62 624 254)" text-anchor="middle">SSH</text>
+  <text x="836" y="372" class="f c mut" text-anchor="middle">Only the servers you add</text>
+</svg>
