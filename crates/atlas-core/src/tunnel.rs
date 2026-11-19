@@ -352,7 +352,11 @@ impl TunnelProcess {
         let mut child = command
             .spawn()
             .map_err(|_| AtlasError::new(ErrorCode::IoFailure))?;
-        job::assign(&child);
+        if let Err(error) = job::assign(&child) {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(error);
+        }
         let stderr = Arc::new(Mutex::new(Vec::new()));
         if let Some(mut pipe) = child.stderr.take() {
             let sink = stderr.clone();
@@ -442,7 +446,9 @@ impl Drop for TunnelProcess {
 mod job {
     //! A kill-on-close job object: if InfraWerf exits by any route, Windows
     //! terminates every tunnel child with it.
+    use super::{AtlasError, ErrorCode};
     use std::{os::windows::io::AsRawHandle, process::Child, sync::OnceLock};
+    use windows_sys::Win32::Foundation::CloseHandle;
     use windows_sys::Win32::System::JobObjects::{
         AssignProcessToJobObject, CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
         JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JobObjectExtendedLimitInformation,
@@ -464,22 +470,56 @@ mod job {
                 (&limits as *const JOBOBJECT_EXTENDED_LIMIT_INFORMATION).cast(),
                 std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
             );
-            (ok != 0).then_some(Job(handle as usize))
+            if ok == 0 {
+                CloseHandle(handle);
+                return None;
+            }
+            Some(Job(handle as usize))
         })
         .as_ref()
         .map(|job| job.0)
     }
-    pub fn assign(child: &Child) {
-        if let Some(handle) = job() {
-            unsafe {
-                AssignProcessToJobObject(handle as _, child.as_raw_handle() as _);
-            }
+    pub fn assign(child: &Child) -> Result<(), AtlasError> {
+        let handle = job().ok_or_else(|| AtlasError::new(ErrorCode::IoFailure))?;
+        if unsafe { AssignProcessToJobObject(handle as _, child.as_raw_handle() as _) } == 0 {
+            return Err(AtlasError::new(ErrorCode::IoFailure));
+        }
+        Ok(())
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::assign;
+        use std::process::{Command, Stdio};
+
+        #[test]
+        fn job_assignment_requires_a_live_child() {
+            let mut child = Command::new("cmd.exe")
+                .args(["/C", "ping -n 10 127.0.0.1 > nul"])
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .unwrap();
+            let assigned = assign(&child);
+            let _ = child.kill();
+            let _ = child.wait();
+            assert!(assigned.is_ok());
+
+            let mut exited = Command::new("cmd.exe")
+                .args(["/C", "exit 0"])
+                .spawn()
+                .unwrap();
+            exited.wait().unwrap();
+            assert!(assign(&exited).is_err());
         }
     }
 }
 #[cfg(not(windows))]
 mod job {
-    pub fn assign(_: &std::process::Child) {}
+    pub fn assign(_: &std::process::Child) -> Result<(), crate::AtlasError> {
+        Ok(())
+    }
 }
 
 pub fn typescript_contracts(config: &Config) -> String {
