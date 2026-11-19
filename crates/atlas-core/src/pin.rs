@@ -64,14 +64,13 @@ fn b64() -> base64::engine::GeneralPurpose {
 
 pub fn new_record(pin: &str) -> Result<PinRecord, AtlasError> {
     use base64::Engine as _;
-    use ring::rand::SecureRandom as _;
     if !valid_pin(pin) {
         return Err(AtlasError::new(ErrorCode::InvalidInput));
     }
-    let mut salt = [0u8; 16];
-    ring::rand::SystemRandom::new()
-        .fill(&mut salt)
-        .map_err(|_| AtlasError::new(ErrorCode::IoFailure))?;
+    // 16 random bytes straight from the operating system's generator.
+    let salt: [u8; 16] = ring::rand::generate(&ring::rand::SystemRandom::new())
+        .map_err(|_| AtlasError::new(ErrorCode::IoFailure))?
+        .expose();
     let hash =
         derive(pin, &salt, ITERATIONS).ok_or_else(|| AtlasError::new(ErrorCode::IoFailure))?;
     Ok(PinRecord {
