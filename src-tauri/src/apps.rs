@@ -139,11 +139,16 @@ pub fn tunnel_close_all(
 ) -> Result<(), AtlasError> {
     local_desktop(&window)?;
     workspace.require_extension(atlas_core::extensions::REMOTE_APPS_OWNER)?;
+    close_all_windows(&app, &workspace);
+    Ok(())
+}
+
+/// Closes every tunnel and its application window.
+pub fn close_all_windows(app: &AppHandle, workspace: &Workspace) {
     for id in workspace.close_all_tunnels() {
-        close_window(&app, &id);
+        close_window(app, &id);
     }
     let _ = app.emit_to(crate::main_webview(), CHANGED, ());
-    Ok(())
 }
 
 #[tauri::command]

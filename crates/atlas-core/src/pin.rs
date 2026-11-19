@@ -4,7 +4,8 @@
 //! a privacy lock against someone else at the keyboard, not encryption: the
 //! data it guards is fetched through authenticated sessions as before. Only a
 //! salted PBKDF2-SHA256 hash is stored. A correct PIN unlocks for
-//! [`UNLOCK_FOR`]; repeated wrong PINs make the next try wait.
+//! [`UNLOCK_FOR`]; repeated wrong PINs make the next try wait, and the count
+//! of wrong PINs survives a restart.
 use crate::*;
 use serde::{Deserialize, Serialize};
 use std::num::NonZeroU32;
@@ -102,6 +103,11 @@ pub fn matches(record: &PinRecord, pin: &str) -> bool {
         .is_ok()
 }
 
+/// How long the next try waits after `failures` wrong PINs in a row.
+fn wait_for(failures: u32) -> Option<Duration> {
+    (failures >= FREE_ATTEMPTS).then(|| WAIT_STEP * (failures - FREE_ATTEMPTS + 1))
+}
+
 /// In-memory lock state around the stored record.
 #[derive(Debug, Default)]
 pub struct PinGate {
@@ -117,6 +123,23 @@ impl PinGate {
             record,
             ..Self::default()
         }
+    }
+
+    /// Restores the wrong-PIN count kept from an earlier run, so restarting
+    /// InfraWerf does not give back free tries. A restored count that has
+    /// reached the limit makes the next try wait again from `now`.
+    pub fn with_failures(record: Option<PinRecord>, failures: u32, now: Instant) -> Self {
+        let mut gate = Self::new(record);
+        if gate.record.is_some() {
+            gate.failures = failures;
+            gate.retry_at = wait_for(failures).map(|wait| now + wait);
+        }
+        gate
+    }
+
+    /// Wrong PINs since the last correct one.
+    pub fn failures(&self) -> u32 {
+        self.failures
     }
 
     pub fn status(&self, now: Instant) -> PinStatus {
@@ -158,10 +181,8 @@ impl PinGate {
             self.retry_at = None;
             return Ok(());
         }
-        self.failures += 1;
-        if self.failures >= FREE_ATTEMPTS {
-            self.retry_at = Some(now + WAIT_STEP * (self.failures - FREE_ATTEMPTS + 1));
-        }
+        self.failures = self.failures.saturating_add(1);
+        self.retry_at = wait_for(self.failures).map(|wait| now + wait);
         Err(AtlasError::new(ErrorCode::Unauthenticated))
     }
 
@@ -232,6 +253,31 @@ mod tests {
         assert!(matches(&record, "482915"));
         assert!(!matches(&record, "482916"));
         assert_ne!(new_record("482915").unwrap().salt, record.salt);
+    }
+
+    #[test]
+    fn wrong_pins_still_count_after_a_restart() {
+        let start = Instant::now();
+        let record = new_record("2468").unwrap();
+        let mut gate = PinGate::with_failures(Some(record.clone()), FREE_ATTEMPTS - 1, start);
+        assert!(gate.status(start).retry_after_seconds.is_none());
+        assert!(gate.unlock("0000", start).is_err());
+        assert_eq!(gate.failures(), FREE_ATTEMPTS);
+        let restarted = PinGate::with_failures(Some(record.clone()), gate.failures(), start);
+        assert_eq!(
+            restarted.status(start).retry_after_seconds,
+            Some(WAIT_STEP.as_secs())
+        );
+        let mut restarted = restarted;
+        assert_eq!(
+            restarted.unlock("2468", start).unwrap_err().code,
+            ErrorCode::Denied
+        );
+        restarted
+            .unlock("2468", start + WAIT_STEP + Duration::from_secs(1))
+            .unwrap();
+        assert_eq!(restarted.failures(), 0);
+        assert_eq!(PinGate::with_failures(None, 9, start).failures(), 0);
     }
 
     #[test]

@@ -405,10 +405,17 @@ fn pin_unlock(
 #[tauri::command]
 fn pin_lock(
     window: tauri::Webview,
+    app: tauri::AppHandle,
     workspace: State<'_, Arc<Workspace>>,
 ) -> Result<atlas_core::pin::PinStatus, AtlasError> {
     local_desktop(&window)?;
-    workspace.pin_lock()
+    let status = workspace.pin_lock()?;
+    if status.set {
+        // Application windows are protected views too: close them and their
+        // tunnels, as Files, Terminal and workload details were closed.
+        apps::close_all_windows(&app, &workspace);
+    }
+    Ok(status)
 }
 #[tauri::command]
 fn pin_set(

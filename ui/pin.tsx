@@ -84,7 +84,7 @@ export function Secret({ value, label, as = "code" }: { value: string; label: st
 export function LockButton() {
   const { status, refresh } = usePin();
   if (!status?.set || !status.unlocked) return null;
-  return <button className="look-switch" title="Hide sensitive details and protected views again" onClick={() => void pinClient.lock().then(refresh, refresh)}>🔒 Lock now</button>;
+  return <button className="look-switch" title="Hide sensitive details and close open Files, Terminal and application windows" onClick={() => void pinClient.lock().then(refresh, refresh)}>🔒 Lock now</button>;
 }
 
 /** Settings → PIN: set, change or remove the PIN. */

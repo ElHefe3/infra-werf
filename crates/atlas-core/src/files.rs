@@ -1432,6 +1432,18 @@ impl FileSessions {
             let _ = self.close(&id);
         }
     }
+    /// Closes every open session (Files, Terminal, workload details), as when
+    /// the owner locks InfraWerf with their PIN.
+    pub fn close_all(&self) {
+        let ids = self
+            .sessions
+            .lock()
+            .map(|sessions| sessions.values().map(|s| s.id.clone()).collect::<Vec<_>>())
+            .unwrap_or_default();
+        for id in ids {
+            let _ = self.close(&id);
+        }
+    }
     /// Reap idle/absolute/disconnected sessions without refreshing activity.
     pub fn reap(&self) -> Vec<SessionId> {
         self.queue.scrub(self.policy);
