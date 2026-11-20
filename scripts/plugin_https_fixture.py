@@ -6,7 +6,7 @@ serves the plugin archive fixtures from 127.0.0.1 only, prints one JSON line
 given directory and is trusted only by the InfraWerf process the test starts
 (ATLAS_PLUGIN_TEST_CA); nothing is added to Windows.
 """
-import datetime, http.server, ipaddress, json, pathlib, re, ssl, sys, threading
+import datetime, http.server, ipaddress, json, pathlib, ssl, sys, threading
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
@@ -70,13 +70,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
         elif self.path == "/big.zip":
             body = b"PK\x03\x04" + b"\0" * (6 * 1024 * 1024)
         else:
-            name = self.path.lstrip("/")
-            if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", name):
-                self.send_response(404)
-                self.end_headers()
-                return
-            file = (archives / name).resolve()
-            if file.parent != archives.resolve() or not file.is_file():
+            # Serve only files that already exist in the archives folder, looked up by name.
+            # The request path is never joined onto a directory, so it cannot reach elsewhere.
+            available = {entry.name: entry for entry in archives.iterdir() if entry.is_file()}
+            file = available.get(self.path.lstrip("/"))
+            if file is None:
                 self.send_response(404)
                 self.end_headers()
                 return
